@@ -17,6 +17,8 @@
       {
         devShell = pkgs.mkShell {
           nativeBuildInputs = with pkgs; [ cargo rustc rust-analyzer ];
+
+          RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
         };
 
         packages = rec {
