@@ -11,11 +11,32 @@
       let
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs { inherit system overlays; };
+
+        cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
       in
       {
         devShell = pkgs.mkShell {
           nativeBuildInputs = with pkgs; [ cargo rustc rust-analyzer ];
         };
-      }
-    );
+
+        packages = rec {
+          mless = pkgs.rustPlatform.buildRustPackage
+            {
+              inherit (cargoToml.package) name version;
+              src = ./.;
+              cargoLock.lockFile = ./Cargo.lock;
+            };
+
+          default = mless;
+        };
+
+        apps = rec {
+          mless = {
+            type = "app";
+            program = "${self.packages.${system}.mless}/bin/mless";
+          };
+
+          default = mless;
+        };
+      });
 }
