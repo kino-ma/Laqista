@@ -16,7 +16,7 @@
       in
       {
         devShell = pkgs.mkShell {
-          nativeBuildInputs = with pkgs; [ cargo rustc rustfmt rust-analyzer protobuf ];
+          nativeBuildInputs = with pkgs; [ cargo rustc rustfmt rust-analyzer protobuf iconv ];
 
           RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
         };
