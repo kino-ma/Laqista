@@ -5,32 +5,42 @@ use uuid::Uuid;
 
 use crate::proto::server_daemon_server::{ServerDaemon, ServerDaemonServer};
 use crate::proto::{
-    DestroyRequest, DestroyResponse, MonitorRequest, MonitorResponse, PingResponse, SpawnRequest,
-    SpawnResponse,
+    DestroyRequest, DestroyResponse, GetInfoRequest, GetInfoResponse, MonitorRequest,
+    MonitorResponse, PingResponse, ServerState, SpawnRequest, SpawnResponse,
 };
 use crate::utils::get_mac;
-use crate::ServerInfo;
+use crate::{GroupInfo, ServerInfo};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ServerDaemonRuntime {
     info: ServerInfo,
+    state: DaemonState,
+}
+
+#[derive(Clone, Debug)]
+pub enum DaemonState {
+    Uninitialized,
+    Running(GroupInfo),
+    Failed,
 }
 
 impl ServerDaemonRuntime {
-    pub fn new(id: Uuid, addr: &str) -> Self {
+    pub fn new(id: Uuid, addr: &str, state: DaemonState) -> Self {
         let info = ServerInfo {
             id,
             addr: addr.to_owned(),
         };
 
-        Self { info }
+        Self { info, state }
     }
 
     pub fn create() -> Result<Self, Box<dyn Error>> {
         let mac = get_mac()?;
         let id = Uuid::now_v6(&mac.bytes());
 
-        Ok(Self::new(id, "127.0.0.1:50051"))
+        let state = DaemonState::Uninitialized;
+
+        Ok(Self::new(id, "127.0.0.1:50051", state))
     }
 
     pub async fn start(self) -> Result<(), Box<dyn Error>> {
@@ -49,6 +59,33 @@ impl ServerDaemonRuntime {
 
 #[tonic::async_trait]
 impl ServerDaemon for ServerDaemonRuntime {
+    async fn get_info(
+        &self,
+        _request: Request<GetInfoRequest>,
+    ) -> Result<Response<GetInfoResponse>, Status> {
+        println!("GetInfo called!");
+
+        let server = Some(self.info.clone().into());
+
+        use DaemonState::*;
+        let group = match &self.state {
+            Uninitialized => None,
+            Running(group) => Some(group.clone().into()),
+            Failed => None,
+        };
+
+        let state: ServerState = self.state.clone().into();
+        let state = state.into();
+
+        let resposne = GetInfoResponse {
+            server,
+            group,
+            state,
+        };
+
+        Ok(Response::new(resposne))
+    }
+
     async fn ping(&self, _request: Request<()>) -> Result<Response<PingResponse>, Status> {
         println!("got ping!");
 

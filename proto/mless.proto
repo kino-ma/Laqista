@@ -12,11 +12,21 @@ message Server {
   string id = 1;
   string addr = 2;
 }
+enum ServerState {
+  UNINITIALIZED = 0;
+  RUNNING = 1;
+  FAILED = 2;
+}
 
 message Deployment {
   string id = 1;
   string source = 2;
   repeated Server servers = 3;
+}
+
+message Group {
+  uint32 number = 1;
+  Server scheduler = 2;
 }
 
 message QoS {}
@@ -26,8 +36,10 @@ message QoS {}
  */
 
 service Scheduler {
+  // For cluster management.
   rpc Join(JoinRequest) returns (JoinResponse);
 
+  // For managing and calling applictions.
   rpc Deploy(DeployRequest) returns (DeployResponse);
   rpc Lookup(LookupRequest) returns (LookupResponse);
 }
@@ -59,6 +71,9 @@ message DeployResponse {
  */
 
 service ServerDaemon {
+  // For getting cluster information.
+  rpc GetInfo(GetInfoRequest) returns (GetInfoResponse);
+
   // For monitoring.
   rpc Ping(google.protobuf.Empty) returns (PingResponse);
   rpc Monitor(MonitorRequest) returns (MonitorResponse);
@@ -69,6 +84,13 @@ service ServerDaemon {
 
   // In addition, the Server Daemon proxies any requsets that is not to package
   // "mless".
+}
+
+message GetInfoRequest {}
+message GetInfoResponse {
+  Server server = 1;
+  optional Group group = 2;
+  ServerState state = 3;
 }
 
 message PingResponse { bool success = 1; }
