@@ -21,7 +21,6 @@ enum ServerState {
 message Deployment {
   string id = 1;
   string source = 2;
-  repeated Server servers = 3;
 }
 
 message Group {
@@ -38,10 +37,24 @@ message QoS {}
 service Scheduler {
   // For cluster management.
   rpc Join(JoinRequest) returns (JoinResponse);
+  rpc Notify(NotifyRequest) returns (NotifyResponse);
 
   // For managing and calling applictions.
   rpc Deploy(DeployRequest) returns (DeployResponse);
   rpc Lookup(LookupRequest) returns (LookupResponse);
+}
+
+message NotifyRequest { ClusterState cluster = 1; }
+message NotifyResponse { bool success = 1; }
+
+message ClusterState {
+  repeated Server servers = 1;
+  Server scheduler = 2;
+  repeated AppInstanceLocations instances = 3;
+}
+message AppInstanceLocations {
+  Deployment deployment = 1;
+  repeated Server locations = 2;
 }
 
 message JoinRequest { string addr = 1; }
@@ -53,6 +66,7 @@ message JoinResponse {
 message LookupRequest {
   string deployment_id = 1;
   QoS qos = 2;
+  repeated AppInstanceLocations instances = 3;
 }
 message LookupResponse {
   bool success = 1;
