@@ -2,6 +2,19 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use mless::server::Server;
 
 fn main() {
+    let command = get_command();
+    let matches = command.get_matches();
+
+    match matches.subcommand() {
+        Some(("server", server_matches)) => run_server(server_matches),
+        Some((subcommand, args)) => {
+            panic!("unknown command: {:?}, with args = {:?}", subcommand, args)
+        }
+        None => unreachable!(),
+    }
+}
+
+fn get_command() -> Command {
     let command_server = Command::new("server").arg(
         Arg::new("start")
             .short('s')
@@ -16,15 +29,7 @@ fn main() {
         .arg_required_else_help(true)
         .subcommand(command_server);
 
-    let matches = command.get_matches();
-
-    match matches.subcommand() {
-        Some(("server", server_matches)) => run_server(server_matches),
-        Some((subcommand, args)) => {
-            panic!("unknown command: {:?}, with args = {:?}", subcommand, args)
-        }
-        None => unreachable!(),
-    }
+    return command;
 }
 
 fn run_server(matches: &ArgMatches) {
