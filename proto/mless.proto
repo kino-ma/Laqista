@@ -2,6 +2,7 @@ syntax = "proto3";
 package mless;
 
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
 
 /*
  * Core messages
@@ -59,7 +60,7 @@ message DeployResponse {
 
 service ServerDaemon {
   // For monitoring.
-  rpc Ping() returns (PingResponse);
+  rpc Ping(google.protobuf.Empty) returns (PingResponse);
   rpc Monitor(MonitorRequest) returns (MonitorResponse);
 
   // App Instance management.
@@ -76,8 +77,8 @@ message MonitorRequest { TimeWindow window = 1; }
 message MonitorResponse { repeated MonitorWindow windows = 1; }
 
 message TimeWindow {
-  Timestamp start = 1;
-  Timestamp end = 2;
+  google.protobuf.Timestamp start = 1;
+  google.protobuf.Timestamp end = 2;
 }
 message MonitorWindow {
   TimeWindow window = 1;
@@ -105,7 +106,7 @@ message DestroyRequest {
 }
 message DestroyResponse { bool success = 1; }
 
-message DestroyReason {
+enum DestroyReason {
   DESTROY_REASON_UNKNOWN = 0;
   SCALE_IN = 1;
   REMOVED = 2;
