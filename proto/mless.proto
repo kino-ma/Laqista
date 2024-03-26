@@ -28,7 +28,7 @@ message QoS {}
 service Scheduler {
   rpc Join(JoinRequest) returns (JoinResponse);
 
-  rpc Deploy(DeploymentRequest) returns (DeployResponse);
+  rpc Deploy(DeployRequest) returns (DeployResponse);
   rpc Lookup(LookupRequest) returns (LookupResponse);
 }
 
@@ -48,7 +48,7 @@ message LookupResponse {
   Server server = 3;
 }
 
-message DeploymentRequest { string source = 1; }
+message DeployRequest { string source = 1; }
 message DeployResponse {
   bool success = 1;
   Deployment deployment = 2;
