@@ -48,8 +48,8 @@ message NotifyRequest { ClusterState cluster = 1; }
 message NotifyResponse { bool success = 1; }
 
 message ClusterState {
-  repeated Server servers = 1;
-  Server scheduler = 2;
+  Group group = 1;
+  repeated Server servers = 2;
   repeated AppInstanceLocations instances = 3;
 }
 message AppInstanceLocations {
@@ -57,11 +57,8 @@ message AppInstanceLocations {
   repeated Server locations = 2;
 }
 
-message JoinRequest { string addr = 1; }
-message JoinResponse {
-  bool success = 1;
-  Server server = 2;
-}
+message JoinRequest { Server server = 1; }
+message JoinResponse { bool success = 1; }
 
 message LookupRequest {
   string deployment_id = 1;

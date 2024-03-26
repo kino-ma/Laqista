@@ -2,6 +2,7 @@ use proto::{GetInfoResponse, Group, Server, ServerState};
 use server::DaemonState;
 use uuid::Uuid;
 
+pub mod scheduler;
 pub mod server;
 
 mod utils;
