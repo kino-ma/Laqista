@@ -1,15 +1,16 @@
+use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::error::Error;
 
 use tonic::transport::Channel;
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{transport::Server, Code, Request, Response, Status};
 use uuid::Uuid;
 
 use crate::proto::scheduler_client::SchedulerClient;
 use crate::proto::scheduler_server::{Scheduler, SchedulerServer};
 use crate::proto::{
     ClusterState, DeployRequest, DeployResponse, JoinRequest, JoinResponse, LookupRequest,
-    LookupResponse, MonitorResponse, MonitorWindow, NotifyRequest,
+    LookupResponse, MonitorResponse, MonitorWindow, NotifyRequest, NotifyResponse,
 };
 use crate::{GroupInfo, ServerInfo};
 
@@ -73,9 +74,26 @@ impl Scheduler for SchedulerRuntime {
         let server = server.expect("server cannot be None");
         self.cluster.state.servers.push(server);
 
-        self.notify_to_other();
+        self.notify_to_other()
+            .await
+            .map_err(|e| Status::new(Code::Aborted, e.to_string()))?;
 
         Ok(Response::new(JoinResponse { success: true }))
+    }
+
+    async fn notify(
+        &self,
+        request: Request<NotifyRequest>,
+    ) -> Result<Response<NotifyResponse>, Status> {
+        println!("notify() called!!");
+
+        let NotifyRequest { cluster: state } = request.into_inner();
+        let state = state.expect("State cannot be None");
+
+        let mut mut_self = self.borrow_mut();
+        mut_self.other.state = state;
+
+        Ok(Response::new(NotifyResponse { success: true }))
     }
 }
 
