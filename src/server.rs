@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use tonic::{transport::Server as TServer, Request, Response, Status};
+use tonic::{transport::Server as TransportServer, Request, Response, Status};
 use uuid::Uuid;
 
 use crate::proto::server_daemon_server::{ServerDaemon, ServerDaemonServer};
@@ -9,19 +9,21 @@ use crate::proto::{
     SpawnResponse,
 };
 use crate::utils::get_mac;
+use crate::ServerInfo;
 
 #[derive(Debug)]
-pub struct Daemon {
-    id: Uuid,
-    addr: String,
+pub struct ServerDaemonRuntime {
+    info: ServerInfo,
 }
 
-impl Daemon {
+impl ServerDaemonRuntime {
     pub fn new(id: Uuid, addr: &str) -> Self {
-        Self {
+        let info = ServerInfo {
             id,
             addr: addr.to_owned(),
-        }
+        };
+
+        Self { info }
     }
 
     pub fn create() -> Result<Self, Box<dyn Error>> {
@@ -32,11 +34,11 @@ impl Daemon {
     }
 
     pub async fn start(self) -> Result<(), Box<dyn Error>> {
-        let addr = self.addr.parse()?;
+        let addr = self.info.addr.parse()?;
 
-        println!("starting server... {}", self.id);
+        println!("starting server... ({})", self.info.id);
 
-        TServer::builder()
+        TransportServer::builder()
             .add_service(ServerDaemonServer::new(self))
             .serve(addr)
             .await?;
@@ -46,7 +48,7 @@ impl Daemon {
 }
 
 #[tonic::async_trait]
-impl ServerDaemon for Daemon {
+impl ServerDaemon for ServerDaemonRuntime {
     async fn ping(&self, _request: Request<()>) -> Result<Response<PingResponse>, Status> {
         println!("got ping!");
 
@@ -79,7 +81,7 @@ impl ServerDaemon for Daemon {
     }
 }
 
-impl Default for Daemon {
+impl Default for ServerDaemonRuntime {
     fn default() -> Self {
         Self::create().expect("failed to create default daemon")
     }

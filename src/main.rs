@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use mless::server::Daemon;
+use mless::server::ServerDaemonRuntime;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -38,7 +38,7 @@ fn get_command() -> Command {
 }
 
 async fn run_server(matches: &ArgMatches) {
-    let server = Daemon::default();
+    let server = ServerDaemonRuntime::default();
 
     if matches.get_flag("start") {
         server.start().await.expect("failed to start the server");
