@@ -1,17 +1,22 @@
-use clap::{Arg, ArgAction, ArgMatches, Command};
-use mless::server::Server;
+use std::error::Error;
 
-fn main() {
+use clap::{Arg, ArgAction, ArgMatches, Command};
+use mless::server::Daemon;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     let command = get_command();
     let matches = command.get_matches();
 
     match matches.subcommand() {
-        Some(("server", server_matches)) => run_server(server_matches),
+        Some(("server", server_matches)) => run_server(server_matches).await,
         Some((subcommand, args)) => {
             panic!("unknown command: {:?}, with args = {:?}", subcommand, args)
         }
         None => unreachable!(),
     }
+
+    Ok(())
 }
 
 fn get_command() -> Command {
@@ -32,11 +37,11 @@ fn get_command() -> Command {
     return command;
 }
 
-fn run_server(matches: &ArgMatches) {
-    let server = Server::new();
+async fn run_server(matches: &ArgMatches) {
+    let server = Daemon::default();
 
     if matches.get_flag("start") {
-        server.start().expect("failed to start the server");
+        server.start().await.expect("failed to start the server");
     } else {
         println!("no flags!");
     }
