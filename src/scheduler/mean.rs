@@ -12,7 +12,7 @@ impl DeploymentScheduler for MeanGpuScheduler {
         let mut least_utilized = stats_map.iter().next()?.1;
         let mut least_utilized_rate = 0.;
 
-        for (id, stats) in stats_map {
+        for (id, stats) in stats_map.iter() {
             let utilized_rate = self.utilized_rate(stats);
 
             if utilized_rate < least_utilized_rate {

@@ -1,5 +1,33 @@
+use std::{
+    collections::{hash_map::Iter, HashMap},
+    fmt::Debug,
+};
+
 use mac_address::{get_mac_address, MacAddress, MacAddressError};
 use prost_types::Timestamp;
+use uuid::Uuid;
+
+#[derive(Clone, Debug)]
+pub struct IdMap<T: Clone + Debug>(HashMap<Uuid, T>);
+
+impl<T: Clone + Debug> IdMap<T> {
+    pub fn new() -> Self {
+        Self(HashMap::new())
+    }
+
+    pub fn clone_by_ids(&self, ids: &[Uuid]) -> Self {
+        let inner = ids
+            .iter()
+            .filter_map(|id| self.0.get(id).map(|s| (id.clone(), s.clone())))
+            .collect();
+
+        Self(inner)
+    }
+
+    pub fn iter(&self) -> Iter<Uuid, T> {
+        self.0.iter()
+    }
+}
 
 pub fn get_mac() -> Result<MacAddress, MacAddressError> {
     match get_mac_address() {

@@ -1,15 +1,12 @@
-use std::collections::HashMap;
-
 use prost_types::Timestamp;
-use uuid::Uuid;
 
 use crate::{
     proto::{MonitorWindow, ResourceUtilization},
-    utils::subtract_window,
+    utils::{subtract_window, IdMap},
     ServerInfo,
 };
 
-pub type StatsMap = HashMap<Uuid, ServerStats>;
+pub type StatsMap = IdMap<ServerStats>;
 
 #[derive(Clone, Debug)]
 pub struct ServerStats {
