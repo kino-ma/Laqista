@@ -1,4 +1,4 @@
-use proto::{GetInfoResponse, Group, Server, ServerState};
+use proto::{Deployment, GetInfoResponse, Group, Server, ServerState};
 use server::DaemonState;
 use uuid::Uuid;
 
@@ -21,6 +21,12 @@ pub struct ServerInfo {
 pub struct GroupInfo {
     number: u32,
     scheduler_info: ServerInfo,
+}
+
+#[derive(Clone, Debug)]
+pub struct DeploymentInfo {
+    id: Uuid,
+    source: String,
 }
 
 impl Into<Server> for ServerInfo {
@@ -80,6 +86,30 @@ impl Into<ServerState> for DaemonState {
             Self::Running(_) => Running,
             Self::Failed => Failed,
         }
+    }
+}
+
+impl DeploymentInfo {
+    pub fn new(source: String) -> Self {
+        let id = Uuid::new_v4();
+        Self { source, id }
+    }
+}
+
+impl TryFrom<Deployment> for DeploymentInfo {
+    type Error = String;
+    fn try_from(deployment: Deployment) -> Result<Self, Self::Error> {
+        let Deployment { source, id } = deployment;
+        let id = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
+        Ok(Self { source, id })
+    }
+}
+
+impl Into<Deployment> for DeploymentInfo {
+    fn into(self) -> Deployment {
+        let Self { source, id } = self;
+        let id = id.to_string();
+        Deployment { source, id }
     }
 }
 

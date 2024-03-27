@@ -71,7 +71,10 @@ message LookupResponse {
   Server server = 3;
 }
 
-message DeployRequest { string source = 1; }
+message DeployRequest {
+  string source = 1;
+  bool authoritative = 2;
+}
 message DeployResponse {
   bool success = 1;
   Deployment deployment = 2;
@@ -126,7 +129,7 @@ message ResourceUtilization {
   int32 vram_used = 6;
 }
 
-message SpawnRequest { string deployment_id = 1; }
+message SpawnRequest { Deployment deployment = 1; }
 message SpawnResponse {
   bool success = 1;
   Deployment deployment = 2;
