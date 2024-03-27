@@ -23,3 +23,8 @@ It is implemented in Go, using [grpc-proxy](https://github.com/mwitkow/grpc-prox
 ```
 grpcurl -plaintext -import-path ./proto -proto mless.proto -d '{}' '127.0.0.1:50051' mless.ServerDaemon/Ping
 ```
+
+### Notes
+
+- Server IDs are UUIDv6, which is based on MAC address
+- Deployment IDs are UUIDv4, which is generated randomly 
