@@ -2,22 +2,22 @@ mod interface;
 mod mean;
 mod stats;
 
-use std::borrow::BorrowMut;
 use std::error::Error;
 
 use tonic::transport::Channel;
-use tonic::{Code, Request, Response, Status};
+use tonic::{server, Code, Request, Response, Status};
 use uuid::Uuid;
 
 use crate::proto::scheduler_client::SchedulerClient;
 use crate::proto::scheduler_server::{Scheduler, SchedulerServer};
 use crate::proto::server_daemon_client::ServerDaemonClient;
 use crate::proto::{
-    ClusterState, DeployRequest, DeployResponse, Deployment, JoinRequest, JoinResponse,
-    LookupRequest, LookupResponse, MonitorResponse, MonitorWindow, NotifyRequest, NotifyResponse,
-    SpawnRequest, SpawnResponse,
+    DeployRequest, DeployResponse, Deployment, Group, JoinRequest, JoinResponse, LookupRequest,
+    LookupResponse, MonitorResponse, MonitorWindow, NotifyRequest, NotifyResponse, SpawnRequest,
+    SpawnResponse,
 };
-use crate::{DeploymentInfo, ServerInfo};
+use crate::utils::IdMap;
+use crate::{AppInstanceInfo, DeploymentInfo, GroupInfo, ServerInfo};
 
 use self::interface::DeploymentScheduler;
 use self::mean::MeanGpuScheduler;
@@ -27,12 +27,14 @@ pub struct SchedulerRuntime {
     cluster: Cluster,
     other: Cluster,
     scheduler: Box<dyn DeploymentScheduler>,
-    deployments: Vec<DeploymentInfo>,
+    deployments: IdMap<DeploymentInfo>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Cluster {
-    state: ClusterState,
+    group: GroupInfo,
+    servers: Vec<ServerInfo>,
+    instances: AppInstanceInfo,
     server_stats: StatsMap,
 }
 
@@ -49,7 +51,7 @@ impl SchedulerRuntime {
             cluster,
             other,
             scheduler,
-            deployments: vec![],
+            deployments: IdMap::new(),
         }
     }
 
@@ -184,7 +186,9 @@ impl Scheduler for SchedulerRuntime {
             .await
             .map_err(|e| Status::aborted(e.to_string()))?;
 
-        self.deployments.push(deployment_info);
+        self.deployments
+            .0
+            .insert(deployment_info.id, deployment_info);
         success &= resp.success;
 
         if authoritative {
@@ -204,31 +208,67 @@ impl Scheduler for SchedulerRuntime {
             deployment: Some(deployment),
         }))
     }
+
+    async fn lookup(
+        &self,
+        request: Request<LookupRequest>,
+    ) -> Result<Response<LookupResponse>, Status> {
+        let id = Uuid::parse_str(&request.get_ref().deployment_id)
+            .map_err(|e| Status::aborted(e.to_string()))?;
+
+        let deployment = self
+            .deployments
+            .0
+            .get(&id)
+            .ok_or(Status::aborted("Deployment not found"))?;
+
+        let server_ids = self
+            .cluster
+            .get_instance_server_ids(&id)
+            .map_err(Status::aborted)?;
+
+        let stats_map = self.cluster.server_stats.clone_by_ids(server_ids);
+
+        let target = self
+            .scheduler
+            .schedule(&stats_map)
+            .ok_or(Status::aborted("Failed to schedule"))?;
+
+        Ok(Response::new(LookupResponse {
+            success: true,
+            deployment: Some((*deployment).into()),
+            server: Some((*target).into()),
+        }))
+    }
 }
 
 impl Cluster {
-    pub fn new(server: &ServerInfo) -> Self {
-        let state = ClusterState {
-            group: None,
-            servers: vec![],
-            instances: vec![],
-        };
-
+    pub fn new(scheduler: &ServerInfo) -> Self {
+        let group = GroupInfo::new(scheduler);
+        let servers = vec![];
+        let instances = AppInstanceInfo::new();
         let server_stats = StatsMap::new();
 
         Self {
-            state,
+            group,
+            servers,
+            instances,
             server_stats,
         }
     }
 
+    pub fn get_instance_server_ids(&self, deployment_id: &Uuid) -> Result<&[Uuid], String> {
+        Ok(&self
+            .instances
+            .0
+            .get(deployment_id)
+            .ok_or("Deployment not found".to_string())?
+            .iter()
+            .map(|s| s.id)
+            .collect::<Vec<_>>())
+    }
+
     pub fn get_addr(&self) -> &str {
-        &self
-            .state
-            .group
-            .expect("Group cannot be empty")
-            .scheduler
-            .expect("Scheduler cannot be empty")
-            .addr
+        &self.group.scheduler_info.addr
     }
 }

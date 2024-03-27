@@ -8,7 +8,7 @@ use prost_types::Timestamp;
 use uuid::Uuid;
 
 #[derive(Clone, Debug)]
-pub struct IdMap<T: Clone + Debug>(HashMap<Uuid, T>);
+pub struct IdMap<T: Clone + Debug>(pub HashMap<Uuid, T>);
 
 impl<T: Clone + Debug> IdMap<T> {
     pub fn new() -> Self {

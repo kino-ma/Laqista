@@ -63,7 +63,6 @@ message JoinResponse { bool success = 1; }
 message LookupRequest {
   string deployment_id = 1;
   QoS qos = 2;
-  repeated AppInstanceLocations instances = 3;
 }
 message LookupResponse {
   bool success = 1;

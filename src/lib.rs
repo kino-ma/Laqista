@@ -1,5 +1,6 @@
 use proto::{Deployment, GetInfoResponse, Group, Server, ServerState};
 use server::DaemonState;
+use utils::IdMap;
 use uuid::Uuid;
 
 pub mod scheduler;
@@ -27,6 +28,18 @@ pub struct GroupInfo {
 pub struct DeploymentInfo {
     id: Uuid,
     source: String,
+}
+
+pub type AppInstanceInfo = IdMap<Vec<ServerInfo>>;
+
+impl GroupInfo {
+    pub fn new(scheduler_info: &ServerInfo) -> Self {
+        let scheduler_info = scheduler_info.clone();
+        Self {
+            number: 0,
+            scheduler_info,
+        }
+    }
 }
 
 impl Into<Server> for ServerInfo {
