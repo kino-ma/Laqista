@@ -102,6 +102,7 @@ impl Into<ServerState> for DaemonState {
         match self {
             Self::Uninitialized => Uninitialized,
             Self::Running(_) => Running,
+            Self::Authoritative(_) => Authoritative,
             Self::Failed => Failed,
         }
     }
@@ -178,6 +179,7 @@ pub fn get_daemon_state(info: &GetInfoResponse) -> Result<DaemonState, String> {
     match state {
         Ok(Uninitialized) => Ok(DaemonState::Uninitialized),
         Ok(Running) => Ok(DaemonState::Running(group)),
+        Ok(Authoritative) => Ok(DaemonState::Authoritative()),
         Ok(Failed) => Ok(DaemonState::Failed),
         Err(e) => Err(e.to_string()),
     }

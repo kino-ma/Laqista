@@ -8,6 +8,7 @@ use crate::proto::{
     DestroyRequest, DestroyResponse, GetInfoRequest, GetInfoResponse, MonitorRequest,
     MonitorResponse, PingResponse, ServerState, SpawnRequest, SpawnResponse,
 };
+use crate::scheduler::AuthoritativeScheduler;
 use crate::utils::get_mac;
 use crate::{GroupInfo, ServerInfo};
 
@@ -21,6 +22,7 @@ pub struct ServerDaemonRuntime {
 pub enum DaemonState {
     Uninitialized,
     Running(GroupInfo),
+    Authoritative(AuthoritativeScheduler),
     Failed,
 }
 
@@ -71,6 +73,16 @@ impl ServerDaemon for ServerDaemonRuntime {
         let group = match &self.state {
             Uninitialized => None,
             Running(group) => Some(group.clone().into()),
+            Authoritative(scheduler) => Some(
+                scheduler
+                    .runtime
+                    .lock()
+                    .unwrap()
+                    .cluster
+                    .group
+                    .clone()
+                    .into(),
+            ),
             Failed => None,
         };
 

@@ -24,24 +24,25 @@ use crate::{AppInstanceMap, AppInstancesInfo, DeploymentInfo, GroupInfo, ServerI
 use self::interface::DeploymentScheduler;
 use self::stats::StatsMap;
 
+#[derive(Debug)]
 pub struct AuthoritativeScheduler {
-    runtime: Arc<Mutex<SchedulerRuntime>>,
+    pub runtime: Arc<Mutex<SchedulerRuntime>>,
 }
 
 #[derive(Clone, Debug)]
 pub struct SchedulerRuntime {
-    cluster: Cluster,
-    other: Cluster,
-    scheduler: Box<dyn DeploymentScheduler>,
-    deployments: IdMap<DeploymentInfo>,
+    pub cluster: Cluster,
+    pub other: Cluster,
+    pub scheduler: Box<dyn DeploymentScheduler>,
+    pub deployments: IdMap<DeploymentInfo>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Cluster {
-    group: GroupInfo,
-    servers: Vec<ServerInfo>,
-    instances: AppInstanceMap,
-    server_stats: StatsMap,
+    pub group: GroupInfo,
+    pub servers: Vec<ServerInfo>,
+    pub instances: AppInstanceMap,
+    pub server_stats: StatsMap,
 }
 
 impl AuthoritativeScheduler {
@@ -169,7 +170,12 @@ impl Scheduler for AuthoritativeScheduler {
             .await
             .map_err(|e| Status::new(Code::Aborted, e.to_string()))?;
 
-        Ok(Response::new(JoinResponse { success: true }))
+        let group = Some(self.runtime.lock().unwrap().cluster.group.clone().into());
+
+        Ok(Response::new(JoinResponse {
+            success: true,
+            group,
+        }))
     }
 
     async fn notify(

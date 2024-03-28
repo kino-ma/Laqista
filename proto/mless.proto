@@ -16,6 +16,7 @@ enum ServerState {
   UNINITIALIZED = 0;
   RUNNING = 1;
   FAILED = 2;
+  AUTHORITATIVE = 3;
 }
 
 message Deployment {
@@ -58,7 +59,10 @@ message AppInstanceLocations {
 }
 
 message JoinRequest { Server server = 1; }
-message JoinResponse { bool success = 1; }
+message JoinResponse {
+  bool success = 1;
+  Group group = 2;
+}
 
 message LookupRequest {
   string deployment_id = 1;
