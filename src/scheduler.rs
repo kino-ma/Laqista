@@ -7,22 +7,20 @@ use std::collections::HashMap;
 use std::error::Error;
 
 use tonic::transport::Channel;
-use tonic::{server, Code, Request, Response, Status};
+use tonic::{Code, Request, Response, Status};
 use uuid::Uuid;
 
 use crate::proto::scheduler_client::SchedulerClient;
-use crate::proto::scheduler_server::{Scheduler, SchedulerServer};
+use crate::proto::scheduler_server::Scheduler;
 use crate::proto::server_daemon_client::ServerDaemonClient;
 use crate::proto::{
-    AppInstanceLocations, ClusterState, DeployRequest, DeployResponse, Deployment, Group,
-    JoinRequest, JoinResponse, LookupRequest, LookupResponse, MonitorResponse, MonitorWindow,
-    NotifyRequest, NotifyResponse, SpawnRequest, SpawnResponse,
+    ClusterState, DeployRequest, DeployResponse, Deployment, JoinRequest, JoinResponse,
+    LookupRequest, LookupResponse, NotifyRequest, NotifyResponse, SpawnRequest, SpawnResponse,
 };
 use crate::utils::IdMap;
 use crate::{AppInstanceMap, AppInstancesInfo, DeploymentInfo, GroupInfo, ServerInfo};
 
 use self::interface::DeploymentScheduler;
-use self::mean::MeanGpuScheduler;
 use self::stats::StatsMap;
 
 pub struct SchedulerRuntime {
