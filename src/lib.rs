@@ -1,4 +1,4 @@
-use proto::{AppInstanceLocations, Deployment, GetInfoResponse, Group, Server, ServerState};
+use proto::{AppInstanceLocations, Deployment, Group, Server, ServerState};
 use server::DaemonState;
 use utils::IdMap;
 use uuid::Uuid;
@@ -163,24 +163,5 @@ impl TryFrom<AppInstanceLocations> for AppInstancesInfo {
             deployment,
             servers,
         })
-    }
-}
-
-pub fn get_daemon_state(info: &GetInfoResponse) -> Result<DaemonState, String> {
-    use ServerState::*;
-
-    let state = ServerState::try_from(info.state).map_err(|e| e.to_string());
-
-    let group = match info.group.clone() {
-        Some(group) => GroupInfo::try_from(group).map_err(|e| e.to_string()),
-        None => Err("No group info".to_string()),
-    }?;
-
-    match state {
-        Ok(Uninitialized) => Ok(DaemonState::Uninitialized),
-        Ok(Running) => Ok(DaemonState::Running(group)),
-        Ok(Authoritative) => Ok(DaemonState::Authoritative()),
-        Ok(Failed) => Ok(DaemonState::Failed),
-        Err(e) => Err(e.to_string()),
     }
 }
