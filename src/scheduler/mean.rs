@@ -5,6 +5,7 @@ use super::{
     stats::{ServerStats, StatsMap},
 };
 
+#[derive(Clone, Debug)]
 pub struct MeanGpuScheduler {}
 
 impl DeploymentScheduler for MeanGpuScheduler {

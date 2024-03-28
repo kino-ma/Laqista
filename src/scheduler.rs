@@ -5,6 +5,7 @@ mod stats;
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::error::Error;
+use std::sync::{Arc, Mutex};
 
 use tonic::transport::Channel;
 use tonic::{Code, Request, Response, Status};
@@ -23,6 +24,11 @@ use crate::{AppInstanceMap, AppInstancesInfo, DeploymentInfo, GroupInfo, ServerI
 use self::interface::DeploymentScheduler;
 use self::stats::StatsMap;
 
+pub struct AuthoritativeScheduler {
+    runtime: Arc<Mutex<SchedulerRuntime>>,
+}
+
+#[derive(Clone, Debug)]
 pub struct SchedulerRuntime {
     cluster: Cluster,
     other: Cluster,
@@ -38,7 +44,7 @@ pub struct Cluster {
     server_stats: StatsMap,
 }
 
-impl SchedulerRuntime {
+impl AuthoritativeScheduler {
     pub fn new(
         this_server: &ServerInfo,
         other_server: &ServerInfo,
@@ -47,16 +53,18 @@ impl SchedulerRuntime {
         let cluster = Cluster::new(this_server);
         let other = Cluster::new(other_server);
 
-        Self {
+        let runtime = Arc::new(Mutex::new(SchedulerRuntime {
             cluster,
             other,
             scheduler,
             deployments: IdMap::new(),
-        }
+        }));
+
+        Self { runtime }
     }
 
     pub fn push_server(&self, server: ServerInfo) {
-        self.cluster.servers.push(server);
+        self.runtime.lock().unwrap().cluster.servers.push(server);
     }
 
     pub async fn deploy_to_other(
@@ -82,7 +90,8 @@ impl SchedulerRuntime {
     pub async fn notify_to_other(&self) -> Result<(), Box<dyn Error>> {
         let mut client = self.other_client().await?;
 
-        let cluster = Some(self.cluster.clone().try_into()?);
+        let runtime = SchedulerRuntime::clone_inner(&self.runtime);
+        let cluster = Some(runtime.cluster.try_into()?);
         let request = Request::new(NotifyRequest { cluster });
 
         let response = client.notify(request).await?;
@@ -99,9 +108,10 @@ impl SchedulerRuntime {
         &self,
         request: SpawnRequest,
     ) -> Result<SpawnResponse, Box<dyn Error>> {
-        let target_server = self
+        let runtime = self.clone_inner();
+        let target_server = runtime
             .scheduler
-            .schedule(&self.cluster.server_stats)
+            .schedule(&runtime.cluster.server_stats)
             .ok_or(Status::new(Code::Aborted, "failed to schedule new job"))?;
 
         let mut client = self.client(target_server).await?;
@@ -130,14 +140,18 @@ impl SchedulerRuntime {
     }
 
     pub async fn other_client(&self) -> Result<SchedulerClient<Channel>, Box<dyn Error>> {
-        let other_addr = self.other.get_addr().to_owned();
+        let other_addr = self.runtime.lock().unwrap().other.get_addr().to_owned();
 
         return Ok(SchedulerClient::connect(other_addr).await?);
+    }
+
+    pub fn clone_inner(&self) -> SchedulerRuntime {
+        SchedulerRuntime::clone_inner(&self.runtime)
     }
 }
 
 #[tonic::async_trait]
-impl Scheduler for SchedulerRuntime {
+impl Scheduler for AuthoritativeScheduler {
     async fn join(&self, request: Request<JoinRequest>) -> Result<Response<JoinResponse>, Status> {
         println!("join() called!!");
 
@@ -179,6 +193,8 @@ impl Scheduler for SchedulerRuntime {
     ) -> Result<Response<DeployResponse>, Status> {
         println!("deploy() called!!");
 
+        let runtime = self.clone_inner();
+
         let DeployRequest {
             source,
             authoritative,
@@ -196,7 +212,8 @@ impl Scheduler for SchedulerRuntime {
             .await
             .map_err(|e| Status::aborted(e.to_string()))?;
 
-        self.deployments
+        runtime
+            .deployments
             .0
             .insert(deployment_info.id, deployment_info);
         success &= resp.success;
@@ -223,23 +240,25 @@ impl Scheduler for SchedulerRuntime {
         &self,
         request: Request<LookupRequest>,
     ) -> Result<Response<LookupResponse>, Status> {
+        let runtime = self.clone_inner();
+
         let id = Uuid::parse_str(&request.get_ref().deployment_id)
             .map_err(|e| Status::aborted(e.to_string()))?;
 
-        let deployment = self
+        let deployment = runtime
             .deployments
             .0
             .get(&id)
             .ok_or(Status::aborted("Deployment not found"))?;
 
-        let server_ids = self
+        let server_ids = runtime
             .cluster
             .get_instance_server_ids(&id)
             .map_err(Status::aborted)?;
 
-        let stats_map = self.cluster.server_stats.clone_by_ids(server_ids);
+        let stats_map = runtime.cluster.server_stats.clone_by_ids(server_ids);
 
-        let target = self
+        let target = runtime
             .scheduler
             .schedule(&stats_map)
             .ok_or(Status::aborted("Failed to schedule"))?;
@@ -249,6 +268,41 @@ impl Scheduler for SchedulerRuntime {
             deployment_id: id.to_string(),
             server: Some((*target).into()),
         }))
+    }
+}
+
+impl Clone for AuthoritativeScheduler {
+    fn clone(&self) -> Self {
+        let runtime = SchedulerRuntime::clone_inner(&self.runtime);
+        Self {
+            runtime: Arc::new(Mutex::new(runtime)),
+        }
+    }
+}
+
+impl SchedulerRuntime {
+    pub fn new(
+        this_server: &ServerInfo,
+        other_server: &ServerInfo,
+        scheduler: Box<dyn DeploymentScheduler>,
+    ) -> Self {
+        let cluster = Cluster::new(this_server);
+        let other = Cluster::new(other_server);
+
+        Self {
+            cluster,
+            other,
+            scheduler,
+            deployments: IdMap::new(),
+        }
+    }
+
+    pub fn wrap(self) -> Arc<Mutex<Self>> {
+        Arc::new(Mutex::new(self))
+    }
+
+    pub fn clone_inner(arc: &Arc<Mutex<Self>>) -> Self {
+        arc.lock().unwrap().clone()
     }
 }
 
