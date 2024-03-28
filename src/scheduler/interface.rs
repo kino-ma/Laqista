@@ -6,7 +6,7 @@ pub trait DeploymentScheduler: SchedulerClone + std::fmt::Debug + Send + Sync {
     fn schedule(&self, stats: &StatsMap) -> Option<ServerInfo>;
 }
 
-trait SchedulerClone {
+pub trait SchedulerClone {
     fn clone_box(&self) -> Box<dyn DeploymentScheduler>;
 }
 

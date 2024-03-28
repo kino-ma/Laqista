@@ -246,12 +246,6 @@ impl Scheduler for AuthoritativeScheduler {
         let id = Uuid::parse_str(&request.get_ref().deployment_id)
             .map_err(|e| Status::aborted(e.to_string()))?;
 
-        let deployment = runtime
-            .deployments
-            .0
-            .get(&id)
-            .ok_or(Status::aborted("Deployment not found"))?;
-
         let server_ids = runtime
             .cluster
             .get_instance_server_ids(&id)
@@ -377,11 +371,7 @@ impl TryFrom<ClusterState> for Cluster {
         let instances = state
             .instances
             .into_iter()
-            .filter_map(|i| {
-                i.clone()
-                    .deployment
-                    .map(|d| AppInstancesInfo::try_from(i).map(|ii| (ii.deployment.id, ii)))
-            })
+            .map(|i| AppInstancesInfo::try_from(i).map(|ii| (ii.deployment.id, ii)))
             .collect::<Result<HashMap<_, _, _>, _>>()
             .map(IdMap)?;
 
