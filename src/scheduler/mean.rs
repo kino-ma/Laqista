@@ -9,7 +9,7 @@ use super::{
 pub struct MeanGpuScheduler {}
 
 impl DeploymentScheduler for MeanGpuScheduler {
-    fn schedule(&self, stats_map: &StatsMap) -> Option<&ServerInfo> {
+    fn schedule(&self, stats_map: &StatsMap) -> Option<ServerInfo> {
         let mut least_utilized = stats_map.iter().next()?.1;
         let mut least_utilized_rate = 0.;
 
@@ -22,7 +22,7 @@ impl DeploymentScheduler for MeanGpuScheduler {
             }
         }
 
-        Some(&least_utilized.server)
+        Some(least_utilized.server.clone())
     }
 }
 

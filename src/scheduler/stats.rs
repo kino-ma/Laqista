@@ -21,7 +21,7 @@ impl ServerStats {
     }
 }
 
-struct Windows<'a> {
+pub struct Windows<'a> {
     inner: std::slice::Iter<'a, MonitorWindow>,
 }
 
@@ -36,12 +36,15 @@ impl<'a> Iterator for Windows<'a> {
     type Item = Window;
     fn next(&mut self) -> Option<Self::Item> {
         let stats = self.inner.next()?;
-        let window = stats.window.expect("Start cannot be empty");
+        let window = stats.window.as_ref().expect("Start cannot be empty");
 
-        let start = window.start.expect("Start cannot be empty");
-        let end = window.end.expect("End cannot be empty");
-        let nanos = subtract_window(end, start);
-        let utilization = stats.utilization.expect("Utilization cannot be empty");
+        let start = window.start.clone().expect("Start cannot be empty");
+        let end = window.end.clone().expect("End cannot be empty");
+        let nanos = subtract_window(&end, &start);
+        let utilization = stats
+            .utilization
+            .clone()
+            .expect("Utilization cannot be empty");
 
         Some(Window {
             start,

@@ -3,7 +3,7 @@ use crate::ServerInfo;
 use super::stats::StatsMap;
 
 pub trait DeploymentScheduler: SchedulerClone + std::fmt::Debug + Send + Sync {
-    fn schedule(&self, stats: &StatsMap) -> Option<&ServerInfo>;
+    fn schedule(&self, stats: &StatsMap) -> Option<ServerInfo>;
 }
 
 trait SchedulerClone {

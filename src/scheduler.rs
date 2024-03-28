@@ -114,7 +114,7 @@ impl AuthoritativeScheduler {
             .schedule(&runtime.cluster.server_stats)
             .ok_or(Status::new(Code::Aborted, "failed to schedule new job"))?;
 
-        let mut client = self.client(target_server).await?;
+        let mut client = self.client(&target_server).await?;
 
         let request = Request::new(request);
 
@@ -194,14 +194,12 @@ impl Scheduler for AuthoritativeScheduler {
     ) -> Result<Response<DeployResponse>, Status> {
         println!("deploy() called!!");
 
-        let mut runtime = self.runtime.lock().unwrap();
-
         let DeployRequest {
             source,
             authoritative,
         } = request.into_inner();
 
-        let deployment_info = DeploymentInfo::new(source);
+        let deployment_info = DeploymentInfo::new(source.clone());
         let deployment: Deployment = deployment_info.clone().into();
 
         let mut success = true;
@@ -213,7 +211,9 @@ impl Scheduler for AuthoritativeScheduler {
             .await
             .map_err(|e| Status::aborted(e.to_string()))?;
 
-        runtime
+        self.runtime
+            .lock()
+            .unwrap()
             .deployments
             .0
             .insert(deployment_info.id, deployment_info);
@@ -257,17 +257,18 @@ impl Scheduler for AuthoritativeScheduler {
             .get_instance_server_ids(&id)
             .map_err(Status::aborted)?;
 
-        let stats_map = runtime.cluster.server_stats.clone_by_ids(server_ids);
+        let stats_map = runtime.cluster.server_stats.clone_by_ids(&server_ids);
 
         let target = runtime
             .scheduler
             .schedule(&stats_map)
-            .ok_or(Status::aborted("Failed to schedule"))?;
+            .ok_or(Status::aborted("Failed to schedule"))?
+            .clone();
 
         Ok(Response::new(LookupResponse {
             success: true,
             deployment_id: id.to_string(),
-            server: Some((*target).into()),
+            server: Some(target.into()),
         }))
     }
 }
@@ -322,8 +323,8 @@ impl Cluster {
         }
     }
 
-    pub fn get_instance_server_ids(&self, deployment_id: &Uuid) -> Result<&[Uuid], String> {
-        Ok(&self
+    pub fn get_instance_server_ids(&self, deployment_id: &Uuid) -> Result<Vec<Uuid>, String> {
+        Ok(self
             .instances
             .0
             .get(deployment_id)
@@ -331,7 +332,7 @@ impl Cluster {
             .servers
             .iter()
             .map(|s| s.id)
-            .collect::<Vec<_>>())
+            .collect())
     }
 
     pub fn get_addr(&self) -> &str {
@@ -342,8 +343,13 @@ impl Cluster {
 impl Into<ClusterState> for Cluster {
     fn into(self) -> ClusterState {
         let group = Some(self.group.into());
-        let servers = self.servers.iter().map(|s| (*s).into()).collect();
-        let instances = self.instances.0.values().map(|i| (*i).into()).collect();
+        let servers = self.servers.iter().map(|s| s.clone().into()).collect();
+        let instances = self
+            .instances
+            .0
+            .values()
+            .map(|i| i.clone().into())
+            .collect();
 
         ClusterState {
             group,
@@ -372,7 +378,8 @@ impl TryFrom<ClusterState> for Cluster {
             .instances
             .into_iter()
             .filter_map(|i| {
-                i.deployment
+                i.clone()
+                    .deployment
                     .map(|d| AppInstancesInfo::try_from(i).map(|ii| (ii.deployment.id, ii)))
             })
             .collect::<Result<HashMap<_, _, _>, _>>()
