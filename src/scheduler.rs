@@ -181,8 +181,9 @@ impl Scheduler for AuthoritativeScheduler {
         let NotifyRequest { cluster: state } = request.into_inner();
         let state = state.expect("State cannot be None");
 
-        let mut mut_self = self.borrow_mut();
-        mut_self.other = state.try_into().map_err(Status::aborted)?;
+        let mut lock = self.runtime.lock().unwrap();
+        let runtime = lock.borrow_mut();
+        runtime.other = state.try_into().map_err(Status::aborted)?;
 
         Ok(Response::new(NotifyResponse { success: true }))
     }
@@ -193,7 +194,7 @@ impl Scheduler for AuthoritativeScheduler {
     ) -> Result<Response<DeployResponse>, Status> {
         println!("deploy() called!!");
 
-        let runtime = self.clone_inner();
+        let mut runtime = self.runtime.lock().unwrap();
 
         let DeployRequest {
             source,
