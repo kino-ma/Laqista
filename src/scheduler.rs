@@ -2,6 +2,8 @@ mod interface;
 mod mean;
 mod stats;
 
+use std::borrow::BorrowMut;
+use std::collections::HashMap;
 use std::error::Error;
 
 use tonic::transport::Channel;
@@ -12,12 +14,12 @@ use crate::proto::scheduler_client::SchedulerClient;
 use crate::proto::scheduler_server::{Scheduler, SchedulerServer};
 use crate::proto::server_daemon_client::ServerDaemonClient;
 use crate::proto::{
-    DeployRequest, DeployResponse, Deployment, Group, JoinRequest, JoinResponse, LookupRequest,
-    LookupResponse, MonitorResponse, MonitorWindow, NotifyRequest, NotifyResponse, SpawnRequest,
-    SpawnResponse,
+    AppInstanceLocations, ClusterState, DeployRequest, DeployResponse, Deployment, Group,
+    JoinRequest, JoinResponse, LookupRequest, LookupResponse, MonitorResponse, MonitorWindow,
+    NotifyRequest, NotifyResponse, SpawnRequest, SpawnResponse,
 };
 use crate::utils::IdMap;
-use crate::{AppInstanceInfo, DeploymentInfo, GroupInfo, ServerInfo};
+use crate::{AppInstanceMap, AppInstancesInfo, DeploymentInfo, GroupInfo, ServerInfo};
 
 use self::interface::DeploymentScheduler;
 use self::mean::MeanGpuScheduler;
@@ -34,7 +36,7 @@ pub struct SchedulerRuntime {
 pub struct Cluster {
     group: GroupInfo,
     servers: Vec<ServerInfo>,
-    instances: AppInstanceInfo,
+    instances: AppInstanceMap,
     server_stats: StatsMap,
 }
 
@@ -53,6 +55,10 @@ impl SchedulerRuntime {
             scheduler,
             deployments: IdMap::new(),
         }
+    }
+
+    pub fn push_server(&self, server: ServerInfo) {
+        self.cluster.servers.push(server);
     }
 
     pub async fn deploy_to_other(
@@ -77,9 +83,9 @@ impl SchedulerRuntime {
 
     pub async fn notify_to_other(&self) -> Result<(), Box<dyn Error>> {
         let mut client = self.other_client().await?;
-        let request = Request::new(NotifyRequest {
-            cluster: Some(self.cluster.state.clone()),
-        });
+
+        let cluster = Some(self.cluster.clone().try_into()?);
+        let request = Request::new(NotifyRequest { cluster });
 
         let response = client.notify(request).await?;
         if !response.get_ref().success {
@@ -137,9 +143,15 @@ impl Scheduler for SchedulerRuntime {
     async fn join(&self, request: Request<JoinRequest>) -> Result<Response<JoinResponse>, Status> {
         println!("join() called!!");
 
-        let JoinRequest { server } = request.get_ref();
-        let server = server.expect("server cannot be None");
-        self.cluster.state.servers.push(server);
+        let server = request
+            .get_ref()
+            .server
+            .clone()
+            .expect("server cannot be None")
+            .try_into()
+            .map_err(|e: uuid::Error| Status::aborted(e.to_string()))?;
+
+        self.push_server(server);
 
         self.notify_to_other()
             .await
@@ -158,7 +170,7 @@ impl Scheduler for SchedulerRuntime {
         let state = state.expect("State cannot be None");
 
         let mut mut_self = self.borrow_mut();
-        mut_self.other.state = state;
+        mut_self.other = state.try_into().map_err(Status::aborted)?;
 
         Ok(Response::new(NotifyResponse { success: true }))
     }
@@ -236,7 +248,7 @@ impl Scheduler for SchedulerRuntime {
 
         Ok(Response::new(LookupResponse {
             success: true,
-            deployment: Some((*deployment).into()),
+            deployment_id: id.to_string(),
             server: Some((*target).into()),
         }))
     }
@@ -246,7 +258,7 @@ impl Cluster {
     pub fn new(scheduler: &ServerInfo) -> Self {
         let group = GroupInfo::new(scheduler);
         let servers = vec![];
-        let instances = AppInstanceInfo::new();
+        let instances = AppInstanceMap::new();
         let server_stats = StatsMap::new();
 
         Self {
@@ -263,6 +275,7 @@ impl Cluster {
             .0
             .get(deployment_id)
             .ok_or("Deployment not found".to_string())?
+            .servers
             .iter()
             .map(|s| s.id)
             .collect::<Vec<_>>())
@@ -270,5 +283,55 @@ impl Cluster {
 
     pub fn get_addr(&self) -> &str {
         &self.group.scheduler_info.addr
+    }
+}
+
+impl Into<ClusterState> for Cluster {
+    fn into(self) -> ClusterState {
+        let group = Some(self.group.into());
+        let servers = self.servers.iter().map(|s| (*s).into()).collect();
+        let instances = self.instances.0.values().map(|i| (*i).into()).collect();
+
+        ClusterState {
+            group,
+            servers,
+            instances,
+        }
+    }
+}
+
+impl TryFrom<ClusterState> for Cluster {
+    type Error = String;
+    fn try_from(state: ClusterState) -> Result<Self, Self::Error> {
+        let group = state
+            .group
+            .ok_or("Group cannot be empty".to_owned())?
+            .try_into()?;
+
+        let servers = state
+            .servers
+            .into_iter()
+            .map(ServerInfo::try_from)
+            .collect::<Result<_, _>>()
+            .map_err(|e| e.to_string())?;
+
+        let instances = state
+            .instances
+            .into_iter()
+            .filter_map(|i| {
+                i.deployment
+                    .map(|d| AppInstancesInfo::try_from(i).map(|ii| (ii.deployment.id, ii)))
+            })
+            .collect::<Result<HashMap<_, _, _>, _>>()
+            .map(IdMap)?;
+
+        let server_stats = IdMap::new();
+
+        Ok(Self {
+            group,
+            servers,
+            instances,
+            server_stats,
+        })
     }
 }

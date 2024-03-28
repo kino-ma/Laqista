@@ -1,4 +1,4 @@
-use proto::{Deployment, GetInfoResponse, Group, Server, ServerState};
+use proto::{AppInstanceLocations, Deployment, GetInfoResponse, Group, Server, ServerState};
 use server::DaemonState;
 use utils::IdMap;
 use uuid::Uuid;
@@ -30,7 +30,12 @@ pub struct DeploymentInfo {
     source: String,
 }
 
-pub type AppInstanceInfo = IdMap<Vec<ServerInfo>>;
+#[derive(Clone, Debug)]
+pub struct AppInstancesInfo {
+    deployment: DeploymentInfo,
+    servers: Vec<ServerInfo>,
+}
+pub type AppInstanceMap = IdMap<AppInstancesInfo>;
 
 impl GroupInfo {
     pub fn new(scheduler_info: &ServerInfo) -> Self {
@@ -123,6 +128,40 @@ impl Into<Deployment> for DeploymentInfo {
         let Self { source, id } = self;
         let id = id.to_string();
         Deployment { source, id }
+    }
+}
+
+impl Into<AppInstanceLocations> for AppInstancesInfo {
+    fn into(self) -> AppInstanceLocations {
+        let deployment = Some(self.deployment.into());
+        let locations = self.servers.iter().map(|s| s.clone().into()).collect();
+
+        AppInstanceLocations {
+            deployment,
+            locations,
+        }
+    }
+}
+
+impl TryFrom<AppInstanceLocations> for AppInstancesInfo {
+    type Error = String;
+    fn try_from(locations: AppInstanceLocations) -> Result<Self, Self::Error> {
+        let deployment = locations
+            .deployment
+            .ok_or("Deployment cannot be empty".to_string())?
+            .try_into()?;
+
+        let servers = locations
+            .locations
+            .into_iter()
+            .map(ServerInfo::try_from)
+            .collect::<Result<_, _>>()
+            .map_err(|e| e.to_string())?;
+
+        Ok(Self {
+            deployment,
+            servers,
+        })
     }
 }
 
