@@ -1,12 +1,17 @@
 pub mod cmd;
 
+use std::borrow::BorrowMut;
 use std::error::Error;
+use std::sync::{Arc, Mutex};
 
+use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 use tonic::transport::Channel;
 use tonic::{transport::Server as TransportServer, Request, Response, Status};
 use uuid::Uuid;
 
 use crate::proto::scheduler_client::SchedulerClient;
+use crate::proto::scheduler_server::SchedulerServer;
 use crate::proto::server_daemon_server::{ServerDaemon, ServerDaemonServer};
 use crate::proto::{
     DestroyRequest, DestroyResponse, GetInfoRequest, GetInfoResponse, JoinRequest, MonitorRequest,
@@ -22,7 +27,7 @@ use self::cmd::{ServerCommand, StartCommand};
 #[derive(Clone, Debug)]
 pub struct ServerDaemonRuntime {
     info: ServerInfo,
-    state: DaemonState,
+    state: Arc<Mutex<DaemonState>>,
     bootstrap_addr: Option<String>,
 }
 
@@ -30,7 +35,7 @@ pub struct ServerDaemonRuntime {
 pub enum DaemonState {
     Starting,
     Running(GroupInfo),
-    Uninitialized(UninitScheduler),
+    Uninitialized,
     Authoritative(AuthoritativeScheduler),
     Failed,
 }
@@ -88,7 +93,7 @@ impl ServerDaemonRuntime {
             id,
             addr: addr.to_owned(),
         };
-        let state = DaemonState::Starting;
+        let state = Arc::new(Mutex::new(DaemonState::Starting));
         let bootstrap_addr = bootstrap_addr.map(|s| s.to_owned());
 
         Self {
@@ -109,16 +114,68 @@ impl ServerDaemonRuntime {
         Ok(Self::new(id, "127.0.0.1:50051", None))
     }
 
-    pub async fn start(self) -> Result<(), Box<dyn Error>> {
+    pub async fn start(&self) -> Result<(), Box<dyn Error>> {
+        loop {
+            self.start_service().await?;
+
+            let lock = self.state.lock().unwrap();
+            match *lock {
+                DaemonState::Starting | DaemonState::Uninitialized | DaemonState::Failed => {
+                    panic!("invalid state in loop")
+                }
+                _ => (),
+            }
+        }
+    }
+
+    pub async fn start_service(&self) -> Result<DaemonState, Box<dyn Error>> {
         let addr = self.info.addr.parse()?;
 
-        println!("starting server... ({})", self.info.id);
+        let state = self.state.lock().unwrap().clone();
 
-        let grpc_server = TransportServer::builder().add_service(ServerDaemonServer::new(self));
+        match state {
+            #[allow(unused_must_use)]
+            DaemonState::Uninitialized => {
+                let (tx, mut rx) = mpsc::channel(1);
+                let cancel_token = CancellationToken::new();
 
-        grpc_server.serve(addr).await?;
+                let scheduler =
+                    UninitScheduler::new(self.info.clone(), tx, cancel_token.child_token());
 
-        Ok(())
+                let service = SchedulerServer::new(scheduler.clone());
+                let initializing_server = TransportServer::builder().add_service(service);
+
+                // Ignoring this Future because we await for Cancellation later
+                initializing_server.serve(addr);
+
+                let new_state = rx.recv().await.ok_or("could not receive the scheduler")?;
+
+                cancel_token.cancelled().await;
+                println!("Uninit scheduler successfully cancelled");
+
+                Ok(new_state)
+            }
+            DaemonState::Running(group) => {
+                let grpc_server =
+                    TransportServer::builder().add_service(ServerDaemonServer::new(self.clone()));
+
+                grpc_server.serve(addr).await?;
+
+                Ok(DaemonState::Running(group))
+            }
+            DaemonState::Authoritative(scheduler) => {
+                let grpc_server = TransportServer::builder()
+                    .add_service(ServerDaemonServer::new(self.clone()))
+                    .add_service(SchedulerServer::new(scheduler.clone()));
+
+                grpc_server.serve(addr).await?;
+
+                Ok(DaemonState::Authoritative(scheduler))
+            }
+            DaemonState::Starting | DaemonState::Failed => {
+                panic!("invalid state: {:?}", state)
+            }
+        }
     }
 
     pub async fn bootstrap(&mut self) -> Result<(), Box<dyn Error>> {
@@ -134,13 +191,9 @@ impl ServerDaemonRuntime {
     }
 
     fn set_state(&mut self, state: DaemonState) {
-        self.state = state;
-    }
-
-    pub fn create_cluster(&self) -> DaemonState {
-        let scheduler = UninitScheduler::new();
-
-        DaemonState::Uninitialized(scheduler)
+        let mut lock = self.state.lock().unwrap();
+        let ptr = lock.borrow_mut();
+        **ptr = state;
     }
 
     pub async fn join_cluster(&self, addr: &str) -> Result<DaemonState, Box<dyn Error>> {
@@ -160,6 +213,10 @@ impl ServerDaemonRuntime {
         Ok(DaemonState::Running(group))
     }
 
+    pub fn create_cluster(&self) -> DaemonState {
+        DaemonState::Uninitialized
+    }
+
     async fn scheduler_client(
         &self,
         target_addr: &str,
@@ -177,12 +234,13 @@ impl ServerDaemon for ServerDaemonRuntime {
         println!("GetInfo called!");
 
         let server = Some(self.info.clone().into());
+        let state = self.state.lock().unwrap().clone();
 
         use DaemonState::*;
-        let group = match &self.state {
+        let group = match &state {
             Starting => None,
             Running(group) => Some(group.clone().into()),
-            Uninitialized(_) => None,
+            Uninitialized => None,
             Authoritative(scheduler) => Some(
                 scheduler
                     .runtime
@@ -196,7 +254,7 @@ impl ServerDaemon for ServerDaemonRuntime {
             Failed => None,
         };
 
-        let state: ServerState = self.state.clone().into();
+        let state: ServerState = state.into();
         let state = state.into();
 
         let resposne = GetInfoResponse {

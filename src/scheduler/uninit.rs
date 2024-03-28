@@ -1,24 +1,74 @@
+use std::fmt::Debug;
+
+use tokio::sync::mpsc::Sender;
+use tokio_util::sync::CancellationToken;
 use tonic::{Request, Response, Status};
 
-use crate::proto::{
-    scheduler_server::Scheduler, DeployRequest, DeployResponse, JoinRequest, JoinResponse,
-    LookupRequest, LookupResponse, NotifyRequest, NotifyResponse,
+use crate::{
+    proto::{
+        scheduler_server::Scheduler, DeployRequest, DeployResponse, Group, JoinRequest,
+        JoinResponse, LookupRequest, LookupResponse, NotifyRequest, NotifyResponse,
+    },
+    server::DaemonState,
+    ServerInfo,
 };
 
-#[derive(Clone, Debug)]
-pub struct UninitScheduler {}
+use super::{mean::MeanGpuScheduler, AuthoritativeScheduler};
+
+pub struct UninitScheduler {
+    server: ServerInfo,
+    tx: Sender<DaemonState>,
+    cancel_token: CancellationToken,
+}
 
 impl UninitScheduler {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(
+        server: ServerInfo,
+        tx: Sender<DaemonState>,
+        cancel_token: CancellationToken,
+    ) -> Self {
+        Self {
+            server,
+            tx,
+            cancel_token,
+        }
+    }
+
+    pub fn create_scheduler(&self, other: &ServerInfo) -> AuthoritativeScheduler {
+        let scheduler = Box::new(MeanGpuScheduler {});
+        AuthoritativeScheduler::new(&self.server, other, scheduler)
     }
 }
 
 #[tonic::async_trait]
 impl Scheduler for UninitScheduler {
-    async fn join(&self, _request: Request<JoinRequest>) -> Result<Response<JoinResponse>, Status> {
+    async fn join(&self, request: Request<JoinRequest>) -> Result<Response<JoinResponse>, Status> {
         println!("Uninit: join called!");
-        Err(Status::aborted("not implemented"))
+
+        let server = request
+            .into_inner()
+            .server
+            .ok_or(Status::aborted("Server cannot be empty"))?;
+        let other: ServerInfo =
+            ServerInfo::try_from(server).map_err(|e| Status::aborted(e.to_string()))?;
+
+        let scheduler = self.create_scheduler(&other);
+        let state = DaemonState::Authoritative(scheduler);
+
+        self.tx
+            .send(state)
+            .await
+            .or(Err(Status::aborted("failed to send state")))?;
+
+        let success = true;
+        let group = Some(Group {
+            scheduler: Some(self.server.clone().into()),
+            number: 1,
+        });
+
+        self.cancel_token.cancel();
+
+        Ok(Response::new(JoinResponse { success, group }))
     }
 
     async fn notify(
@@ -43,5 +93,20 @@ impl Scheduler for UninitScheduler {
     ) -> Result<Response<LookupResponse>, Status> {
         println!("Uninit: lookup called!");
         Err(Status::aborted("not implemented"))
+    }
+}
+
+impl Debug for UninitScheduler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UninitScheduler")
+            .field("server", &self.server)
+            .field("tx", &"[Sender]")
+            .finish()
+    }
+}
+
+impl Clone for UninitScheduler {
+    fn clone(&self) -> Self {
+        panic!("cannot clone uninit scheduler")
     }
 }

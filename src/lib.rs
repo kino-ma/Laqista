@@ -103,7 +103,7 @@ impl Into<ServerState> for DaemonState {
         match self {
             Self::Starting => Starting,
             Self::Running(_) => Running,
-            Self::Uninitialized(_) => Uninitialized,
+            Self::Uninitialized => Uninitialized,
             Self::Authoritative(_) => Authoritative,
             Self::Failed => Failed,
         }

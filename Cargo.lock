@@ -610,6 +610,7 @@ dependencies = [
  "prost",
  "prost-types",
  "tokio",
+ "tokio-util",
  "tonic",
  "tonic-build",
  "uuid",
