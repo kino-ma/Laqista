@@ -1,8 +1,6 @@
 pub mod cmd;
 
-use std::borrow::BorrowMut;
 use std::error::Error;
-use std::sync::{Arc, Mutex};
 
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -27,7 +25,7 @@ use self::cmd::{ServerCommand, StartCommand};
 #[derive(Clone, Debug)]
 pub struct ServerDaemonRuntime {
     info: ServerInfo,
-    state: Arc<Mutex<DaemonState>>,
+    state: DaemonState,
     bootstrap_addr: Option<String>,
 }
 
@@ -63,7 +61,7 @@ impl ServerRunner {
         server_command: &ServerCommand,
         start_command: &StartCommand,
     ) -> Result<(), Box<dyn Error>> {
-        let daemon = self.create_daemon(server_command, start_command)?;
+        let mut daemon = self.create_daemon(server_command, start_command)?;
 
         daemon.start().await
     }
@@ -93,7 +91,7 @@ impl ServerDaemonRuntime {
             id,
             addr: addr.to_owned(),
         };
-        let state = Arc::new(Mutex::new(DaemonState::Starting));
+        let state = DaemonState::Starting;
         let bootstrap_addr = bootstrap_addr.map(|s| s.to_owned());
 
         Self {
@@ -114,24 +112,17 @@ impl ServerDaemonRuntime {
         Ok(Self::new(id, "127.0.0.1:50051", None))
     }
 
-    pub async fn start(&self) -> Result<(), Box<dyn Error>> {
+    pub async fn start(&mut self) -> Result<(), Box<dyn Error>> {
         loop {
-            self.start_service().await?;
-
-            let lock = self.state.lock().unwrap();
-            match *lock {
-                DaemonState::Starting | DaemonState::Uninitialized | DaemonState::Failed => {
-                    panic!("invalid state in loop")
-                }
-                _ => (),
-            }
+            let next = self.start_service().await?;
+            self.state = next;
         }
     }
 
     pub async fn start_service(&self) -> Result<DaemonState, Box<dyn Error>> {
         let addr = self.info.addr.parse()?;
 
-        let state = self.state.lock().unwrap().clone();
+        let state = self.state.clone();
 
         match state {
             #[allow(unused_must_use)]
@@ -172,7 +163,8 @@ impl ServerDaemonRuntime {
 
                 Ok(DaemonState::Authoritative(scheduler))
             }
-            DaemonState::Starting | DaemonState::Failed => {
+            DaemonState::Starting => Ok(DaemonState::Uninitialized),
+            DaemonState::Failed => {
                 panic!("invalid state: {:?}", state)
             }
         }
@@ -191,9 +183,7 @@ impl ServerDaemonRuntime {
     }
 
     fn set_state(&mut self, state: DaemonState) {
-        let mut lock = self.state.lock().unwrap();
-        let ptr = lock.borrow_mut();
-        **ptr = state;
+        self.state = state
     }
 
     pub async fn join_cluster(&self, addr: &str) -> Result<DaemonState, Box<dyn Error>> {
@@ -234,7 +224,7 @@ impl ServerDaemon for ServerDaemonRuntime {
         println!("GetInfo called!");
 
         let server = Some(self.info.clone().into());
-        let state = self.state.lock().unwrap().clone();
+        let state = self.state.clone();
 
         use DaemonState::*;
         let group = match &state {
