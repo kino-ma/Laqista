@@ -3,6 +3,7 @@ use server::DaemonState;
 use utils::IdMap;
 use uuid::Uuid;
 
+pub mod cmd;
 pub mod scheduler;
 pub mod server;
 

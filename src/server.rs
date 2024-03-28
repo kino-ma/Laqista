@@ -1,3 +1,5 @@
+pub mod cmd;
+
 use std::error::Error;
 
 use tonic::{transport::Server as TransportServer, Request, Response, Status};
@@ -11,6 +13,8 @@ use crate::proto::{
 use crate::scheduler::AuthoritativeScheduler;
 use crate::utils::get_mac;
 use crate::{GroupInfo, ServerInfo};
+
+use self::cmd::{ServerCommand, StartCommand};
 
 #[derive(Clone, Debug)]
 pub struct ServerDaemonRuntime {
@@ -26,23 +30,72 @@ pub enum DaemonState {
     Failed,
 }
 
+pub struct ServerRunner {
+    command: ServerCommand,
+}
+
+impl ServerRunner {
+    pub fn new(command: ServerCommand) -> Self {
+        Self { command }
+    }
+
+    pub async fn run(&self) -> Result<(), Box<dyn Error>> {
+        use ServerCommand::*;
+
+        match &self.command {
+            Start(subcmd) => self.run_start(&self.command, &subcmd),
+        }
+        .await
+    }
+
+    pub async fn run_start(
+        &self,
+        server_command: &ServerCommand,
+        start_command: &StartCommand,
+    ) -> Result<(), Box<dyn Error>> {
+        let daemon = self.create_daemon(server_command, start_command)?;
+
+        daemon.start().await
+    }
+
+    pub fn create_daemon(
+        &self,
+        _server_command: &ServerCommand,
+        start_command: &StartCommand,
+    ) -> Result<ServerDaemonRuntime, Box<dyn Error>> {
+        if let Some(id) = &start_command.id {
+            let id = Uuid::try_parse(&id)?;
+            Ok(ServerDaemonRuntime::new_with_id(
+                id,
+                &start_command.listen_host,
+            ))
+        } else {
+            // Non initialized. Craeting new server
+            Ok(ServerDaemonRuntime::default())
+        }
+    }
+}
+
 impl ServerDaemonRuntime {
-    pub fn new(id: Uuid, addr: &str, state: DaemonState) -> Self {
+    pub fn new(id: Uuid, addr: &str) -> Self {
         let info = ServerInfo {
             id,
             addr: addr.to_owned(),
         };
+        let state = DaemonState::Uninitialized;
 
         Self { info, state }
+    }
+
+    pub fn new_with_id(id: Uuid, addr: &str) -> Self {
+        Self::new(id, addr)
     }
 
     pub fn create() -> Result<Self, Box<dyn Error>> {
         let mac = get_mac()?;
         let id = Uuid::now_v6(&mac.bytes());
 
-        let state = DaemonState::Uninitialized;
-
-        Ok(Self::new(id, "127.0.0.1:50051", state))
+        Ok(Self::new(id, "127.0.0.1:50051"))
     }
 
     pub async fn start(self) -> Result<(), Box<dyn Error>> {
