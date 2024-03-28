@@ -13,10 +13,11 @@ message Server {
   string addr = 2;
 }
 enum ServerState {
-  UNINITIALIZED = 0;
+  STARTING = 0;
   RUNNING = 1;
   FAILED = 2;
   AUTHORITATIVE = 3;
+  UNINITIALIZED = 4;
 }
 
 message Deployment {

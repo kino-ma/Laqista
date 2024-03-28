@@ -1,6 +1,7 @@
-mod interface;
-mod mean;
-mod stats;
+pub mod interface;
+pub mod mean;
+pub mod stats;
+pub mod uninit;
 
 use std::borrow::BorrowMut;
 use std::collections::HashMap;

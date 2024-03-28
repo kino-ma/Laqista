@@ -2,14 +2,17 @@ pub mod cmd;
 
 use std::error::Error;
 
+use tonic::transport::Channel;
 use tonic::{transport::Server as TransportServer, Request, Response, Status};
 use uuid::Uuid;
 
+use crate::proto::scheduler_client::SchedulerClient;
 use crate::proto::server_daemon_server::{ServerDaemon, ServerDaemonServer};
 use crate::proto::{
-    DestroyRequest, DestroyResponse, GetInfoRequest, GetInfoResponse, MonitorRequest,
+    DestroyRequest, DestroyResponse, GetInfoRequest, GetInfoResponse, JoinRequest, MonitorRequest,
     MonitorResponse, PingResponse, ServerState, SpawnRequest, SpawnResponse,
 };
+use crate::scheduler::uninit::UninitScheduler;
 use crate::scheduler::AuthoritativeScheduler;
 use crate::utils::get_mac;
 use crate::{GroupInfo, ServerInfo};
@@ -20,12 +23,14 @@ use self::cmd::{ServerCommand, StartCommand};
 pub struct ServerDaemonRuntime {
     info: ServerInfo,
     state: DaemonState,
+    bootstrap_addr: Option<String>,
 }
 
 #[derive(Clone, Debug)]
 pub enum DaemonState {
-    Uninitialized,
+    Starting,
     Running(GroupInfo),
+    Uninitialized(UninitScheduler),
     Authoritative(AuthoritativeScheduler),
     Failed,
 }
@@ -68,6 +73,7 @@ impl ServerRunner {
             Ok(ServerDaemonRuntime::new_with_id(
                 id,
                 &start_command.listen_host,
+                start_command.bootstrap_addr.as_ref().map(|x| x.as_str()),
             ))
         } else {
             // Non initialized. Craeting new server
@@ -77,25 +83,30 @@ impl ServerRunner {
 }
 
 impl ServerDaemonRuntime {
-    pub fn new(id: Uuid, addr: &str) -> Self {
+    pub fn new(id: Uuid, addr: &str, bootstrap_addr: Option<&str>) -> Self {
         let info = ServerInfo {
             id,
             addr: addr.to_owned(),
         };
-        let state = DaemonState::Uninitialized;
+        let state = DaemonState::Starting;
+        let bootstrap_addr = bootstrap_addr.map(|s| s.to_owned());
 
-        Self { info, state }
+        Self {
+            info,
+            state,
+            bootstrap_addr,
+        }
     }
 
-    pub fn new_with_id(id: Uuid, addr: &str) -> Self {
-        Self::new(id, addr)
+    pub fn new_with_id(id: Uuid, addr: &str, bootstrap_addr: Option<&str>) -> Self {
+        Self::new(id, addr, bootstrap_addr)
     }
 
     pub fn create() -> Result<Self, Box<dyn Error>> {
         let mac = get_mac()?;
         let id = Uuid::now_v6(&mac.bytes());
 
-        Ok(Self::new(id, "127.0.0.1:50051"))
+        Ok(Self::new(id, "127.0.0.1:50051", None))
     }
 
     pub async fn start(self) -> Result<(), Box<dyn Error>> {
@@ -103,12 +114,57 @@ impl ServerDaemonRuntime {
 
         println!("starting server... ({})", self.info.id);
 
-        TransportServer::builder()
-            .add_service(ServerDaemonServer::new(self))
-            .serve(addr)
-            .await?;
+        let grpc_server = TransportServer::builder().add_service(ServerDaemonServer::new(self));
+
+        grpc_server.serve(addr).await?;
 
         Ok(())
+    }
+
+    pub async fn bootstrap(&mut self) -> Result<(), Box<dyn Error>> {
+        let state = if let Some(addr) = &self.bootstrap_addr {
+            self.join_cluster(&addr).await?
+        } else {
+            self.create_cluster()
+        };
+
+        self.set_state(state);
+
+        Ok(())
+    }
+
+    fn set_state(&mut self, state: DaemonState) {
+        self.state = state;
+    }
+
+    pub fn create_cluster(&self) -> DaemonState {
+        let scheduler = UninitScheduler::new();
+
+        DaemonState::Uninitialized(scheduler)
+    }
+
+    pub async fn join_cluster(&self, addr: &str) -> Result<DaemonState, Box<dyn Error>> {
+        let mut client = self.scheduler_client(addr).await?;
+
+        let request = JoinRequest {
+            server: Some(self.info.clone().into()),
+        };
+        let resp = client.join(request).await?;
+
+        let group = resp
+            .into_inner()
+            .group
+            .expect("Group in response cannot be empty")
+            .try_into()?;
+
+        Ok(DaemonState::Running(group))
+    }
+
+    async fn scheduler_client(
+        &self,
+        target_addr: &str,
+    ) -> Result<SchedulerClient<Channel>, Box<dyn Error>> {
+        Ok(SchedulerClient::connect(target_addr.to_owned()).await?)
     }
 }
 
@@ -124,8 +180,9 @@ impl ServerDaemon for ServerDaemonRuntime {
 
         use DaemonState::*;
         let group = match &self.state {
-            Uninitialized => None,
+            Starting => None,
             Running(group) => Some(group.clone().into()),
+            Uninitialized(_) => None,
             Authoritative(scheduler) => Some(
                 scheduler
                     .runtime

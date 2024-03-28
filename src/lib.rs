@@ -101,8 +101,9 @@ impl Into<ServerState> for DaemonState {
         use ServerState::*;
 
         match self {
-            Self::Uninitialized => Uninitialized,
+            Self::Starting => Starting,
             Self::Running(_) => Running,
+            Self::Uninitialized(_) => Uninitialized,
             Self::Authoritative(_) => Authoritative,
             Self::Failed => Failed,
         }
