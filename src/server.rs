@@ -5,8 +5,6 @@ use std::error::Error;
 use std::net::SocketAddr;
 use std::pin::pin;
 
-use axum::routing::get;
-use axum::Router;
 use futures::future;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -21,7 +19,6 @@ use crate::proto::{
     DestroyRequest, DestroyResponse, GetInfoRequest, GetInfoResponse, JoinRequest, MonitorRequest,
     MonitorResponse, PingResponse, ServerState, SpawnRequest, SpawnResponse,
 };
-use crate::proxy::create_reverse_proxy;
 use crate::scheduler::mean::MeanGpuScheduler;
 use crate::scheduler::uninit::UninitScheduler;
 use crate::scheduler::{AuthoritativeScheduler, Cluster};
@@ -194,19 +191,10 @@ impl ServerDaemonRuntime {
             DaemonState::Running(group) => {
                 println!("Running a new server...");
 
-                let handler = create_reverse_proxy("mypackage", "httpbin.org:80").await?;
-                let grpc_router = TransportServer::builder()
-                    .add_service(ServerDaemonServer::new(self.clone()))
-                    .into_router();
+                let grpc_router =
+                    TransportServer::builder().add_service(ServerDaemonServer::new(self.clone()));
 
-                let new_router = Router::new()
-                    .route("/proxy", handler)
-                    .route("/hello", get(|| async move { "hello, world!" }))
-                    .merge(grpc_router);
-
-                axum::Server::bind(&self.socket)
-                    .serve(new_router.into_make_service())
-                    .await?;
+                grpc_router.serve(self.socket).await?;
 
                 Ok(DaemonState::Running(group.clone()))
             }
