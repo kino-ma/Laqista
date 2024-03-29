@@ -1,16 +1,9 @@
 use std::error::Error;
 
-use axum::{
-    body::{BoxBody, Bytes},
-    extract::State,
-    handler::Handler,
-    response::IntoResponse,
-    routing::{any, MethodRouter},
-};
-use bytes::Buf;
-use h2::client::{self, SendRequest};
-use http_body::{combinators::UnsyncBoxBody, Body};
-use hyper::{HeaderMap, Request};
+use axum::routing::{any, MethodRouter};
+use h2::client;
+use http_body::Body;
+use hyper::Request;
 use tokio::net::TcpStream;
 
 pub async fn create_reverse_proxy(
@@ -25,7 +18,7 @@ pub async fn create_reverse_proxy(
             .await
             .expect("failed to connect the server");
 
-        let (mut client, h2) = client::handshake(tcp)
+        let (mut client, _h2) = client::handshake(tcp)
             .await
             .expect("failed to handshake with the server");
 
@@ -50,7 +43,7 @@ pub async fn create_reverse_proxy(
             .map_err(|e| println!("failed to send request to destination: {}", e))
             .unwrap();
 
-        stream.send_data(body, true);
+        stream.send_data(body, true).expect("failed to send data");
 
         let resp = resp.await.expect("failed to receive the response");
 
