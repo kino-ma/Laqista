@@ -8,6 +8,7 @@ use utils::{get_mac, IdMap};
 use uuid::Uuid;
 
 pub mod cmd;
+pub mod proxy;
 pub mod scheduler;
 pub mod server;
 
