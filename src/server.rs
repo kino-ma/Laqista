@@ -155,7 +155,7 @@ impl ServerDaemonRuntime {
                 let scheduler =
                     UninitScheduler::new(self.info.clone(), tx, cancel_token.child_token());
 
-                let service = SchedulerServer::new(scheduler.clone());
+                let service = SchedulerServer::new(scheduler);
                 let initializing_server = TransportServer::builder().add_service(service);
 
                 // Ignoring this Future because we await for Cancellation later

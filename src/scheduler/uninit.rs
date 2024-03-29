@@ -58,7 +58,7 @@ impl Scheduler for UninitScheduler {
         self.tx
             .send(state)
             .await
-            .or(Err(Status::aborted("failed to send state")))?;
+            .map_err(|e| Status::aborted(format!("failed to send data: {}", e)))?;
 
         let success = true;
         let group = Some(Group {
