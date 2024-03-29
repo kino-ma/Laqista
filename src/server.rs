@@ -23,7 +23,7 @@ use crate::{GroupInfo, ServerInfo};
 
 use self::cmd::{ServerCommand, StartCommand};
 
-const DEFAULT_HOST: &'static str = "127.0.0.1:50051";
+const DEFAULT_HOST: &'static str = "http://127.0.0.1:50051";
 
 #[derive(Clone, Debug)]
 pub struct ServerDaemonRuntime {
@@ -159,11 +159,14 @@ impl ServerDaemonRuntime {
                 let initializing_server = TransportServer::builder().add_service(service);
 
                 // Ignoring this Future because we await for Cancellation later
-                initializing_server.serve(addr);
+                tokio::spawn(async move {
+                    initializing_server.serve(addr).await;
+                });
+
+                cancel_token.cancelled().await;
 
                 let new_state = rx.recv().await.ok_or("could not receive the scheduler")?;
 
-                cancel_token.cancelled().await;
                 println!("Uninit scheduler successfully cancelled");
 
                 Ok(new_state)
