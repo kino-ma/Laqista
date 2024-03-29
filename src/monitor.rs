@@ -18,6 +18,7 @@ pub struct PowerMetrics {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Gpu {
     pub freq_hz: f64,
+    pub idle_ratio: f64,
     pub dvfm_states: Vec<DvfmState>,
 }
 
@@ -31,28 +32,23 @@ impl PowerMonitor {
         Self {}
     }
 
-    pub async fn start(&self, tx: mpsc::Sender<PowerMonitor>) {
+    pub async fn start(&self, tx: mpsc::Sender<PowerMetrics>) {
         println!("start start");
         let commands = Self::commands();
 
-        loop {
-            println!("loop...");
-            let cmd = Command::new(commands[0])
-                .args(&commands[1..])
-                .stdout(process::Stdio::piped())
-                .spawn()
-                .expect("failed to spawn monitor process");
+        let cmd = Command::new(commands[0])
+            .args(&commands[1..])
+            .stdout(process::Stdio::piped())
+            .spawn()
+            .expect("failed to spawn monitor process");
 
-            let stdout = cmd.stdout.expect("faile to get child's stdout");
-            let reader = BufReader::new(stdout);
+        let stdout = cmd.stdout.expect("faile to get child's stdout");
+        let reader = BufReader::new(stdout);
 
-            let plists: Plists<PowerMetrics> = Plists::new(reader.lines());
+        let plists: Plists<PowerMetrics> = Plists::new(reader.lines());
 
-            for metrics in plists {
-                println!("metrics = {:?}", metrics);
-                println!("utilization = {:?}", metrics.gpu.utilization_ratio());
-            }
-            println!("end loop");
+        for metrics in plists {
+            tx.send(metrics).await.expect("failed to send metrics");
         }
     }
 
@@ -76,7 +72,7 @@ impl Gpu {
             .unwrap()
     }
 
-    pub(crate) fn min_frequency(&self) -> u16 {
+    pub fn min_frequency(&self) -> u16 {
         self.dvfm_states
             .iter()
             .map(|state| state.freq)
@@ -85,11 +81,7 @@ impl Gpu {
     }
 
     pub fn utilization_ratio(&self) -> f64 {
-        let min = self.min_frequency() as f64;
-        let max = self.max_frequency() as f64;
-        ((self.freq_hz - min).max(0.0) / (max - min).max(1.0))
-            .max(0.0)
-            .min(1.0)
+        1. - self.idle_ratio
     }
 }
 
@@ -130,19 +122,13 @@ where
         while let Some(line) = self.inner.next() {
             let line = line.expect("failed to read line");
 
-            println!(
-                "line = '{}' (offset 1 = {:?})",
-                line,
-                line.chars().take(2).collect::<Vec<_>>()
-            );
-
             buff.extend(line.as_bytes());
 
             if line == "</plist>" {
                 let parsed = self.parse(&buff);
                 if let Err(e) = &parsed {
                     println!("WARN: failed to parse plist: {}", e);
-                    println!("data = '{}'", line);
+                    println!("last data = '{}'", line);
                 }
 
                 return parsed.ok();

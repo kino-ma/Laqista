@@ -13,12 +13,22 @@ use tokio::sync::mpsc;
 async fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
 
-    tokio::spawn(async {
+    let (tx, mut rx) = mpsc::channel(10);
+    tokio::spawn(async move {
         println!("start thread");
-        let (tx, _rx) = mpsc::channel(1);
         let monit = PowerMonitor::new();
         monit.start(tx).await;
-        println!("end thread");
+    });
+
+    tokio::spawn(async move {
+        println!("start listen thread");
+        while let Some(metrics) = rx.recv().await {
+            println!(
+                "received metrics: utilization = {:.3}%",
+                metrics.gpu.utilization_ratio() * 100.
+            );
+        }
+        println!("end listen thread");
     });
 
     use Commands::*;
