@@ -197,7 +197,7 @@ impl ServerDaemonRuntime {
                 println!("Running a new server...");
 
                 let handler = create_reverse_proxy("mypackage", "myaddr").await?;
-                let router: Router<_, UnsyncBoxBody<Bytes, _>> = TransportServer::builder()
+                let router = TransportServer::builder()
                     .add_service(ServerDaemonServer::new(self.clone()))
                     .into_router()
                     .route("/", handler);

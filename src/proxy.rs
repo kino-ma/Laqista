@@ -16,16 +16,11 @@ use tokio::net::TcpStream;
 pub async fn create_reverse_proxy(
     package: &str,
     addr: &str,
-) -> Result<MethodRouter<(), UnsyncBoxBody<Bytes, ()>>, Box<dyn Error>> {
+) -> Result<MethodRouter, Box<dyn Error>> {
     let _package = package.to_owned();
     let addr = addr.to_owned();
 
-    // let stream = TcpStream::connect(addr).await?;
-    // let io = TokioIo::new(stream);
-    // let exec = TokioExecutor::new();
-    // let (sender, _conn) = hyper::client::conn::http2::handshake::<_, _, Body>(exec, io).await?;
-
-    let handler = any(|req: Request<UnsyncBoxBody<_, _>>| async move {
+    let handler: MethodRouter = any(|req: Request<hyper::body::Body>| async move {
         let tcp = TcpStream::connect(addr)
             .await
             .expect("failed to connect the server");
