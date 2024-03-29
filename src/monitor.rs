@@ -118,9 +118,18 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut buff = BytesMut::new();
+        let mut have_seen_idle_ratio = false;
 
         while let Some(line) = self.inner.next() {
             let line = line.expect("failed to read line");
+
+            if line.starts_with("<key>idle_ratio</key>") {
+                if have_seen_idle_ratio {
+                    continue;
+                } else {
+                    have_seen_idle_ratio = true;
+                }
+            }
 
             buff.extend(line.as_bytes());
 
