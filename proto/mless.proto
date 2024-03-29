@@ -1,0 +1,155 @@
+syntax = "proto3";
+package mless;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+/*
+ * Core messages
+ */
+
+message Server {
+  string id = 1;
+  string addr = 2;
+}
+enum ServerState {
+  STARTING = 0;
+  RUNNING = 1;
+  FAILED = 2;
+  AUTHORITATIVE = 3;
+  UNINITIALIZED = 4;
+}
+
+message Deployment {
+  string id = 1;
+  string source = 2;
+}
+
+message Group {
+  uint32 number = 1;
+  Server scheduler = 2;
+}
+
+message QoS {}
+
+/*
+ * Scheduler services
+ */
+
+service Scheduler {
+  // For cluster management.
+  rpc Join(JoinRequest) returns (JoinResponse);
+  rpc Notify(NotifyRequest) returns (NotifyResponse);
+
+  // For managing and calling applictions.
+  rpc Deploy(DeployRequest) returns (DeployResponse);
+  rpc Lookup(LookupRequest) returns (LookupResponse);
+}
+
+message NotifyRequest { ClusterState cluster = 1; }
+message NotifyResponse { bool success = 1; }
+
+message ClusterState {
+  Group group = 1;
+  repeated Server servers = 2;
+  repeated AppInstanceLocations instances = 3;
+}
+message AppInstanceLocations {
+  Deployment deployment = 1;
+  repeated Server locations = 2;
+}
+
+message JoinRequest { Server server = 1; }
+message JoinResponse {
+  bool success = 1;
+  Group group = 2;
+  bool is_scheduler = 3;
+  optional Group our_group = 4;
+}
+
+message LookupRequest {
+  string deployment_id = 1;
+  QoS qos = 2;
+}
+message LookupResponse {
+  bool success = 1;
+  string deployment_id = 2;
+  Server server = 3;
+}
+
+message DeployRequest {
+  string source = 1;
+  bool authoritative = 2;
+}
+message DeployResponse {
+  bool success = 1;
+  Deployment deployment = 2;
+}
+
+/*
+ * Server Daemon services
+ */
+
+service ServerDaemon {
+  // For getting cluster information.
+  rpc GetInfo(GetInfoRequest) returns (GetInfoResponse);
+
+  // For monitoring.
+  rpc Ping(google.protobuf.Empty) returns (PingResponse);
+  rpc Monitor(MonitorRequest) returns (MonitorResponse);
+
+  // App Instance management.
+  rpc Spawn(SpawnRequest) returns (SpawnResponse);
+  rpc Destroy(DestroyRequest) returns (DestroyResponse);
+
+  // In addition, the Server Daemon proxies any requsets that is not to package
+  // "mless".
+}
+
+message GetInfoRequest {}
+message GetInfoResponse {
+  Server server = 1;
+  optional Group group = 2;
+  ServerState state = 3;
+}
+
+message PingResponse { bool success = 1; }
+
+message MonitorRequest { TimeWindow window = 1; }
+message MonitorResponse { repeated MonitorWindow windows = 1; }
+
+message TimeWindow {
+  google.protobuf.Timestamp start = 1;
+  google.protobuf.Timestamp end = 2;
+}
+message MonitorWindow {
+  TimeWindow window = 1;
+  ResourceUtilization utilization = 2;
+}
+message ResourceUtilization {
+  int32 cpu = 1;
+  int32 ram_total = 2;
+  int32 ram_used = 3;
+  int32 gpu = 4;
+  int32 vram_total = 5;
+  int32 vram_used = 6;
+}
+
+message SpawnRequest { Deployment deployment = 1; }
+message SpawnResponse {
+  bool success = 1;
+  Deployment deployment = 2;
+  Server server = 3;
+}
+
+message DestroyRequest {
+  string app_id = 1;
+  DestroyReason reason = 2;
+}
+message DestroyResponse { bool success = 1; }
+
+enum DestroyReason {
+  DESTROY_REASON_UNKNOWN = 0;
+  SCALE_IN = 1;
+  REMOVED = 2;
+}

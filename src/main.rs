@@ -1,43 +1,24 @@
-use clap::{Arg, ArgAction, ArgMatches, Command};
-use mless::server::Server;
+use std::error::Error;
 
-fn main() {
-    let command = get_command();
-    let matches = command.get_matches();
+use clap::Parser;
 
-    match matches.subcommand() {
-        Some(("server", server_matches)) => run_server(server_matches),
-        Some((subcommand, args)) => {
-            panic!("unknown command: {:?}, with args = {:?}", subcommand, args)
+use mless::{
+    cmd::{Cli, Commands},
+    server::ServerRunner,
+};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    let cli = Cli::parse();
+
+    use Commands::*;
+
+    match cli.command {
+        Server(subcmd) => {
+            let runner = ServerRunner::new(subcmd);
+            runner.run().await?;
         }
-        None => unreachable!(),
-    }
-}
+    };
 
-fn get_command() -> Command {
-    let command_server = Command::new("server").arg(
-        Arg::new("start")
-            .short('s')
-            .long("start")
-            .help("start a nwe MLess Server")
-            .action(ArgAction::SetTrue),
-    );
-
-    let command = Command::new("mless")
-        .about("MLess CLI")
-        .subcommand_required(true)
-        .arg_required_else_help(true)
-        .subcommand(command_server);
-
-    return command;
-}
-
-fn run_server(matches: &ArgMatches) {
-    let server = Server::new();
-
-    if matches.get_flag("start") {
-        server.start().expect("failed to start the server");
-    } else {
-        println!("no flags!");
-    }
+    Ok(())
 }
