@@ -136,6 +136,7 @@ impl AuthoritativeScheduler {
 
     pub async fn other_client(&self) -> Result<SchedulerClient<Channel>, Box<dyn Error>> {
         let other_addr = self.runtime.lock().unwrap().other.get_addr().to_owned();
+        println!("creating other_client ({})", other_addr);
 
         return Ok(SchedulerClient::connect(other_addr).await?);
     }

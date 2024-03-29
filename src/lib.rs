@@ -1,6 +1,10 @@
+use std::{error::Error, net::SocketAddr};
+
+use mac_address::MacAddressError;
 use proto::{AppInstanceLocations, Deployment, Group, Server, ServerState};
 use server::DaemonState;
-use utils::IdMap;
+use url::Url;
+use utils::{get_mac, IdMap};
 use uuid::Uuid;
 
 pub mod cmd;
@@ -37,6 +41,31 @@ pub struct AppInstancesInfo {
     servers: Vec<ServerInfo>,
 }
 pub type AppInstanceMap = IdMap<AppInstancesInfo>;
+
+impl ServerInfo {
+    pub fn new(host: &str) -> Self {
+        let id = Self::gen_id().unwrap();
+
+        Self::with_id(host, &id)
+    }
+
+    pub fn with_id(host: &str, id: &Uuid) -> Self {
+        let id = id.clone();
+        let addr = format!("http://{}", host);
+        Self { id, addr }
+    }
+
+    fn gen_id() -> Result<Uuid, MacAddressError> {
+        let mac = get_mac()?;
+        Ok(Uuid::now_v6(&mac.bytes()))
+    }
+
+    pub fn as_socket(&self) -> Result<SocketAddr, Box<dyn Error>> {
+        let parsed = Url::parse(&self.addr)?;
+        let mut hosts = parsed.socket_addrs(|| None)?;
+        return Ok(hosts.pop().ok_or("could not find any hosts".to_string())?);
+    }
+}
 
 impl GroupInfo {
     pub fn new(scheduler_info: &ServerInfo) -> Self {

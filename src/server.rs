@@ -2,10 +2,10 @@ pub mod cmd;
 
 use std::error::Error;
 
+use std::net::SocketAddr;
 use std::pin::pin;
 
 use futures::future;
-use mac_address::MacAddressError;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tonic::transport::Channel;
@@ -22,16 +22,16 @@ use crate::proto::{
 use crate::scheduler::mean::MeanGpuScheduler;
 use crate::scheduler::uninit::UninitScheduler;
 use crate::scheduler::{AuthoritativeScheduler, Cluster};
-use crate::utils::get_mac;
 use crate::{GroupInfo, ServerInfo};
 
 use self::cmd::{ServerCommand, StartCommand};
 
-const DEFAULT_HOST: &'static str = "http://127.0.0.1:50051";
+const DEFAULT_HOST: &'static str = "127.0.0.1:50051";
 
 #[derive(Clone, Debug)]
 pub struct ServerDaemonRuntime {
     info: ServerInfo,
+    socket: SocketAddr,
     state: DaemonState,
 }
 
@@ -103,9 +103,14 @@ impl ServerDaemonRuntime {
 
     pub fn with_info(info: &ServerInfo) -> Self {
         let info = info.clone();
+        let socket = info.as_socket().expect("failed to parse host in info");
         let state = DaemonState::Starting;
 
-        Self { info, state }
+        Self {
+            info,
+            socket,
+            state,
+        }
     }
 
     pub fn with_optionals(
@@ -113,15 +118,14 @@ impl ServerDaemonRuntime {
         maybe_addr: Option<&str>,
         maybe_bootstrap_addr: Option<&str>,
     ) -> Result<Self, Box<dyn Error>> {
-        let id = if let Some(id) = maybe_id {
-            Uuid::try_parse(&id)?
+        let host = maybe_addr.unwrap_or(DEFAULT_HOST).to_owned();
+
+        let info = if let Some(id) = maybe_id {
+            let id = Uuid::try_parse(&id)?;
+            ServerInfo::with_id(&host, &id)
         } else {
-            ServerDaemonRuntime::gen_id()?
+            ServerInfo::new(&host)
         };
-
-        let addr = maybe_addr.unwrap_or(DEFAULT_HOST).to_owned();
-
-        let info = ServerInfo { id, addr };
 
         let this = match maybe_bootstrap_addr {
             Some(bootstrap_addr) => Self::new_joining(&info, bootstrap_addr),
@@ -133,9 +137,14 @@ impl ServerDaemonRuntime {
 
     pub fn new_joining(info: &ServerInfo, bootstrap_addr: &str) -> Self {
         let info = info.clone();
+        let socket = info.as_socket().expect("failed to parse host in info");
         let state = DaemonState::Joining(bootstrap_addr.to_owned());
 
-        Self { info, state }
+        Self {
+            info,
+            socket,
+            state,
+        }
     }
 
     pub async fn start(&mut self) -> Result<(), Box<dyn Error>> {
@@ -146,8 +155,6 @@ impl ServerDaemonRuntime {
     }
 
     pub async fn start_service(&self) -> Result<DaemonState, Box<dyn Error>> {
-        let addr = self.info.addr.parse()?;
-
         let state = &self.state;
 
         match state {
@@ -164,7 +171,7 @@ impl ServerDaemonRuntime {
                 let service = SchedulerServer::new(scheduler);
                 let initializing_server = TransportServer::builder().add_service(service);
 
-                let serving_future = initializing_server.serve(addr);
+                let serving_future = initializing_server.serve(self.socket);
 
                 // Terminate serving_future by selecting another future
                 let new_state = match future::select(pin!(serving_future), pin!(rx.recv())).await {
@@ -187,7 +194,7 @@ impl ServerDaemonRuntime {
                 let grpc_server =
                     TransportServer::builder().add_service(ServerDaemonServer::new(self.clone()));
 
-                grpc_server.serve(addr).await?;
+                grpc_server.serve(self.socket).await?;
 
                 Ok(DaemonState::Running(group.clone()))
             }
@@ -198,7 +205,7 @@ impl ServerDaemonRuntime {
                     .add_service(ServerDaemonServer::new(self.clone()))
                     .add_service(SchedulerServer::new(scheduler.clone()));
 
-                grpc_server.serve(addr).await?;
+                grpc_server.serve(self.socket).await?;
 
                 Ok(DaemonState::Authoritative(scheduler.clone()))
             }
@@ -255,11 +262,6 @@ impl ServerDaemonRuntime {
         target_addr: &str,
     ) -> Result<SchedulerClient<Channel>, Box<dyn Error>> {
         Ok(SchedulerClient::connect(target_addr.to_owned()).await?)
-    }
-
-    fn gen_id() -> Result<Uuid, MacAddressError> {
-        let mac = get_mac()?;
-        Ok(Uuid::now_v6(&mac.bytes()))
     }
 }
 
@@ -336,14 +338,14 @@ impl ServerDaemon for ServerDaemonRuntime {
 
 impl Default for ServerDaemonRuntime {
     fn default() -> Self {
-        let id = Self::gen_id().expect("failed to generate id");
-        let info = ServerInfo {
-            id,
-            addr: "127.0.0.1:50051".to_owned(),
-        };
-
+        let info = ServerInfo::new(DEFAULT_HOST);
+        let socket = DEFAULT_HOST.parse().expect("failed to parse DEFAULT_HOST");
         let state = DaemonState::Starting;
 
-        Self { info, state }
+        Self {
+            info,
+            socket,
+            state,
+        }
     }
 }
