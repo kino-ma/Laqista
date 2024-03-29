@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::{self, Sender};
 use tokio_util::sync::CancellationToken;
 use tonic::{Request, Response, Status};
 
@@ -107,6 +107,16 @@ impl Debug for UninitScheduler {
 
 impl Clone for UninitScheduler {
     fn clone(&self) -> Self {
-        panic!("cannot clone uninit scheduler")
+        println!("WARN: cloning tx");
+
+        let server = self.server.clone();
+        let (tx, _) = mpsc::channel(1);
+        let cancel_token = CancellationToken::new();
+
+        Self {
+            server,
+            tx,
+            cancel_token,
+        }
     }
 }

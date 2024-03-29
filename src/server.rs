@@ -2,6 +2,7 @@ pub mod cmd;
 
 use std::error::Error;
 
+use mac_address::MacAddressError;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tonic::transport::Channel;
@@ -22,11 +23,12 @@ use crate::{GroupInfo, ServerInfo};
 
 use self::cmd::{ServerCommand, StartCommand};
 
+const DEFAULT_HOST: &'static str = "127.0.0.1:50051";
+
 #[derive(Clone, Debug)]
 pub struct ServerDaemonRuntime {
     info: ServerInfo,
     state: DaemonState,
-    bootstrap_addr: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -34,6 +36,7 @@ pub enum DaemonState {
     Starting,
     Running(GroupInfo),
     Uninitialized,
+    Joining(String),
     Authoritative(AuthoritativeScheduler),
     Failed,
 }
@@ -71,58 +74,77 @@ impl ServerRunner {
         _server_command: &ServerCommand,
         start_command: &StartCommand,
     ) -> Result<ServerDaemonRuntime, Box<dyn Error>> {
-        if let Some(id) = &start_command.id {
-            let id = Uuid::try_parse(&id)?;
-            Ok(ServerDaemonRuntime::new_with_id(
-                id,
-                &start_command.listen_host,
-                start_command.bootstrap_addr.as_ref().map(|x| x.as_str()),
-            ))
-        } else {
-            // Non initialized. Craeting new server
-            Ok(ServerDaemonRuntime::default())
-        }
+        let maybe_id = start_command.id.as_deref();
+        let maybe_addr: Option<&str> = Some(&start_command.listen_host);
+        let maybe_bootstrap_addr = start_command.bootstrap_addr.as_deref();
+
+        ServerDaemonRuntime::with_optionals(maybe_id, maybe_addr, maybe_bootstrap_addr)
     }
 }
 
 impl ServerDaemonRuntime {
-    pub fn new(id: Uuid, addr: &str, bootstrap_addr: Option<&str>) -> Self {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_id(id: &str) -> Result<Self, uuid::Error> {
+        let id = Uuid::try_parse(id)?;
         let info = ServerInfo {
             id,
-            addr: addr.to_owned(),
+            addr: DEFAULT_HOST.to_owned(),
         };
+
+        Ok(Self::with_info(&info))
+    }
+
+    pub fn with_info(info: &ServerInfo) -> Self {
+        let info = info.clone();
         let state = DaemonState::Starting;
-        let bootstrap_addr = bootstrap_addr.map(|s| s.to_owned());
 
-        Self {
-            info,
-            state,
-            bootstrap_addr,
-        }
+        Self { info, state }
     }
 
-    pub fn new_with_id(id: Uuid, addr: &str, bootstrap_addr: Option<&str>) -> Self {
-        Self::new(id, addr, bootstrap_addr)
+    pub fn with_optionals(
+        maybe_id: Option<&str>,
+        maybe_addr: Option<&str>,
+        maybe_bootstrap_addr: Option<&str>,
+    ) -> Result<Self, Box<dyn Error>> {
+        let id = if let Some(id) = maybe_id {
+            Uuid::try_parse(&id)?
+        } else {
+            ServerDaemonRuntime::gen_id()?
+        };
+
+        let addr = maybe_addr.unwrap_or(DEFAULT_HOST).to_owned();
+
+        let info = ServerInfo { id, addr };
+
+        let this = match maybe_bootstrap_addr {
+            Some(bootstrap_addr) => Self::new_joining(&info, bootstrap_addr),
+            None => Self::with_info(&info),
+        };
+
+        Ok(this)
     }
 
-    pub fn create() -> Result<Self, Box<dyn Error>> {
-        let mac = get_mac()?;
-        let id = Uuid::now_v6(&mac.bytes());
+    pub fn new_joining(info: &ServerInfo, bootstrap_addr: &str) -> Self {
+        let info = info.clone();
+        let state = DaemonState::Joining(bootstrap_addr.to_owned());
 
-        Ok(Self::new(id, "127.0.0.1:50051", None))
+        Self { info, state }
     }
 
     pub async fn start(&mut self) -> Result<(), Box<dyn Error>> {
         loop {
             let next = self.start_service().await?;
-            self.state = next;
+            self.set_state(next);
         }
     }
 
     pub async fn start_service(&self) -> Result<DaemonState, Box<dyn Error>> {
         let addr = self.info.addr.parse()?;
 
-        let state = self.state.clone();
+        let state = &self.state;
 
         match state {
             #[allow(unused_must_use)]
@@ -146,13 +168,14 @@ impl ServerDaemonRuntime {
 
                 Ok(new_state)
             }
+            DaemonState::Joining(bootstrap_addr) => self.join_cluster(&bootstrap_addr).await,
             DaemonState::Running(group) => {
                 let grpc_server =
                     TransportServer::builder().add_service(ServerDaemonServer::new(self.clone()));
 
                 grpc_server.serve(addr).await?;
 
-                Ok(DaemonState::Running(group))
+                Ok(DaemonState::Running(group.clone()))
             }
             DaemonState::Authoritative(scheduler) => {
                 let grpc_server = TransportServer::builder()
@@ -161,7 +184,7 @@ impl ServerDaemonRuntime {
 
                 grpc_server.serve(addr).await?;
 
-                Ok(DaemonState::Authoritative(scheduler))
+                Ok(DaemonState::Authoritative(scheduler.clone()))
             }
             DaemonState::Starting => Ok(DaemonState::Uninitialized),
             DaemonState::Failed => {
@@ -170,29 +193,21 @@ impl ServerDaemonRuntime {
         }
     }
 
-    pub async fn bootstrap(&mut self) -> Result<(), Box<dyn Error>> {
-        let state = if let Some(addr) = &self.bootstrap_addr {
-            self.join_cluster(&addr).await?
-        } else {
-            self.create_cluster()
-        };
-
-        self.set_state(state);
-
-        Ok(())
-    }
-
     fn set_state(&mut self, state: DaemonState) {
         self.state = state
     }
 
     pub async fn join_cluster(&self, addr: &str) -> Result<DaemonState, Box<dyn Error>> {
+        println!("Joining a cluster over {}...", addr);
+
         let mut client = self.scheduler_client(addr).await?;
 
         let request = JoinRequest {
             server: Some(self.info.clone().into()),
         };
         let resp = client.join(request).await?;
+
+        println!("JoinResponse: {:?}", resp);
 
         let group = resp
             .into_inner()
@@ -213,6 +228,11 @@ impl ServerDaemonRuntime {
     ) -> Result<SchedulerClient<Channel>, Box<dyn Error>> {
         Ok(SchedulerClient::connect(target_addr.to_owned()).await?)
     }
+
+    fn gen_id() -> Result<Uuid, MacAddressError> {
+        let mac = get_mac()?;
+        Ok(Uuid::now_v6(&mac.bytes()))
+    }
 }
 
 #[tonic::async_trait]
@@ -224,13 +244,12 @@ impl ServerDaemon for ServerDaemonRuntime {
         println!("GetInfo called!");
 
         let server = Some(self.info.clone().into());
-        let state = self.state.clone();
+        let state = &self.state;
 
         use DaemonState::*;
         let group = match &state {
-            Starting => None,
+            Starting | Uninitialized | Failed | Joining(_) => None,
             Running(group) => Some(group.clone().into()),
-            Uninitialized => None,
             Authoritative(scheduler) => Some(
                 scheduler
                     .runtime
@@ -241,10 +260,9 @@ impl ServerDaemon for ServerDaemonRuntime {
                     .clone()
                     .into(),
             ),
-            Failed => None,
         };
 
-        let state: ServerState = state.into();
+        let state: ServerState = state.clone().into();
         let state = state.into();
 
         let resposne = GetInfoResponse {
@@ -290,6 +308,14 @@ impl ServerDaemon for ServerDaemonRuntime {
 
 impl Default for ServerDaemonRuntime {
     fn default() -> Self {
-        Self::create().expect("failed to create default daemon")
+        let id = Self::gen_id().expect("failed to generate id");
+        let info = ServerInfo {
+            id,
+            addr: "127.0.0.1:50051".to_owned(),
+        };
+
+        let state = DaemonState::Starting;
+
+        Self { info, state }
     }
 }
