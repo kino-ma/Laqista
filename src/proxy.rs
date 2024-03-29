@@ -1,22 +1,7 @@
-use std::error::Error;
-use std::pin::Pin;
+use axum::routing::{any, MethodRouter};
 
-use axum::response::Response;
-use futures::Future;
-
-pub async fn create_reverse_proxy(
-    package: &str,
-    addr: &str,
-) -> impl Fn() -> Pin<Box<dyn Future<Output = Result<Response<&'static str>, Box<dyn Error>>>>> {
+pub fn create_reverse_proxy(package: &str, addr: &str) -> MethodRouter {
     let package = package.to_owned();
     let addr = addr.to_owned();
-    move || Box::pin(inner_proxy(package.clone(), addr.clone()))
-}
-
-async fn inner_proxy(
-    package: String,
-    addr: String,
-) -> Result<Response<&'static str>, Box<dyn Error>> {
-    let resp = Response::new("");
-    Ok(resp)
+    any(|| async move { format!("hello from handler!\n{:?} -> {:?}", package, addr) })
 }
