@@ -784,6 +784,7 @@ dependencies = [
  "mac_address",
  "prost",
  "prost-types",
+ "serde",
  "tokio",
  "tokio-util",
  "tonic",
