@@ -46,6 +46,14 @@ impl GroupInfo {
             scheduler_info,
         }
     }
+
+    pub fn with_number(scheduler_info: &ServerInfo, number: u32) -> Self {
+        let scheduler_info = scheduler_info.clone();
+        Self {
+            number,
+            scheduler_info,
+        }
+    }
 }
 
 impl Into<Server> for ServerInfo {

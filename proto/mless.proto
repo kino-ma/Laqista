@@ -63,6 +63,8 @@ message JoinRequest { Server server = 1; }
 message JoinResponse {
   bool success = 1;
   Group group = 2;
+  bool is_scheduler = 3;
+  optional Group our_group = 4;
 }
 
 message LookupRequest {

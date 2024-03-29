@@ -10,6 +10,7 @@ opt-level = 0
 
 [dependencies]
 clap = { version = "4.5.3", features = ["derive"] }
+futures = "0.3.30"
 tonic = "0.11"
 prost = "0.12"
 prost-types = "0.12.3"

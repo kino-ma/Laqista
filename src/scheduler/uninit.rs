@@ -6,14 +6,14 @@ use tonic::{Request, Response, Status};
 
 use crate::{
     proto::{
-        scheduler_server::Scheduler, DeployRequest, DeployResponse, Group, JoinRequest,
-        JoinResponse, LookupRequest, LookupResponse, NotifyRequest, NotifyResponse,
+        scheduler_server::Scheduler, DeployRequest, DeployResponse, JoinRequest, JoinResponse,
+        LookupRequest, LookupResponse, NotifyRequest, NotifyResponse,
     },
     server::DaemonState,
     ServerInfo,
 };
 
-use super::{mean::MeanGpuScheduler, AuthoritativeScheduler};
+use super::{mean::MeanGpuScheduler, AuthoritativeScheduler, Cluster};
 
 pub struct UninitScheduler {
     server: ServerInfo,
@@ -34,9 +34,9 @@ impl UninitScheduler {
         }
     }
 
-    pub fn create_scheduler(&self, other: &ServerInfo) -> AuthoritativeScheduler {
+    pub fn create_scheduler(&self, this: Cluster, other: Cluster) -> AuthoritativeScheduler {
         let scheduler = Box::new(MeanGpuScheduler {});
-        AuthoritativeScheduler::new(&self.server, other, scheduler)
+        AuthoritativeScheduler::new(this, other, scheduler)
     }
 }
 
@@ -45,30 +45,36 @@ impl Scheduler for UninitScheduler {
     async fn join(&self, request: Request<JoinRequest>) -> Result<Response<JoinResponse>, Status> {
         println!("Uninit: join called!");
 
-        let server = request
+        let other_server = request
             .into_inner()
             .server
             .ok_or(Status::aborted("Server cannot be empty"))?;
         let other: ServerInfo =
-            ServerInfo::try_from(server).map_err(|e| Status::aborted(e.to_string()))?;
+            ServerInfo::try_from(other_server).map_err(|e| Status::aborted(e.to_string()))?;
 
-        let scheduler = self.create_scheduler(&other);
+        let this_cluster = Cluster::new(&self.server);
+        let this_group = this_cluster.group.clone();
+        let other_cluster = this_cluster.next_cluster(&other);
+        let other_group = other_cluster.group.clone();
+
+        let scheduler = self.create_scheduler(this_cluster, other_cluster);
+
         let state = DaemonState::Authoritative(scheduler);
-
         self.tx
             .send(state)
             .await
             .map_err(|e| Status::aborted(format!("failed to send data: {}", e)))?;
 
         let success = true;
-        let group = Some(Group {
-            scheduler: Some(self.server.clone().into()),
-            number: 1,
-        });
 
         self.cancel_token.cancel();
 
-        Ok(Response::new(JoinResponse { success, group }))
+        Ok(Response::new(JoinResponse {
+            success,
+            group: Some(other_group.into()),
+            is_scheduler: true,
+            our_group: Some(this_group.into()),
+        }))
     }
 
     async fn notify(

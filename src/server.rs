@@ -2,6 +2,9 @@ pub mod cmd;
 
 use std::error::Error;
 
+use std::pin::pin;
+
+use futures::future;
 use mac_address::MacAddressError;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -16,8 +19,9 @@ use crate::proto::{
     DestroyRequest, DestroyResponse, GetInfoRequest, GetInfoResponse, JoinRequest, MonitorRequest,
     MonitorResponse, PingResponse, ServerState, SpawnRequest, SpawnResponse,
 };
+use crate::scheduler::mean::MeanGpuScheduler;
 use crate::scheduler::uninit::UninitScheduler;
-use crate::scheduler::AuthoritativeScheduler;
+use crate::scheduler::{AuthoritativeScheduler, Cluster};
 use crate::utils::get_mac;
 use crate::{GroupInfo, ServerInfo};
 
@@ -149,6 +153,8 @@ impl ServerDaemonRuntime {
         match state {
             #[allow(unused_must_use)]
             DaemonState::Uninitialized => {
+                println!("Uninitialized. Waiting for others to join...");
+
                 let (tx, mut rx) = mpsc::channel(1);
                 let cancel_token = CancellationToken::new();
 
@@ -158,21 +164,26 @@ impl ServerDaemonRuntime {
                 let service = SchedulerServer::new(scheduler);
                 let initializing_server = TransportServer::builder().add_service(service);
 
-                // Ignoring this Future because we await for Cancellation later
-                tokio::spawn(async move {
-                    initializing_server.serve(addr).await;
-                });
+                let serving_future = initializing_server.serve(addr);
 
-                cancel_token.cancelled().await;
-
-                let new_state = rx.recv().await.ok_or("could not receive the scheduler")?;
+                // Terminate serving_future by selecting another future
+                let new_state = match future::select(pin!(serving_future), pin!(rx.recv())).await {
+                    future::Either::Left(_) => unreachable!(),
+                    future::Either::Right((state, _)) => state,
+                }
+                .ok_or("could not receive the scheduler")?;
 
                 println!("Uninit scheduler successfully cancelled");
 
                 Ok(new_state)
             }
-            DaemonState::Joining(bootstrap_addr) => self.join_cluster(&bootstrap_addr).await,
+            DaemonState::Joining(bootstrap_addr) => {
+                println!("Joining to a cluster...");
+                self.join_cluster(&bootstrap_addr).await
+            }
             DaemonState::Running(group) => {
+                println!("Running a new server...");
+
                 let grpc_server =
                     TransportServer::builder().add_service(ServerDaemonServer::new(self.clone()));
 
@@ -181,6 +192,8 @@ impl ServerDaemonRuntime {
                 Ok(DaemonState::Running(group.clone()))
             }
             DaemonState::Authoritative(scheduler) => {
+                println!("Running an Authoritative server...");
+
                 let grpc_server = TransportServer::builder()
                     .add_service(ServerDaemonServer::new(self.clone()))
                     .add_service(SchedulerServer::new(scheduler.clone()));
@@ -208,17 +221,29 @@ impl ServerDaemonRuntime {
         let request = JoinRequest {
             server: Some(self.info.clone().into()),
         };
-        let resp = client.join(request).await?;
+        let resp = client.join(request).await?.into_inner();
 
         println!("JoinResponse: {:?}", resp);
 
         let group = resp
-            .into_inner()
             .group
             .expect("Group in response cannot be empty")
             .try_into()?;
 
-        Ok(DaemonState::Running(group))
+        if resp.is_scheduler {
+            let other = resp
+                .our_group
+                .expect("Other group cannot be empty when becoming a scheduler");
+
+            let cluster = Cluster::with_group(&group);
+            let other_cluster = Cluster::with_group(&other.try_into()?);
+
+            let scheduler =
+                AuthoritativeScheduler::new(cluster, other_cluster, Box::new(MeanGpuScheduler {}));
+            Ok(DaemonState::Authoritative(scheduler))
+        } else {
+            Ok(DaemonState::Running(group))
+        }
     }
 
     pub fn create_cluster(&self) -> DaemonState {

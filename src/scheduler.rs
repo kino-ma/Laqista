@@ -47,14 +47,7 @@ pub struct Cluster {
 }
 
 impl AuthoritativeScheduler {
-    pub fn new(
-        this_server: &ServerInfo,
-        other_server: &ServerInfo,
-        scheduler: Box<dyn DeploymentScheduler>,
-    ) -> Self {
-        let cluster = Cluster::new(this_server);
-        let other = Cluster::new(other_server);
-
+    pub fn new(cluster: Cluster, other: Cluster, scheduler: Box<dyn DeploymentScheduler>) -> Self {
         let runtime = Arc::new(Mutex::new(SchedulerRuntime {
             cluster,
             other,
@@ -167,15 +160,17 @@ impl Scheduler for AuthoritativeScheduler {
 
         self.push_server(server);
 
-        self.notify_to_other()
-            .await
-            .map_err(|e| Status::new(Code::Aborted, e.to_string()))?;
+        self.notify_to_other().await.map_err(|e| {
+            Status::aborted(format!("failed to notify to the other scheduler: {}", e))
+        })?;
 
         let group = Some(self.runtime.lock().unwrap().cluster.group.clone().into());
 
         Ok(Response::new(JoinResponse {
             success: true,
             group,
+            is_scheduler: false,
+            our_group: None,
         }))
     }
 
@@ -323,6 +318,26 @@ impl Cluster {
             instances,
             server_stats,
         }
+    }
+
+    pub fn with_group(group: &GroupInfo) -> Self {
+        let group = group.clone();
+        let servers = vec![];
+        let instances = AppInstanceMap::new();
+        let server_stats = StatsMap::new();
+
+        Self {
+            group,
+            servers,
+            instances,
+            server_stats,
+        }
+    }
+
+    pub fn next_cluster(&self, scheduler_info: &ServerInfo) -> Self {
+        let number = self.group.number + 1;
+        let other_group = GroupInfo::with_number(scheduler_info, number);
+        Self::with_group(&other_group)
     }
 
     pub fn get_instance_server_ids(&self, deployment_id: &Uuid) -> Result<Vec<Uuid>, String> {
