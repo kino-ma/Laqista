@@ -27,6 +27,7 @@
               inherit (cargoToml.package) name version;
               src = ./.;
               cargoLock.lockFile = ./Cargo.lock;
+              nativeBuildInputs = with pkgs; [ protobuf ];
             };
 
           default = mless;
