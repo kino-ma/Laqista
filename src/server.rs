@@ -5,6 +5,8 @@ use std::error::Error;
 use std::net::SocketAddr;
 use std::pin::pin;
 
+use axum::routing::{any, get};
+use axum::Router;
 use futures::future;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -192,14 +194,18 @@ impl ServerDaemonRuntime {
             DaemonState::Running(group) => {
                 println!("Running a new server...");
 
-                let handler = create_reverse_proxy("mypackage", "myaddr").await?;
-                let router = TransportServer::builder()
+                let handler = create_reverse_proxy("mypackage", "httpbin.org:80").await?;
+                let grpc_router = TransportServer::builder()
                     .add_service(ServerDaemonServer::new(self.clone()))
-                    .into_router()
-                    .route("/", handler);
+                    .into_router();
+
+                let new_router = Router::new()
+                    .route("/proxy", handler)
+                    .route("/hello", get(|| async move { "hello, world!" }))
+                    .merge(grpc_router);
 
                 axum::Server::bind(&self.socket)
-                    .serve(router.into_make_service())
+                    .serve(new_router.into_make_service())
                     .await?;
 
                 Ok(DaemonState::Running(group.clone()))
