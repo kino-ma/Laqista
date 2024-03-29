@@ -19,6 +19,7 @@ use crate::proto::{
     DestroyRequest, DestroyResponse, GetInfoRequest, GetInfoResponse, JoinRequest, MonitorRequest,
     MonitorResponse, PingResponse, ServerState, SpawnRequest, SpawnResponse,
 };
+use crate::proxy::create_reverse_proxy;
 use crate::scheduler::mean::MeanGpuScheduler;
 use crate::scheduler::uninit::UninitScheduler;
 use crate::scheduler::{AuthoritativeScheduler, Cluster};
@@ -191,10 +192,15 @@ impl ServerDaemonRuntime {
             DaemonState::Running(group) => {
                 println!("Running a new server...");
 
-                let grpc_server =
-                    TransportServer::builder().add_service(ServerDaemonServer::new(self.clone()));
+                let handler = create_reverse_proxy("mypackage", "myaddr");
+                let router = TransportServer::builder()
+                    .add_service(ServerDaemonServer::new(self.clone()))
+                    .into_router()
+                    .route("/", handler);
 
-                grpc_server.serve(self.socket).await?;
+                axum::Server::bind(&self.socket)
+                    .serve(router.into_make_service())
+                    .await?;
 
                 Ok(DaemonState::Running(group.clone()))
             }
