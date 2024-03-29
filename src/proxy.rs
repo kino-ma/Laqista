@@ -57,11 +57,12 @@ pub async fn create_reverse_proxy(
 
     let handler = any(
         // |State(sender): State<SendRequest<_>>, mut req: Request<_>| async move {
-        || async move {
-            // let headers = req.headers();
-            // let body = req.into_body();
+        |req: Request| async move {
+            // || async move {
+            let headers = req.headers();
+            let body = req.into_body();
 
-            // let req = hyper::Request::new(body);
+            let _req = hyper::Request::new(body);
             // sender.send_request(req).await;
             ""
         },
