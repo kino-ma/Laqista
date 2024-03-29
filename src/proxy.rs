@@ -18,13 +18,13 @@ use axum::{
     Router,
 };
 // use http_body::Body;
-use hyper::{body::Incoming, client::conn::http1::SendRequest, StatusCode};
+use hyper::{body::Incoming, client::conn::http2::SendRequest, StatusCode};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 
 type Client = hyper_util::client::legacy::Client<HttpConnector, Body>;
 
 use hyper_util::client::legacy::connect::HttpConnector;
-use tokio::net::TcpStream;
+use tokio::net::{unix::pipe::Sender, TcpStream};
 
 #[derive(Clone, Copy, Debug)]
 struct LocalExec;
@@ -47,24 +47,22 @@ pub async fn create_reverse_proxy(
     let addr = addr.to_owned();
 
     let stream = TcpStream::connect(addr).await?;
-    let mut io = TokioIo::new(stream);
-    let mut exec = TokioExecutor::new();
+    let io = TokioIo::new(stream);
+    let exec = TokioExecutor::new();
     let (sender, conn) = hyper::client::conn::http2::handshake::<_, _, Body>(exec, io).await?;
 
-    // let client: Client =
-    //     hyper_util::client::legacy::Client::<(), ()>::builder(TokioExecutor::new())
-    //         .build(HttpConnector::new());
-
     let handler = any(
-        // |State(sender): State<SendRequest<_>>, mut req: Request<_>| async move {
-        |req: Request| async move {
-            // || async move {
-            let headers = req.headers();
+        |State(mut sender): State<SendRequest<_>>, req: Request| async move {
+            let headers = req.headers().clone();
             let body = req.into_body();
 
-            let _req = hyper::Request::new(body);
-            // sender.send_request(req).await;
-            ""
+            let mut req = hyper::Request::new(body);
+            req.headers_mut().clone_from(&headers);
+            sender
+                .send_request(req)
+                .await
+                .map_err(|e| println!("failed to send request to destination: {}", e))
+                .unwrap()
         },
     )
     .with_state(sender);
