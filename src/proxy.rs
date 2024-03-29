@@ -30,14 +30,14 @@ pub async fn create_reverse_proxy(
         let uri: Uri = "https://http2.akamai.com/"
             .parse()
             .expect("failed parse uri");
-        let body = req
+        let _body = req
             .into_body()
             .collect()
             .await
             .expect("failed to collect data")
             .to_bytes();
 
-        let mut req = Request::builder()
+        let req = Request::builder()
             .uri(uri)
             .body(())
             .expect(&format!("failed to send request to destination"));

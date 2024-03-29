@@ -5,7 +5,7 @@ use std::error::Error;
 use std::net::SocketAddr;
 use std::pin::pin;
 
-use axum::routing::{any, get};
+use axum::routing::get;
 use axum::Router;
 use futures::future;
 use tokio::sync::mpsc;
