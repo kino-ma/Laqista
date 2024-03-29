@@ -10,21 +10,18 @@ use std::error::Error;
 // use tokio::net::TcpStream;
 
 use axum::{
-    body::{Body, Bytes},
+    body::Body,
     extract::{Request, State},
-    http::uri::Uri,
-    response::{IntoResponse, Response},
-    routing::{any, get, MethodRouter},
-    Router,
+    routing::{any, MethodRouter},
 };
 // use http_body::Body;
-use hyper::{body::Incoming, client::conn::http2::SendRequest, StatusCode};
+use hyper::client::conn::http2::SendRequest;
 use hyper_util::rt::{TokioExecutor, TokioIo};
 
 type Client = hyper_util::client::legacy::Client<HttpConnector, Body>;
 
 use hyper_util::client::legacy::connect::HttpConnector;
-use tokio::net::{unix::pipe::Sender, TcpStream};
+use tokio::net::TcpStream;
 
 #[derive(Clone, Copy, Debug)]
 struct LocalExec;
@@ -43,13 +40,13 @@ pub async fn create_reverse_proxy(
     package: &str,
     addr: &str,
 ) -> Result<MethodRouter, Box<dyn Error>> {
-    let package = package.to_owned();
+    let _package = package.to_owned();
     let addr = addr.to_owned();
 
     let stream = TcpStream::connect(addr).await?;
     let io = TokioIo::new(stream);
     let exec = TokioExecutor::new();
-    let (sender, conn) = hyper::client::conn::http2::handshake::<_, _, Body>(exec, io).await?;
+    let (sender, _conn) = hyper::client::conn::http2::handshake::<_, _, Body>(exec, io).await?;
 
     let handler = any(
         |State(mut sender): State<SendRequest<_>>, req: Request| async move {
