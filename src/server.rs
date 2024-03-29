@@ -6,8 +6,10 @@ use std::net::SocketAddr;
 use std::pin::pin;
 
 use axum::Router;
+use bytes::Bytes;
 use futures::future;
 use h2::client::SendRequest;
+use http_body::combinators::UnsyncBoxBody;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tonic::transport::Channel;
@@ -195,7 +197,7 @@ impl ServerDaemonRuntime {
                 println!("Running a new server...");
 
                 let handler = create_reverse_proxy("mypackage", "myaddr").await?;
-                let router = TransportServer::builder()
+                let router: Router<_, UnsyncBoxBody<Bytes, _>> = TransportServer::builder()
                     .add_service(ServerDaemonServer::new(self.clone()))
                     .into_router()
                     .route("/", handler);
