@@ -12,7 +12,7 @@ pub struct MetricsReporter {
     scheduler: ServerInfo,
     server: ServerInfo,
     rx: mpsc::Receiver<MonitorWindow>,
-    sender_handle: JoinHandle<()>,
+    _sender_handle: JoinHandle<()>,
 }
 
 impl MetricsReporter {
@@ -26,7 +26,7 @@ impl MetricsReporter {
             scheduler,
             server,
             rx,
-            sender_handle: monitor_handle,
+            _sender_handle: monitor_handle,
         }
     }
 

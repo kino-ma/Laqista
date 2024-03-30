@@ -57,7 +57,7 @@ pub fn mul_as_percent(x: i64, percent: i64) -> i64 {
     (x * y) as i64
 }
 
-pub fn prost_to_system_time(timestamp: &Timestamp) -> SystemTime {
+pub fn _prost_to_system_time(timestamp: &Timestamp) -> SystemTime {
     let system_time = SystemTime::now();
 
     let ts_from_epoch = Duration::from_secs(timestamp.seconds as u64);
