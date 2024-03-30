@@ -191,10 +191,10 @@ impl ServerDaemonRuntime {
             DaemonState::Running(group) => {
                 println!("Running a new server...");
 
-                let grpc_server =
+                let grpc_router =
                     TransportServer::builder().add_service(ServerDaemonServer::new(self.clone()));
 
-                grpc_server.serve(self.socket).await?;
+                grpc_router.serve(self.socket).await?;
 
                 Ok(DaemonState::Running(group.clone()))
             }

@@ -17,13 +17,14 @@ use crate::proto::scheduler_server::Scheduler;
 use crate::proto::server_daemon_client::ServerDaemonClient;
 use crate::proto::{
     ClusterState, DeployRequest, DeployResponse, Deployment, JoinRequest, JoinResponse,
-    LookupRequest, LookupResponse, NotifyRequest, NotifyResponse, SpawnRequest, SpawnResponse,
+    LookupRequest, LookupResponse, NotifyRequest, NotifyResponse, ReportRequest, ReportResponse,
+    SpawnRequest, SpawnResponse,
 };
 use crate::utils::IdMap;
 use crate::{AppInstanceMap, AppInstancesInfo, DeploymentInfo, GroupInfo, ServerInfo};
 
 use self::interface::DeploymentScheduler;
-use self::stats::StatsMap;
+use self::stats::{ServerStats, StatsMap};
 
 #[derive(Debug)]
 pub struct AuthoritativeScheduler {
@@ -191,6 +192,29 @@ impl Scheduler for AuthoritativeScheduler {
         Ok(Response::new(NotifyResponse { success: true }))
     }
 
+    async fn report(
+        &self,
+        request: Request<ReportRequest>,
+    ) -> Result<Response<ReportResponse>, Status> {
+        println!("report() called!!");
+
+        let ReportRequest { server, windows } = request.into_inner();
+
+        let server: ServerInfo = server
+            .ok_or(Status::aborted("server cannot be empty"))?
+            .try_into()
+            .map_err(|e| Status::aborted(format!("failed to parse server info: {}", e)))?;
+
+        let stats = ServerStats::from_stats(server, windows);
+
+        let mut lock = self.runtime.lock().unwrap();
+        let runtime = lock.borrow_mut();
+
+        runtime.cluster.insert_stats(stats);
+
+        Ok(Response::new(ReportResponse { success: true }))
+    }
+
     async fn deploy(
         &self,
         request: Request<DeployRequest>,
@@ -339,6 +363,22 @@ impl Cluster {
         let number = self.group.number + 1;
         let other_group = GroupInfo::with_number(scheduler_info, number);
         Self::with_group(&other_group)
+    }
+
+    pub fn insert_stats(&mut self, stats: ServerStats) {
+        let id = stats.server.id;
+        let entry = self.server_stats.0.get_mut(&stats.server.id);
+
+        let ptr = match entry {
+            Some(ptr) => ptr,
+            None => {
+                let stats = ServerStats::new(stats.server);
+                self.server_stats.0.insert(id, stats);
+                self.server_stats.0.get_mut(&id).unwrap()
+            }
+        };
+
+        ptr.append(stats.stats)
     }
 
     pub fn get_instance_server_ids(&self, deployment_id: &Uuid) -> Result<Vec<Uuid>, String> {

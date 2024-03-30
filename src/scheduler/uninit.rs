@@ -7,7 +7,8 @@ use tonic::{Request, Response, Status};
 use crate::{
     proto::{
         scheduler_server::Scheduler, DeployRequest, DeployResponse, JoinRequest, JoinResponse,
-        LookupRequest, LookupResponse, NotifyRequest, NotifyResponse,
+        LookupRequest, LookupResponse, NotifyRequest, NotifyResponse, ReportRequest,
+        ReportResponse,
     },
     server::DaemonState,
     ServerInfo,
@@ -82,6 +83,13 @@ impl Scheduler for UninitScheduler {
         _request: Request<NotifyRequest>,
     ) -> Result<Response<NotifyResponse>, Status> {
         println!("Uninit: notify called!");
+        Err(Status::aborted("not implemented"))
+    }
+
+    async fn report(
+        &self,
+        _request: Request<ReportRequest>,
+    ) -> Result<Response<ReportResponse>, Status> {
         Err(Status::aborted("not implemented"))
     }
 
