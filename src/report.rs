@@ -16,14 +16,21 @@ pub struct MetricsReporter {
 }
 
 impl MetricsReporter {
-    pub fn new() {
-        let (tx, mut rx) = mpsc::channel(10);
+    pub fn new(scheduler: ServerInfo, server: ServerInfo) -> Self {
+        let (tx, rx) = mpsc::channel(10);
 
         let monitor_handle = tokio::spawn(async move {
             println!("start thread");
             let monit = PowerMonitor::new();
             monit.start(tx).await;
         });
+
+        Self {
+            scheduler,
+            server,
+            rx,
+            monitor_handle,
+        }
     }
 
     pub async fn start(&mut self) {
@@ -32,7 +39,9 @@ impl MetricsReporter {
         while let Some(window) = self.rx.recv().await {
             println!("metrics window = {:?}", window);
 
-            self.report(&window);
+            self.report(&window.into())
+                .await
+                .expect("failed to report metrics");
         }
 
         println!("end listen thread");
@@ -43,14 +52,9 @@ impl MetricsReporter {
 
         let server = Some(self.server.clone().into());
 
-        let window = Some(metrics.clone().into());
-        // todo!(
-        //     (
-        //     "Scheduler 側で metrics を保存する仕組みがない",
-        //     "たしか metrics をもとに schedule されていない"
-        // ));
+        let windows = vec![metrics.clone().into()];
 
-        let req = ReportRequest { window, server };
+        let req = ReportRequest { windows, server };
 
         client.report(req).await?;
 

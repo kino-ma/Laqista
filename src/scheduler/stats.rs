@@ -1,7 +1,6 @@
 use prost_types::Timestamp;
 
 use crate::{
-    monitor::MetricsWindow,
     proto::{MonitorWindow, ResourceUtilization},
     utils::{subtract_window, IdMap},
     ServerInfo,
@@ -12,22 +11,31 @@ pub type StatsMap = IdMap<ServerStats>;
 #[derive(Clone, Debug)]
 pub struct ServerStats {
     pub server: ServerInfo,
-    pub stats: Vec<MetricsWindow>,
+    pub stats: Vec<MonitorWindow>,
 }
 
 impl ServerStats {
+    pub fn new(server: ServerInfo) -> Self {
+        let stats = Vec::new();
+        Self { server, stats }
+    }
+
+    pub fn from_stats(server: ServerInfo, stats: Vec<MonitorWindow>) -> Self {
+        Self { server, stats }
+    }
+
     pub fn windows(&self) -> Windows {
         let inner = self.stats.iter();
         Windows { inner }
     }
 
-    pub fn append(&mut self, window: MonitorWindow) {
-        self.stats.push(window)
+    pub fn append(&mut self, mut window: Vec<MonitorWindow>) {
+        self.stats.append(&mut window)
     }
 }
 
 pub struct Windows<'a> {
-    inner: std::slice::Iter<'a, MetricsWindow>,
+    inner: std::slice::Iter<'a, MonitorWindow>,
 }
 
 pub struct Window {

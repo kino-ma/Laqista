@@ -52,7 +52,7 @@ message NotifyResponse { bool success = 1; }
 
 message ReportRequest {
   Server server = 1;
-  MonitorWindow window = 2;
+  repeated MonitorWindow windows = 2;
 }
 message ReportResponse { bool success = 1; }
 

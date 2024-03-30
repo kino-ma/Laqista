@@ -12,7 +12,6 @@ use tonic::transport::Channel;
 use tonic::{Code, Request, Response, Status};
 use uuid::Uuid;
 
-use crate::monitor::MetricsWindow;
 use crate::proto::scheduler_client::SchedulerClient;
 use crate::proto::scheduler_server::Scheduler;
 use crate::proto::server_daemon_client::ServerDaemonClient;
@@ -25,7 +24,7 @@ use crate::utils::IdMap;
 use crate::{AppInstanceMap, AppInstancesInfo, DeploymentInfo, GroupInfo, ServerInfo};
 
 use self::interface::DeploymentScheduler;
-use self::stats::StatsMap;
+use self::stats::{ServerStats, StatsMap};
 
 #[derive(Debug)]
 pub struct AuthoritativeScheduler {
@@ -199,23 +198,21 @@ impl Scheduler for AuthoritativeScheduler {
     ) -> Result<Response<ReportResponse>, Status> {
         println!("report() called!!");
 
-        let ReportRequest { server, window } = request.into_inner();
+        let ReportRequest { server, windows } = request.into_inner();
 
         let server: ServerInfo = server
             .ok_or(Status::aborted("server cannot be empty"))?
             .try_into()
             .map_err(|e| Status::aborted(format!("failed to parse server info: {}", e)))?;
 
-        let window: MetricsWindow = window
-            .ok_or(Status::aborted("window cannot be empty"))?
-            .try_into()
-            .map_err(|e| Status::aborted(format!("failed to parse window info: {}", e)))?;
+        let stats = ServerStats::from_stats(server, windows);
 
         let mut lock = self.runtime.lock().unwrap();
         let runtime = lock.borrow_mut();
-        runtime.cluster.server_stats.0.get(&server.id);
 
-        Ok(Response::new(NotifyResponse { success: true }))
+        runtime.cluster.insert_stats(stats);
+
+        Ok(Response::new(ReportResponse { success: true }))
     }
 
     async fn deploy(
@@ -366,6 +363,22 @@ impl Cluster {
         let number = self.group.number + 1;
         let other_group = GroupInfo::with_number(scheduler_info, number);
         Self::with_group(&other_group)
+    }
+
+    pub fn insert_stats(&mut self, stats: ServerStats) {
+        let id = stats.server.id;
+        let entry = self.server_stats.0.get_mut(&stats.server.id);
+
+        let ptr = match entry {
+            Some(ptr) => ptr,
+            None => {
+                let stats = ServerStats::new(stats.server);
+                self.server_stats.0.insert(id, stats);
+                self.server_stats.0.get_mut(&id).unwrap()
+            }
+        };
+
+        ptr.append(stats.stats)
     }
 
     pub fn get_instance_server_ids(&self, deployment_id: &Uuid) -> Result<Vec<Uuid>, String> {

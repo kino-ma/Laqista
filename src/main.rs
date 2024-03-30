@@ -4,10 +4,8 @@ use clap::Parser;
 
 use mless::{
     cmd::{Cli, Commands},
-    monitor::PowerMonitor,
     server::ServerRunner,
 };
-use tokio::sync::mpsc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {

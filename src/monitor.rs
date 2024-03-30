@@ -1,19 +1,15 @@
 use std::{
     io::{BufRead, BufReader, Lines},
-    marker::PhantomData,
     process::{self, ChildStdout, Command},
-    time::SystemTime,
+    time::{Duration, SystemTime},
 };
 
 use bytes::BytesMut;
 use plist::Date;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
-use crate::{
-    proto::{MonitorWindow, ResourceUtilization, TimeWindow},
-    utils::prost_to_system_time,
-};
+use crate::proto::{MonitorWindow, ResourceUtilization, TimeWindow};
 
 pub struct PowerMonitor {}
 
@@ -48,7 +44,7 @@ impl PowerMonitor {
         Self {}
     }
 
-    pub async fn start(&self, tx: mpsc::Sender<PowerMetrics>) {
+    pub async fn start(&self, tx: mpsc::Sender<MetricsWindow>) {
         println!("start start");
         let commands = Self::commands();
 
@@ -61,7 +57,7 @@ impl PowerMonitor {
         let stdout = cmd.stdout.expect("faile to get child's stdout");
         let reader = BufReader::new(stdout);
 
-        let plists: Plists<PowerMetrics> = Plists::new(reader.lines());
+        let plists: MetricsReader = MetricsReader::new(reader.lines());
 
         for metrics in plists {
             tx.send(metrics).await.expect("failed to send metrics");
@@ -101,36 +97,42 @@ impl Gpu {
     }
 }
 
-type StdoutLines = Lines<BufReader<ChildStdout>>;
-struct Plists<T> {
-    inner: StdoutLines,
-    phantom: PhantomData<T>,
-}
+impl Into<MetricsWindow> for PowerMetrics {
+    fn into(self) -> MetricsWindow {
+        let end = self.timestamp.into();
+        let duration = Duration::from_nanos(self.elapesd_ns as u64);
+        let start = end - duration;
 
-impl<T> Plists<T>
-where
-    T: DeserializeOwned,
-{
-    pub fn new(lines: StdoutLines) -> Self {
-        Self {
-            inner: lines,
-            phantom: PhantomData,
+        MetricsWindow {
+            start,
+            end,
+            metrics: self,
         }
     }
+}
 
-    fn parse(&self, mut buff: &[u8]) -> Result<T, plist::Error> {
+type StdoutLines = Lines<BufReader<ChildStdout>>;
+struct MetricsReader {
+    inner: StdoutLines,
+}
+
+impl MetricsReader {
+    pub fn new(lines: StdoutLines) -> Self {
+        Self { inner: lines }
+    }
+
+    fn parse(&self, mut buff: &[u8]) -> Result<MetricsWindow, plist::Error> {
         if buff[0] == b'\0' {
             buff = &buff[1..];
         }
-        plist::from_bytes(buff)
+        let metrics: PowerMetrics = plist::from_bytes(buff)?;
+
+        Ok(metrics.into())
     }
 }
 
-impl<'a, T> Iterator for Plists<T>
-where
-    T: DeserializeOwned,
-{
-    type Item = T;
+impl<'a> Iterator for MetricsReader {
+    type Item = MetricsWindow;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut buff = BytesMut::new();
@@ -197,38 +199,5 @@ impl Into<MonitorWindow> for MetricsWindow {
             window,
             utilization,
         }
-    }
-}
-
-impl TryFrom<MonitorWindow> for MetricsWindow {
-    type Error = String;
-
-    fn try_from(monitor_window: MonitorWindow) -> Result<Self, Self::Error> {
-        let window = monitor_window
-            .window
-            .ok_or("window cannot be empty".to_owned())?;
-
-        let start = window
-            .start
-            .as_ref()
-            .map(prost_to_system_time)
-            .ok_or("start cannot be empty".to_owned())?;
-
-        let end = window
-            .end
-            .as_ref()
-            .map(prost_to_system_time)
-            .ok_or("end cannot be empty".to_owned())?;
-
-        let u = monitor_window
-            .utilization
-            .ok_or("metrics cannot be empty")?;
-        let metrics = PowerMetrics { gpu: u.gpu, elapesd_ns: (), timestamp: () }
-
-        Ok(Self {
-            start,
-            end,
-            metrics,
-        })
     }
 }
