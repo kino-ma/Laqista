@@ -13,8 +13,10 @@ pub mod proxy;
 pub mod report;
 pub mod scheduler;
 pub mod server;
-
 mod utils;
+
+// sample application
+mod app;
 
 pub mod proto {
     tonic::include_proto!("mless");
