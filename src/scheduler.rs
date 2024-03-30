@@ -357,7 +357,7 @@ impl SchedulerRuntime {
 impl Cluster {
     pub fn new(scheduler: &ServerInfo) -> Self {
         let group = GroupInfo::new(scheduler);
-        let servers = vec![scheduler.clone()];
+        let servers = vec![];
         let instances = AppInstanceMap::new();
         let server_stats = StatsMap::new();
 
@@ -371,7 +371,7 @@ impl Cluster {
 
     pub fn with_group(group: &GroupInfo) -> Self {
         let group = group.clone();
-        let servers = vec![group.scheduler_info.clone()];
+        let servers = vec![];
         let instances = AppInstanceMap::new();
         let server_stats = StatsMap::new();
 

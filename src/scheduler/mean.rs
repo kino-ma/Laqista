@@ -13,7 +13,7 @@ impl DeploymentScheduler for MeanGpuScheduler {
         let mut least_utilized = stats_map
             .iter()
             .next()
-            .or_else(|| {
+            .or({
                 println!("WARN: stats are empty");
                 None
             })?
