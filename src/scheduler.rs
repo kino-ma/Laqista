@@ -9,7 +9,7 @@ use std::error::Error;
 use std::sync::{Arc, Mutex};
 
 use tonic::transport::Channel;
-use tonic::{Code, Request, Response, Status};
+use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
 use crate::proto::scheduler_client::SchedulerClient;
@@ -102,13 +102,26 @@ impl AuthoritativeScheduler {
 
     pub async fn deploy_in_us(
         &self,
-        request: SpawnRequest,
+        deployment: DeploymentInfo,
     ) -> Result<SpawnResponse, Box<dyn Error>> {
-        let runtime = self.clone_inner();
-        let target_server = runtime
-            .scheduler
-            .schedule(&runtime.cluster.server_stats)
-            .ok_or(Status::new(Code::Aborted, "failed to schedule new job"))?;
+        let request = SpawnRequest {
+            deployment: Some(deployment.clone().into()),
+        };
+
+        let target_server = {
+            println!("taking lock of runtime to get scheduler and stats");
+            let runtime = self.runtime.lock().unwrap();
+            println!("took lock");
+
+            runtime
+                .scheduler
+                .schedule(&runtime.cluster.server_stats)
+                .unwrap_or({
+                    println!("WARN: failed to schedule. Using the first server");
+                    runtime.cluster.servers[0].clone()
+                })
+        };
+        println!("got target server = {:?}", &target_server);
 
         let mut client = self.client(&target_server).await?;
 
@@ -117,6 +130,23 @@ impl AuthoritativeScheduler {
         let response = client.spawn(request).await?;
         if !response.get_ref().success {
             return Err("Unsuccessful spawn".into());
+        }
+
+        println!("spawend successfully");
+
+        // Update deployments information and instances information atomicly
+        {
+            println!("taking lock of runtime");
+            let mut runtime = self.runtime.lock().unwrap();
+            runtime
+                .deployments
+                .0
+                .insert(deployment.id, deployment.clone());
+
+            runtime
+                .cluster
+                .insert_instance(deployment, vec![target_server]);
+            println!("freeing runtime");
         }
 
         println!(
@@ -196,7 +226,7 @@ impl Scheduler for AuthoritativeScheduler {
         &self,
         request: Request<ReportRequest>,
     ) -> Result<Response<ReportResponse>, Status> {
-        println!("report() called!!");
+        // println!("report() called!!");
 
         let ReportRequest { server, windows } = request.into_inner();
 
@@ -228,23 +258,16 @@ impl Scheduler for AuthoritativeScheduler {
 
         let deployment_info = DeploymentInfo::new(source.clone());
         let deployment: Deployment = deployment_info.clone().into();
+        println!("created info");
 
         let mut success = true;
 
         let resp = self
-            .deploy_in_us(SpawnRequest {
-                deployment: Some(deployment.clone()),
-            })
+            .deploy_in_us(deployment_info)
             .await
             .map_err(|e| Status::aborted(e.to_string()))?;
-
-        self.runtime
-            .lock()
-            .unwrap()
-            .deployments
-            .0
-            .insert(deployment_info.id, deployment_info);
         success &= resp.success;
+        println!("got resp");
 
         if authoritative {
             let resp = self
@@ -257,6 +280,7 @@ impl Scheduler for AuthoritativeScheduler {
 
             success &= resp.success;
         }
+        println!("notified");
 
         Ok(Response::new(DeployResponse {
             success,
@@ -365,23 +389,30 @@ impl Cluster {
         Self::with_group(&other_group)
     }
 
+    pub fn insert_instance(&mut self, deployment: DeploymentInfo, servers: Vec<ServerInfo>) {
+        let id = deployment.id;
+        self.instances
+            .0
+            .entry(id)
+            .and_modify(|i| i.servers.append(&mut servers.clone()))
+            .or_insert(AppInstancesInfo {
+                deployment,
+                servers,
+            });
+    }
+
     pub fn insert_stats(&mut self, stats: ServerStats) {
         let id = stats.server.id;
-        let entry = self.server_stats.0.get_mut(&stats.server.id);
-
-        let ptr = match entry {
-            Some(ptr) => ptr,
-            None => {
-                let stats = ServerStats::new(stats.server);
-                self.server_stats.0.insert(id, stats);
-                self.server_stats.0.get_mut(&id).unwrap()
-            }
-        };
-
-        ptr.append(stats.stats)
+        self.server_stats
+            .0
+            .entry(id)
+            .and_modify(|s| s.append(stats.stats.clone()))
+            .or_insert(stats);
     }
 
     pub fn get_instance_server_ids(&self, deployment_id: &Uuid) -> Result<Vec<Uuid>, String> {
+        println!("instances = {:?}", self.instances.0);
+
         Ok(self
             .instances
             .0

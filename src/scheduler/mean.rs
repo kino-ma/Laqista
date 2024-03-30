@@ -10,7 +10,14 @@ pub struct MeanGpuScheduler {}
 
 impl DeploymentScheduler for MeanGpuScheduler {
     fn schedule(&self, stats_map: &StatsMap) -> Option<ServerInfo> {
-        let mut least_utilized = stats_map.iter().next()?.1;
+        let mut least_utilized = stats_map
+            .iter()
+            .next()
+            .or({
+                println!("WARN: stats are empty");
+                None
+            })?
+            .1;
         let mut least_utilized_rate = 0.;
 
         for (_id, stats) in stats_map.iter() {

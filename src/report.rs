@@ -35,11 +35,8 @@ impl MetricsReporter {
         println!("start listen thread");
 
         loop {
-            println!("selecting...");
-
             select! {
                 Some(window) = self.rx.recv() => {
-                    println!("metrics window = {:?}", window);
 
                     self.report(&window.into())
                         .await
@@ -59,7 +56,6 @@ impl MetricsReporter {
     }
 
     pub async fn report(&self, metrics: &MonitorWindow) -> Result<(), Box<dyn Error>> {
-        println!("scheduler = {:?}", &self.scheduler.addr);
         let mut client = SchedulerClient::connect(self.scheduler.addr.clone()).await?;
 
         let server = Some(self.server.clone().into());
