@@ -19,6 +19,7 @@ use crate::proto::{
     DestroyRequest, DestroyResponse, GetInfoRequest, GetInfoResponse, JoinRequest, MonitorRequest,
     MonitorResponse, PingResponse, ServerState, SpawnRequest, SpawnResponse,
 };
+use crate::report::MetricsReporter;
 use crate::scheduler::mean::MeanGpuScheduler;
 use crate::scheduler::uninit::UninitScheduler;
 use crate::scheduler::{AuthoritativeScheduler, Cluster};
@@ -190,22 +191,33 @@ impl ServerDaemonRuntime {
             }
             DaemonState::Running(group) => {
                 println!("Running a new server...");
+                println!("group = {:?}", group);
+
+                let reporter_token = self.start_reporter(group.scheduler_info.clone());
 
                 let grpc_router =
                     TransportServer::builder().add_service(ServerDaemonServer::new(self.clone()));
 
                 grpc_router.serve(self.socket).await?;
 
+                println!("cancel reporter (running)");
+                reporter_token.cancel();
+
                 Ok(DaemonState::Running(group.clone()))
             }
             DaemonState::Authoritative(scheduler) => {
                 println!("Running an Authoritative server...");
+
+                let reporter_token = self.start_reporter(self.info.clone());
 
                 let grpc_server = TransportServer::builder()
                     .add_service(ServerDaemonServer::new(self.clone()))
                     .add_service(SchedulerServer::new(scheduler.clone()));
 
                 grpc_server.serve(self.socket).await?;
+
+                println!("cancel reporter (authoritative)");
+                reporter_token.cancel();
 
                 Ok(DaemonState::Authoritative(scheduler.clone()))
             }
@@ -214,6 +226,16 @@ impl ServerDaemonRuntime {
                 panic!("invalid state: {:?}", state)
             }
         }
+    }
+
+    fn start_reporter(&self, scheduler: ServerInfo) -> CancellationToken {
+        let token = CancellationToken::new();
+        let cloned = token.clone();
+
+        let mut reporter = MetricsReporter::new(self.info.clone(), scheduler);
+        tokio::spawn(async move { reporter.start(cloned).await });
+
+        token
     }
 
     fn set_state(&mut self, state: DaemonState) {

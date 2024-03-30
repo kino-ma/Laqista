@@ -53,7 +53,10 @@ impl SendMetrics for MetricsMonitor {
 
             for metrics in plists {
                 let window = metrics.into();
-                tx.send(window).await.expect("failed to send metrics");
+                tx.send(window)
+                    .await
+                    .map_err(|e| format!("failed to send metrics: {}", e))
+                    .expect("failed to send metrics");
             }
         })
     }
@@ -68,7 +71,7 @@ impl MetricsMonitor {
         vec![
             "/usr/bin/powermetrics",
             "--sampler=gpu_power",
-            "--sample-rate=3000", // in ms
+            "--sample-rate=1000", // in ms
             // "--sample-count=1",
             "--format=plist",
         ]
@@ -78,7 +81,7 @@ impl MetricsMonitor {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PowerMetrics {
     pub gpu: Gpu,
-    pub elapesd_ns: i64,
+    pub elapsed_ns: i64,
     pub timestamp: Date,
 }
 
@@ -107,7 +110,7 @@ impl Gpu {
 impl Into<MetricsWindow> for PowerMetrics {
     fn into(self) -> MetricsWindow {
         let end = self.timestamp.into();
-        let duration = Duration::from_nanos(self.elapesd_ns as u64);
+        let duration = Duration::from_nanos(self.elapsed_ns as u64);
         let start = end - duration;
 
         MetricsWindow {
