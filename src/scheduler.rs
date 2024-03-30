@@ -12,12 +12,14 @@ use tonic::transport::Channel;
 use tonic::{Code, Request, Response, Status};
 use uuid::Uuid;
 
+use crate::monitor::MetricsWindow;
 use crate::proto::scheduler_client::SchedulerClient;
 use crate::proto::scheduler_server::Scheduler;
 use crate::proto::server_daemon_client::ServerDaemonClient;
 use crate::proto::{
     ClusterState, DeployRequest, DeployResponse, Deployment, JoinRequest, JoinResponse,
-    LookupRequest, LookupResponse, NotifyRequest, NotifyResponse, SpawnRequest, SpawnResponse,
+    LookupRequest, LookupResponse, NotifyRequest, NotifyResponse, ReportRequest, ReportResponse,
+    SpawnRequest, SpawnResponse,
 };
 use crate::utils::IdMap;
 use crate::{AppInstanceMap, AppInstancesInfo, DeploymentInfo, GroupInfo, ServerInfo};
@@ -187,6 +189,31 @@ impl Scheduler for AuthoritativeScheduler {
         let mut lock = self.runtime.lock().unwrap();
         let runtime = lock.borrow_mut();
         runtime.other = state.try_into().map_err(Status::aborted)?;
+
+        Ok(Response::new(NotifyResponse { success: true }))
+    }
+
+    async fn report(
+        &self,
+        request: Request<ReportRequest>,
+    ) -> Result<Response<ReportResponse>, Status> {
+        println!("report() called!!");
+
+        let ReportRequest { server, window } = request.into_inner();
+
+        let server: ServerInfo = server
+            .ok_or(Status::aborted("server cannot be empty"))?
+            .try_into()
+            .map_err(|e| Status::aborted(format!("failed to parse server info: {}", e)))?;
+
+        let window: MetricsWindow = window
+            .ok_or(Status::aborted("window cannot be empty"))?
+            .try_into()
+            .map_err(|e| Status::aborted(format!("failed to parse window info: {}", e)))?;
+
+        let mut lock = self.runtime.lock().unwrap();
+        let runtime = lock.borrow_mut();
+        runtime.cluster.server_stats.0.get(&server.id);
 
         Ok(Response::new(NotifyResponse { success: true }))
     }

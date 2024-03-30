@@ -40,6 +40,7 @@ service Scheduler {
   // For cluster management.
   rpc Join(JoinRequest) returns (JoinResponse);
   rpc Notify(NotifyRequest) returns (NotifyResponse);
+  rpc Report(ReportRequest) returns (ReportResponse);
 
   // For managing and calling applictions.
   rpc Deploy(DeployRequest) returns (DeployResponse);
@@ -48,6 +49,12 @@ service Scheduler {
 
 message NotifyRequest { ClusterState cluster = 1; }
 message NotifyResponse { bool success = 1; }
+
+message ReportRequest {
+  Server server = 1;
+  MonitorWindow window = 2;
+}
+message ReportResponse { bool success = 1; }
 
 message ClusterState {
   Group group = 1;

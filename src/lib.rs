@@ -10,6 +10,7 @@ use uuid::Uuid;
 pub mod cmd;
 pub mod monitor;
 pub mod proxy;
+pub mod report;
 pub mod scheduler;
 pub mod server;
 

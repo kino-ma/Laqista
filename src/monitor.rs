@@ -2,27 +2,43 @@ use std::{
     io::{BufRead, BufReader, Lines},
     marker::PhantomData,
     process::{self, ChildStdout, Command},
+    time::SystemTime,
 };
 
 use bytes::BytesMut;
+use plist::Date;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tokio::sync::mpsc;
 
+use crate::{
+    proto::{MonitorWindow, ResourceUtilization, TimeWindow},
+    utils::prost_to_system_time,
+};
+
 pub struct PowerMonitor {}
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct PowerMetrics {
-    pub gpu: Gpu,
+#[derive(Clone, Debug)]
+pub struct MetricsWindow {
+    start: SystemTime,
+    end: SystemTime,
+    metrics: PowerMetrics,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PowerMetrics {
+    pub gpu: Gpu,
+    pub elapesd_ns: i64,
+    pub timestamp: Date,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Gpu {
     pub freq_hz: f64,
     pub idle_ratio: f64,
     pub dvfm_states: Vec<DvfmState>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DvfmState {
     pub freq: u16,
 }
@@ -145,5 +161,74 @@ where
         }
 
         None
+    }
+}
+
+impl MetricsWindow {
+    pub fn time_window(&self) -> TimeWindow {
+        let start = Some(self.start.into());
+        let end = Some(self.end.into());
+
+        TimeWindow { start, end }
+    }
+}
+
+impl Into<ResourceUtilization> for PowerMetrics {
+    fn into(self) -> ResourceUtilization {
+        let gpu = (self.gpu.utilization_ratio() * 100.0) as i32;
+
+        ResourceUtilization {
+            gpu,
+            cpu: -1,
+            ram_total: -1,
+            ram_used: -1,
+            vram_total: -1,
+            vram_used: -1,
+        }
+    }
+}
+
+impl Into<MonitorWindow> for MetricsWindow {
+    fn into(self) -> MonitorWindow {
+        let window = Some(self.time_window());
+        let utilization = Some(self.metrics.into());
+
+        MonitorWindow {
+            window,
+            utilization,
+        }
+    }
+}
+
+impl TryFrom<MonitorWindow> for MetricsWindow {
+    type Error = String;
+
+    fn try_from(monitor_window: MonitorWindow) -> Result<Self, Self::Error> {
+        let window = monitor_window
+            .window
+            .ok_or("window cannot be empty".to_owned())?;
+
+        let start = window
+            .start
+            .as_ref()
+            .map(prost_to_system_time)
+            .ok_or("start cannot be empty".to_owned())?;
+
+        let end = window
+            .end
+            .as_ref()
+            .map(prost_to_system_time)
+            .ok_or("end cannot be empty".to_owned())?;
+
+        let u = monitor_window
+            .utilization
+            .ok_or("metrics cannot be empty")?;
+        let metrics = PowerMetrics { gpu: u.gpu, elapesd_ns: (), timestamp: () }
+
+        Ok(Self {
+            start,
+            end,
+            metrics,
+        })
     }
 }
