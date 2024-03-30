@@ -1,22 +1,25 @@
 use std::{
-    io::{BufReader, Lines},
-    process::ChildStdout,
-    time::Duration,
+    io::{BufRead, BufReader, Lines},
+    process::{self, ChildStdout, Command},
+    time::{Duration, SystemTime},
 };
 
 use bytes::BytesMut;
 use plist::Date;
 use serde::{Deserialize, Serialize};
+use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::proto::{MonitorWindow, ResourceUtilization, TimeWindow};
 
-use super::MetricsWindow;
+use super::SendMetrics;
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct PowerMetrics {
-    pub gpu: Gpu,
-    pub elapesd_ns: i64,
-    pub timestamp: Date,
+pub struct MetricsMonitor {}
+
+#[derive(Clone, Debug)]
+pub struct MetricsWindow {
+    start: SystemTime,
+    end: SystemTime,
+    metrics: PowerMetrics,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -29,6 +32,54 @@ pub struct Gpu {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DvfmState {
     pub freq: u16,
+}
+
+impl SendMetrics for MetricsMonitor {
+    fn spawn(&self, tx: mpsc::Sender<MonitorWindow>) -> JoinHandle<()> {
+        tokio::spawn(async move {
+            println!("start start");
+            let commands = Self::commands();
+
+            let cmd = Command::new(commands[0])
+                .args(&commands[1..])
+                .stdout(process::Stdio::piped())
+                .spawn()
+                .expect("failed to spawn monitor process");
+
+            let stdout = cmd.stdout.expect("faile to get child's stdout");
+            let reader = BufReader::new(stdout);
+
+            let plists: MetricsReader = MetricsReader::new(reader.lines());
+
+            for metrics in plists {
+                let window = metrics.into();
+                tx.send(window).await.expect("failed to send metrics");
+            }
+        })
+    }
+}
+
+impl MetricsMonitor {
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    fn commands() -> Vec<&'static str> {
+        vec![
+            "/usr/bin/powermetrics",
+            "--sampler=gpu_power",
+            "--sample-rate=3000", // in ms
+            // "--sample-count=1",
+            "--format=plist",
+        ]
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PowerMetrics {
+    pub gpu: Gpu,
+    pub elapesd_ns: i64,
+    pub timestamp: Date,
 }
 
 impl Gpu {

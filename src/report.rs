@@ -3,33 +3,30 @@ use std::error::Error;
 use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
-    monitor::{MetricsWindow, PowerMonitor},
-    proto::{scheduler_client::SchedulerClient, ReportRequest},
+    monitor::{MetricsMonitor, SendMetrics},
+    proto::{scheduler_client::SchedulerClient, MonitorWindow, ReportRequest},
     ServerInfo,
 };
 
 pub struct MetricsReporter {
     scheduler: ServerInfo,
     server: ServerInfo,
-    rx: mpsc::Receiver<MetricsWindow>,
-    monitor_handle: JoinHandle<()>,
+    rx: mpsc::Receiver<MonitorWindow>,
+    sender_handle: JoinHandle<()>,
 }
 
 impl MetricsReporter {
     pub fn new(scheduler: ServerInfo, server: ServerInfo) -> Self {
         let (tx, rx) = mpsc::channel(10);
 
-        let monitor_handle = tokio::spawn(async move {
-            println!("start thread");
-            let monit = PowerMonitor::new();
-            monit.start(tx).await;
-        });
+        let sender: Box<dyn SendMetrics> = Box::new(MetricsMonitor::new());
+        let monitor_handle = sender.spawn(tx);
 
         Self {
             scheduler,
             server,
             rx,
-            monitor_handle,
+            sender_handle: monitor_handle,
         }
     }
 
@@ -43,11 +40,9 @@ impl MetricsReporter {
                 .await
                 .expect("failed to report metrics");
         }
-
-        println!("end listen thread");
     }
 
-    pub async fn report(&self, metrics: &MetricsWindow) -> Result<(), Box<dyn Error>> {
+    pub async fn report(&self, metrics: &MonitorWindow) -> Result<(), Box<dyn Error>> {
         let mut client = SchedulerClient::connect(self.scheduler.addr.clone()).await?;
 
         let server = Some(self.server.clone().into());
