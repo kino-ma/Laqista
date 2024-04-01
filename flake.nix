@@ -35,6 +35,7 @@
               python311
               python311Packages.grpcio-tools
               jq
+              gnuplot
             ];
 
 

@@ -17,11 +17,8 @@ pub mod scheduler;
 pub mod server;
 mod utils;
 
-#[cfg(test)]
-mod bench;
-
 // sample application
-mod app;
+pub mod app;
 // mod bench;
 
 pub mod proto {
