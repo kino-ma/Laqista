@@ -36,6 +36,26 @@ pub fn bench_scheduled(c: &mut Criterion) {
     );
 }
 
+pub fn bench_direct(c: &mut Criterion) {
+    let addr = "http://127.0.0.1:50051";
+
+    let runtime = Runtime::new().unwrap();
+    let (_, app_client, _) = runtime.block_on(async { setup_clients(addr).await });
+
+    let arc_app_client = Arc::new(Mutex::new(app_client));
+
+    c.bench_with_input(
+        BenchmarkId::new("direct", "<App client>"),
+        &arc_app_client,
+        |b, app_client| {
+            b.to_async(Runtime::new().unwrap()).iter(|| async {
+                let mut app_client = app_client.lock().await;
+                run_direct(&mut app_client).await
+            })
+        },
+    );
+}
+
 async fn setup_clients(
     addr: &str,
 ) -> (SchedulerClient<Channel>, GreeterClient<Channel>, Deployment) {
@@ -82,5 +102,12 @@ async fn run_scheduled(
     app_client.say_hello(request).await.unwrap();
 }
 
-criterion_group!(benches, bench_scheduled);
+async fn run_direct(app_client: &mut GreeterClient<Channel>) {
+    let request = HelloRequest {
+        name: "MLess benchamrk".to_owned(),
+    };
+    app_client.say_hello(request).await.unwrap();
+}
+
+criterion_group!(benches, bench_scheduled, bench_direct);
 criterion_main!(benches);
