@@ -1,3 +1,5 @@
+#![feature(test)]
+
 use std::{error::Error, net::SocketAddr};
 
 use mac_address::MacAddressError;
@@ -15,8 +17,12 @@ pub mod scheduler;
 pub mod server;
 mod utils;
 
+#[cfg(test)]
+mod bench;
+
 // sample application
 mod app;
+// mod bench;
 
 pub mod proto {
     tonic::include_proto!("mless");
