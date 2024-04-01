@@ -4,21 +4,39 @@
     nixpkgs-stable.url = "github:nixos/nixpkgs/nixos-23.11";
     flake-utils.url = "github:numtide/flake-utils";
 
-    rust-overlay.url = "github:oxalica/rust-overlay";
+    fenix = {
+      url = "github:nix-community/fenix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs, nixpkgs-stable, flake-utils, rust-overlay }:
+  outputs = { self, nixpkgs, nixpkgs-stable, flake-utils, fenix }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        overlays = [ (import rust-overlay) ];
+        overlays = [ fenix.overlays.default ];
         pkgs = import nixpkgs { inherit system overlays; };
         pkgs-stable = import nixpkgs-stable { inherit system overlays; };
+
+        rust-components = pkgs.fenix.complete.withComponents [ "cargo" "rust-src" "rustc" "rustfmt" ];
 
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
       in
       {
         devShell = pkgs.mkShell {
-          nativeBuildInputs = with pkgs; [ cargo rustc rustfmt rust-analyzer protobuf iconv grpcurl pkgs-stable.opencv pkg-config ];
+          nativeBuildInputs = with pkgs;
+            [
+              rust-components
+              rust-analyzer-nightly
+              protobuf
+              iconv
+              grpcurl
+              pkgs-stable.opencv
+              pkg-config
+              python311
+              python311Packages.grpcio-tools
+              jq
+            ];
+
 
           RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
         };
