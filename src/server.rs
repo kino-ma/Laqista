@@ -23,7 +23,7 @@ use crate::report::MetricsReporter;
 use crate::scheduler::mean::MeanGpuScheduler;
 use crate::scheduler::uninit::UninitScheduler;
 use crate::scheduler::{AuthoritativeScheduler, Cluster};
-use crate::{GroupInfo, ServerInfo};
+use crate::{app, GroupInfo, ServerInfo};
 
 use self::cmd::{ServerCommand, StartCommand};
 
@@ -195,8 +195,11 @@ impl ServerDaemonRuntime {
 
                 let reporter_token = self.start_reporter(group.scheduler_info.clone());
 
-                let grpc_router =
-                    TransportServer::builder().add_service(ServerDaemonServer::new(self.clone()));
+                let grpc_router = TransportServer::builder()
+                    .add_service(ServerDaemonServer::new(self.clone()))
+                    .add_service(app::proto::greeter_server::GreeterServer::new(
+                        app::MyGreeter::default(),
+                    ));
 
                 grpc_router.serve(self.socket).await?;
 
@@ -212,7 +215,10 @@ impl ServerDaemonRuntime {
 
                 let grpc_server = TransportServer::builder()
                     .add_service(ServerDaemonServer::new(self.clone()))
-                    .add_service(SchedulerServer::new(scheduler.clone()));
+                    .add_service(SchedulerServer::new(scheduler.clone()))
+                    .add_service(app::proto::greeter_server::GreeterServer::new(
+                        app::MyGreeter::default(),
+                    ));
 
                 grpc_server.serve(self.socket).await?;
 
