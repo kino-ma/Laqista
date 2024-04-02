@@ -3,14 +3,15 @@ use std::{env::args, error::Error};
 use face::{DetectedFrame, VideoDetector, DEFAULT_VIDEO_FILE};
 use opencv::{
     core, highgui, imgproc,
-    videoio::{self, VideoCapture, VideoCaptureTraitConst},
+    videoio::{self, VideoCapture, VideoCaptureTraitConst, CAP_ANY},
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let maybe_filename = args().nth(1);
-    let filename = maybe_filename.as_deref().unwrap_or(DEFAULT_VIDEO_FILE);
+    // let maybe_filename = args().nth(1);
+    // let filename = maybe_filename.as_deref().unwrap_or(DEFAULT_VIDEO_FILE);
 
-    let capture = VideoCapture::from_file(filename, videoio::CAP_ANY)?;
+    // let capture = VideoCapture::from_file(filename, videoio::CAP_ANY)?;
+    let capture = VideoCapture::new(0, CAP_ANY).unwrap();
 
     let window = "video capture";
     highgui::named_window_def(window)?;

@@ -1,6 +1,3 @@
-use std::thread;
-use std::time::Duration;
-
 use opencv::objdetect::CascadeClassifier;
 use opencv::prelude::*;
 use opencv::types::VectorOfRect;
@@ -12,13 +9,13 @@ pub const DEFAULT_VIDEO_FILE: &'static str =
 
 pub struct VideoDetector {
     frames: Frames,
-    detector: Detector,
+    detector: FaceDetector,
 }
 
 impl VideoDetector {
     pub fn new(capture: VideoCapture) -> Self {
         let frames = Frames::new(capture);
-        let detector = Detector::new();
+        let detector = FaceDetector::new();
 
         Self { frames, detector }
     }
@@ -42,11 +39,11 @@ pub struct DetectedFrame {
     pub faces: VectorOfRect,
 }
 
-struct Detector {
+pub struct FaceDetector {
     classifier: CascadeClassifier,
 }
 
-impl Detector {
+impl FaceDetector {
     pub fn new() -> Self {
         let xml = core::find_file_def("haarcascades/haarcascade_frontalface_alt.xml").unwrap();
         let classifier = objdetect::CascadeClassifier::new(&xml).unwrap();
@@ -55,10 +52,6 @@ impl Detector {
     }
 
     pub fn detect(&mut self, frame: Mat) -> Result<DetectedFrame> {
-        if frame.size()?.width == 0 {
-            thread::sleep(Duration::from_secs(50));
-        }
-
         let mut gray = Mat::default();
         imgproc::cvt_color_def(&frame, &mut gray, imgproc::COLOR_BGR2GRAY)?;
 
