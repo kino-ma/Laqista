@@ -14,27 +14,19 @@ pub fn run() -> Result<()> {
     let maybe_filename = args().nth(1);
     let filename = maybe_filename.as_deref().unwrap_or(DEFAULT_VIDEO_FILE);
 
-    let mut video = VideoCapture::from_file(filename, videoio::CAP_ANY)?;
+    let capture = VideoCapture::from_file(filename, videoio::CAP_ANY)?;
 
     let window = "video capture";
     highgui::named_window_def(window)?;
-    let opened = videoio::VideoCapture::is_opened(&video)?;
+    let opened = videoio::VideoCapture::is_opened(&capture)?;
     if !opened {
         panic!("Unable to open default camera!");
     }
 
-    let mut detector = Detector::new();
+    let detector = Detector::new(capture);
 
-    loop {
-        let mut frame = Mat::default();
-
-        if !video.read(&mut frame)? {
-            break;
-        }
-
-        let detected_frame = detector.detect(frame)?;
-
-        highgui::imshow(window, &detected_frame)?;
+    for detected_frame in detector {
+        highgui::imshow(window, &detected_frame?)?;
         if highgui::wait_key(10)? > 0 {
             break;
         }
@@ -45,14 +37,18 @@ pub fn run() -> Result<()> {
 
 struct Detector {
     classifier: CascadeClassifier,
+    capture: VideoCapture,
 }
 
 impl Detector {
-    pub fn new() -> Self {
+    pub fn new(capture: VideoCapture) -> Self {
         let xml = core::find_file_def("haarcascades/haarcascade_frontalface_alt.xml").unwrap();
         let classifier = objdetect::CascadeClassifier::new(&xml).unwrap();
 
-        Self { classifier }
+        Self {
+            classifier,
+            capture,
+        }
     }
 
     pub fn detect(&mut self, mut frame: Mat) -> Result<Mat> {
@@ -105,5 +101,23 @@ impl Detector {
         }
 
         Ok(frame)
+    }
+}
+
+impl Iterator for Detector {
+    type Item = Result<Mat>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut frame = Mat::default();
+
+        let read_result = self.capture.read(&mut frame);
+
+        match read_result {
+            Ok(true) => (),
+            Ok(false) => return None,
+            Err(e) => return Some(Err(e)),
+        };
+
+        Some(self.detect(frame))
     }
 }
