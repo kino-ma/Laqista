@@ -1,26 +1,25 @@
+use std::env::args;
 use std::thread;
 use std::time::Duration;
 
 use opencv::prelude::*;
+use opencv::videoio::VideoCapture;
 use opencv::{core, highgui, imgproc, objdetect, types, videoio, Result};
 
 fn main() -> Result<()> {
+    let mut video = VideoCapture::from_file(&args().nth(1).unwrap(), videoio::CAP_ANY)?;
+
     let window = "video capture";
     highgui::named_window_def(window)?;
-    let (xml, mut cam) = {
-        (
-            core::find_file_def("haarcascades/haarcascade_frontalface_alt.xml")?,
-            videoio::VideoCapture::new(0, videoio::CAP_ANY)?, // 0 is the default camera
-        )
-    };
-    let opened = videoio::VideoCapture::is_opened(&cam)?;
+    let xml = core::find_file_def("haarcascades/haarcascade_frontalface_alt.xml")?;
+    let opened = videoio::VideoCapture::is_opened(&video)?;
     if !opened {
         panic!("Unable to open default camera!");
     }
     let mut face = objdetect::CascadeClassifier::new(&xml)?;
     loop {
         let mut frame = Mat::default();
-        cam.read(&mut frame)?;
+        video.read(&mut frame)?;
         if frame.size()?.width == 0 {
             thread::sleep(Duration::from_secs(50));
             continue;
