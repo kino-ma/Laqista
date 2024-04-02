@@ -7,8 +7,18 @@ use opencv::prelude::*;
 use opencv::videoio::VideoCapture;
 use opencv::{core, highgui, imgproc, objdetect, types, videoio, Result};
 
+const DEFAULT_VIDEO_FILE: &'static str =
+    "/Users/kino-ma/Documents/research/mless/dataset/people.mp4";
+
 fn main() -> Result<()> {
-    let mut video = VideoCapture::from_file(&args().nth(1).unwrap(), videoio::CAP_ANY)?;
+    run()
+}
+
+pub fn run() -> Result<()> {
+    let maybe_filename = args().nth(1);
+    let filename = maybe_filename.as_deref().unwrap_or(DEFAULT_VIDEO_FILE);
+
+    let mut video = VideoCapture::from_file(filename, videoio::CAP_ANY)?;
 
     let window = "video capture";
     highgui::named_window_def(window)?;
@@ -21,7 +31,10 @@ fn main() -> Result<()> {
 
     loop {
         let mut frame = Mat::default();
-        video.read(&mut frame)?;
+
+        if !video.read(&mut frame)? {
+            break;
+        }
 
         let detected_frame = detector.detect(frame)?;
 
