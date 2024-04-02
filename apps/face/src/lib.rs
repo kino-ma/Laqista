@@ -1,57 +1,60 @@
-use std::env::args;
 use std::thread;
 use std::time::Duration;
 
 use opencv::objdetect::CascadeClassifier;
 use opencv::prelude::*;
+use opencv::types::VectorOfRect;
 use opencv::videoio::VideoCapture;
-use opencv::{core, highgui, imgproc, objdetect, types, videoio, Result};
+use opencv::{core, imgproc, objdetect, types, Result};
 
-const DEFAULT_VIDEO_FILE: &'static str =
+pub const DEFAULT_VIDEO_FILE: &'static str =
     "/Users/kino-ma/Documents/research/mless/dataset/people.mp4";
 
-pub fn run() -> Result<()> {
-    let maybe_filename = args().nth(1);
-    let filename = maybe_filename.as_deref().unwrap_or(DEFAULT_VIDEO_FILE);
+pub struct VideoDetector {
+    frames: Frames,
+    detector: Detector,
+}
 
-    let capture = VideoCapture::from_file(filename, videoio::CAP_ANY)?;
+impl VideoDetector {
+    pub fn new(capture: VideoCapture) -> Self {
+        let frames = Frames::new(capture);
+        let detector = Detector::new();
 
-    let window = "video capture";
-    highgui::named_window_def(window)?;
-    let opened = videoio::VideoCapture::is_opened(&capture)?;
-    if !opened {
-        panic!("Unable to open default camera!");
+        Self { frames, detector }
     }
+}
 
-    let detector = Detector::new(capture);
+impl Iterator for VideoDetector {
+    type Item = DetectedFrame;
 
-    for detected_frame in detector {
-        highgui::imshow(window, &detected_frame?)?;
-        if highgui::wait_key(10)? > 0 {
-            break;
+    fn next(&mut self) -> Option<Self::Item> {
+        let frame = self.frames.next()?;
+
+        match self.detector.detect(frame) {
+            Ok(v) => Some(v),
+            _ => None,
         }
     }
+}
 
-    Ok(())
+pub struct DetectedFrame {
+    pub frame: Mat,
+    pub faces: VectorOfRect,
 }
 
 struct Detector {
     classifier: CascadeClassifier,
-    capture: VideoCapture,
 }
 
 impl Detector {
-    pub fn new(capture: VideoCapture) -> Self {
+    pub fn new() -> Self {
         let xml = core::find_file_def("haarcascades/haarcascade_frontalface_alt.xml").unwrap();
         let classifier = objdetect::CascadeClassifier::new(&xml).unwrap();
 
-        Self {
-            classifier,
-            capture,
-        }
+        Self { classifier }
     }
 
-    pub fn detect(&mut self, mut frame: Mat) -> Result<Mat> {
+    pub fn detect(&mut self, frame: Mat) -> Result<DetectedFrame> {
         if frame.size()?.width == 0 {
             thread::sleep(Duration::from_secs(50));
         }
@@ -90,22 +93,22 @@ impl Detector {
             },
         )?;
 
-        println!("faces: {}", faces.len());
-
-        for face in faces {
-            println!("face {face:?}");
-            let scaled_face =
-                core::Rect::new(face.x * 4, face.y * 4, face.width * 4, face.height * 4);
-
-            imgproc::rectangle_def(&mut frame, scaled_face, (0, 255, 0).into())?;
-        }
-
-        Ok(frame)
+        Ok(DetectedFrame { faces, frame })
     }
 }
 
-impl Iterator for Detector {
-    type Item = Result<Mat>;
+struct Frames {
+    capture: VideoCapture,
+}
+
+impl Frames {
+    pub fn new(capture: VideoCapture) -> Self {
+        Self { capture }
+    }
+}
+
+impl Iterator for Frames {
+    type Item = Mat;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut frame = Mat::default();
@@ -113,11 +116,8 @@ impl Iterator for Detector {
         let read_result = self.capture.read(&mut frame);
 
         match read_result {
-            Ok(true) => (),
-            Ok(false) => return None,
-            Err(e) => return Some(Err(e)),
-        };
-
-        Some(self.detect(frame))
+            Ok(true) => Some(frame),
+            _ => return None,
+        }
     }
 }
