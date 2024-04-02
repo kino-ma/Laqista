@@ -25,7 +25,6 @@ impl Detector for DetectServer {
         let mut total_detected = 0;
 
         for detected_frame in detector {
-            println!("loop");
             let DetectedFrame { faces, .. } = detected_frame;
             total_detected += faces.len();
         }
