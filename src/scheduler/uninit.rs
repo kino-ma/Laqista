@@ -11,7 +11,7 @@ use crate::{
         ReportResponse,
     },
     server::DaemonState,
-    ServerInfo,
+    Error, ServerInfo,
 };
 
 use super::{mean::MeanGpuScheduler, AuthoritativeScheduler, Cluster};
@@ -51,7 +51,7 @@ impl Scheduler for UninitScheduler {
             .server
             .ok_or(Status::aborted("Server cannot be empty"))?;
         let other: ServerInfo =
-            ServerInfo::try_from(other_server).map_err(|e| Status::aborted(e.to_string()))?;
+            ServerInfo::try_from(other_server).map_err(<Error as Into<Status>>::into)?;
 
         let this_cluster = Cluster::new(&self.server);
         let this_group = this_cluster.group.clone();

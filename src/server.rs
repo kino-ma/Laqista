@@ -1,7 +1,5 @@
 pub mod cmd;
 
-use std::error::Error;
-
 use std::net::SocketAddr;
 use std::pin::pin;
 
@@ -10,7 +8,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tonic::transport::server::Router;
 use tonic::transport::Channel;
-use tonic::{transport::Server as TransportServer, Request, Response, Status};
+use tonic::{transport::Server as TransportServer, Request, Response};
 use uuid::Uuid;
 
 use crate::proto::scheduler_client::SchedulerClient;
@@ -24,7 +22,7 @@ use crate::report::MetricsReporter;
 use crate::scheduler::mean::MeanGpuScheduler;
 use crate::scheduler::uninit::UninitScheduler;
 use crate::scheduler::{AuthoritativeScheduler, Cluster};
-use crate::{GroupInfo, ServerInfo};
+use crate::{GroupInfo, Result, RpcResult, ServerInfo};
 
 use self::cmd::{ServerCommand, StartCommand};
 
@@ -59,7 +57,7 @@ impl ServerRunner {
         Self { command }
     }
 
-    pub async fn run(&self) -> Result<(), Box<dyn Error>> {
+    pub async fn run(&self) -> Result<()> {
         use ServerCommand::*;
 
         match &self.command {
@@ -72,7 +70,7 @@ impl ServerRunner {
         &self,
         server_command: &ServerCommand,
         start_command: &StartCommand,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<()> {
         let mut daemon = self.create_daemon(server_command, start_command)?;
 
         daemon.start().await
@@ -82,7 +80,7 @@ impl ServerRunner {
         &self,
         _server_command: &ServerCommand,
         start_command: &StartCommand,
-    ) -> Result<ServerDaemonRuntime, Box<dyn Error>> {
+    ) -> Result<ServerDaemonRuntime> {
         let maybe_id = start_command.id.as_deref();
         let maybe_addr: Option<&str> = Some(&start_command.listen_host);
         let maybe_bootstrap_addr = start_command.bootstrap_addr.as_deref();
@@ -96,7 +94,7 @@ impl ServerDaemonRuntime {
         Self::default()
     }
 
-    pub fn with_id(id: &str) -> Result<Self, uuid::Error> {
+    pub fn with_id(id: &str) -> Result<Self> {
         let id = Uuid::try_parse(id)?;
         let info = ServerInfo {
             id,
@@ -122,7 +120,7 @@ impl ServerDaemonRuntime {
         maybe_id: Option<&str>,
         maybe_addr: Option<&str>,
         maybe_bootstrap_addr: Option<&str>,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Result<Self> {
         let host = maybe_addr.unwrap_or(DEFAULT_HOST).to_owned();
 
         let info = if let Some(id) = maybe_id {
@@ -152,14 +150,14 @@ impl ServerDaemonRuntime {
         }
     }
 
-    pub async fn start(&mut self) -> Result<(), Box<dyn Error>> {
+    pub async fn start(&mut self) -> Result<()> {
         loop {
             let next = self.start_service().await?;
             self.set_state(next);
         }
     }
 
-    pub async fn start_service(&self) -> Result<DaemonState, Box<dyn Error>> {
+    pub async fn start_service(&self) -> Result<DaemonState> {
         let state = &self.state;
 
         match state {
@@ -256,7 +254,7 @@ impl ServerDaemonRuntime {
         self.state = state
     }
 
-    pub async fn join_cluster(&self, addr: &str) -> Result<DaemonState, Box<dyn Error>> {
+    pub async fn join_cluster(&self, addr: &str) -> Result<DaemonState> {
         println!("Joining a cluster over {}...", addr);
 
         let mut client = self.scheduler_client(addr).await?;
@@ -293,10 +291,7 @@ impl ServerDaemonRuntime {
         DaemonState::Uninitialized
     }
 
-    async fn scheduler_client(
-        &self,
-        target_addr: &str,
-    ) -> Result<SchedulerClient<Channel>, Box<dyn Error>> {
+    async fn scheduler_client(&self, target_addr: &str) -> Result<SchedulerClient<Channel>> {
         Ok(SchedulerClient::connect(target_addr.to_owned()).await?)
     }
 }
@@ -306,7 +301,7 @@ impl ServerDaemon for ServerDaemonRuntime {
     async fn get_info(
         &self,
         _request: Request<GetInfoRequest>,
-    ) -> Result<Response<GetInfoResponse>, Status> {
+    ) -> RpcResult<Response<GetInfoResponse>> {
         println!("GetInfo called!");
 
         let server = Some(self.info.clone().into());
@@ -340,7 +335,7 @@ impl ServerDaemon for ServerDaemonRuntime {
         Ok(Response::new(resposne))
     }
 
-    async fn ping(&self, _request: Request<()>) -> Result<Response<PingResponse>, Status> {
+    async fn ping(&self, _request: Request<()>) -> RpcResult<Response<PingResponse>> {
         println!("got ping!");
 
         let resposne = PingResponse { success: true };
@@ -351,13 +346,10 @@ impl ServerDaemon for ServerDaemonRuntime {
     async fn monitor(
         &self,
         _request: Request<MonitorRequest>,
-    ) -> Result<Response<MonitorResponse>, Status> {
+    ) -> RpcResult<Response<MonitorResponse>> {
         Ok(Response::new(MonitorResponse { windows: vec![] }))
     }
-    async fn spawn(
-        &self,
-        _request: Request<SpawnRequest>,
-    ) -> Result<Response<SpawnResponse>, Status> {
+    async fn spawn(&self, _request: Request<SpawnRequest>) -> RpcResult<Response<SpawnResponse>> {
         Ok(Response::new(SpawnResponse {
             success: true,
             deployment: None,
@@ -367,7 +359,7 @@ impl ServerDaemon for ServerDaemonRuntime {
     async fn destroy(
         &self,
         _request: Request<DestroyRequest>,
-    ) -> Result<Response<DestroyResponse>, Status> {
+    ) -> RpcResult<Response<DestroyResponse>> {
         Ok(Response::new(DestroyResponse { success: true }))
     }
 }

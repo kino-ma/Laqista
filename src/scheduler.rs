@@ -5,7 +5,6 @@ pub mod uninit;
 
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
-use std::error::Error;
 use std::sync::{Arc, Mutex};
 
 use tonic::transport::Channel;
@@ -18,10 +17,11 @@ use crate::proto::server_daemon_client::ServerDaemonClient;
 use crate::proto::{
     ClusterState, DeployRequest, DeployResponse, Deployment, JoinRequest, JoinResponse,
     LookupRequest, LookupResponse, NotifyRequest, NotifyResponse, ReportRequest, ReportResponse,
-    SpawnRequest, SpawnResponse,
+    Server, SpawnRequest, SpawnResponse,
 };
 use crate::utils::IdMap;
-use crate::{AppInstanceMap, AppInstancesInfo, DeploymentInfo, GroupInfo, ServerInfo};
+use crate::{AppInstanceMap, AppInstancesInfo, DeploymentInfo, GroupInfo, RpcResult, ServerInfo};
+use crate::{Error, Result};
 
 use self::interface::DeploymentScheduler;
 use self::stats::{ServerStats, StatsMap};
@@ -63,10 +63,7 @@ impl AuthoritativeScheduler {
         self.runtime.lock().unwrap().cluster.servers.push(server);
     }
 
-    pub async fn deploy_to_other(
-        &self,
-        request: DeployRequest,
-    ) -> Result<DeployResponse, Box<dyn Error>> {
+    pub async fn deploy_to_other(&self, request: DeployRequest) -> Result<DeployResponse> {
         let mut client = self.other_client().await?;
         let request = Request::new(request);
 
@@ -83,7 +80,7 @@ impl AuthoritativeScheduler {
         Ok(response.into_inner())
     }
 
-    pub async fn notify_to_other(&self) -> Result<(), Box<dyn Error>> {
+    pub async fn notify_to_other(&self) -> Result<()> {
         let mut client = self.other_client().await?;
 
         let runtime = SchedulerRuntime::clone_inner(&self.runtime);
@@ -100,10 +97,7 @@ impl AuthoritativeScheduler {
         Ok(())
     }
 
-    pub async fn deploy_in_us(
-        &self,
-        deployment: DeploymentInfo,
-    ) -> Result<SpawnResponse, Box<dyn Error>> {
+    pub async fn deploy_in_us(&self, deployment: DeploymentInfo) -> Result<SpawnResponse> {
         let request = SpawnRequest {
             deployment: Some(deployment.clone().into()),
         };
@@ -158,14 +152,11 @@ impl AuthoritativeScheduler {
         Ok(response.into_inner())
     }
 
-    pub async fn client(
-        &self,
-        server: &ServerInfo,
-    ) -> Result<ServerDaemonClient<Channel>, Box<dyn Error>> {
+    pub async fn client(&self, server: &ServerInfo) -> Result<ServerDaemonClient<Channel>> {
         Ok(ServerDaemonClient::connect(server.addr.clone()).await?)
     }
 
-    pub async fn other_client(&self) -> Result<SchedulerClient<Channel>, Box<dyn Error>> {
+    pub async fn other_client(&self) -> Result<SchedulerClient<Channel>> {
         let other_addr = self.runtime.lock().unwrap().other.get_addr().to_owned();
         println!("creating other_client ({})", other_addr);
 
@@ -179,7 +170,7 @@ impl AuthoritativeScheduler {
 
 #[tonic::async_trait]
 impl Scheduler for AuthoritativeScheduler {
-    async fn join(&self, request: Request<JoinRequest>) -> Result<Response<JoinResponse>, Status> {
+    async fn join(&self, request: Request<JoinRequest>) -> RpcResult<Response<JoinResponse>> {
         println!("join() called!!");
 
         let server = request
@@ -188,13 +179,13 @@ impl Scheduler for AuthoritativeScheduler {
             .clone()
             .expect("server cannot be None")
             .try_into()
-            .map_err(|e: uuid::Error| Status::aborted(e.to_string()))?;
+            .map_err(<Error as Into<Status>>::into)?;
 
         self.push_server(server);
 
-        self.notify_to_other().await.map_err(|e| {
-            Status::aborted(format!("failed to notify to the other scheduler: {}", e))
-        })?;
+        self.notify_to_other()
+            .await
+            .map_err(<Error as Into<Status>>::into)?;
 
         let group = Some(self.runtime.lock().unwrap().cluster.group.clone().into());
 
@@ -206,10 +197,7 @@ impl Scheduler for AuthoritativeScheduler {
         }))
     }
 
-    async fn notify(
-        &self,
-        request: Request<NotifyRequest>,
-    ) -> Result<Response<NotifyResponse>, Status> {
+    async fn notify(&self, request: Request<NotifyRequest>) -> RpcResult<Response<NotifyResponse>> {
         println!("notify() called!!");
 
         let NotifyRequest { cluster: state } = request.into_inner();
@@ -222,18 +210,14 @@ impl Scheduler for AuthoritativeScheduler {
         Ok(Response::new(NotifyResponse { success: true }))
     }
 
-    async fn report(
-        &self,
-        request: Request<ReportRequest>,
-    ) -> Result<Response<ReportResponse>, Status> {
+    async fn report(&self, request: Request<ReportRequest>) -> RpcResult<Response<ReportResponse>> {
         // println!("report() called!!");
 
         let ReportRequest { server, windows } = request.into_inner();
 
-        let server: ServerInfo = server
-            .ok_or(Status::aborted("server cannot be empty"))?
-            .try_into()
-            .map_err(|e| Status::aborted(format!("failed to parse server info: {}", e)))?;
+        let server: Server = server.ok_or(Status::aborted("server cannot be empty"))?;
+        let server = ServerInfo::try_from(server);
+        let server = server.map_err(|e| <Error as Into<Status>>::into(e))?;
 
         let stats = ServerStats::from_stats(server, windows);
 
@@ -245,10 +229,7 @@ impl Scheduler for AuthoritativeScheduler {
         Ok(Response::new(ReportResponse { success: true }))
     }
 
-    async fn deploy(
-        &self,
-        request: Request<DeployRequest>,
-    ) -> Result<Response<DeployResponse>, Status> {
+    async fn deploy(&self, request: Request<DeployRequest>) -> RpcResult<Response<DeployResponse>> {
         println!("deploy() called!!");
 
         let DeployRequest {
@@ -262,10 +243,8 @@ impl Scheduler for AuthoritativeScheduler {
 
         let mut success = true;
 
-        let resp = self
-            .deploy_in_us(deployment_info)
-            .await
-            .map_err(|e| Status::aborted(e.to_string()))?;
+        let resp = self.deploy_in_us(deployment_info).await;
+        let resp = resp.map_err(<Error as Into<Status>>::into)?;
         success &= resp.success;
         println!("got resp");
 
@@ -276,7 +255,7 @@ impl Scheduler for AuthoritativeScheduler {
                     authoritative: false,
                 })
                 .await
-                .map_err(|e| Status::aborted(e.to_string()))?;
+                .map_err(<Error as Into<Status>>::into)?;
 
             success &= resp.success;
         }
@@ -288,10 +267,7 @@ impl Scheduler for AuthoritativeScheduler {
         }))
     }
 
-    async fn lookup(
-        &self,
-        request: Request<LookupRequest>,
-    ) -> Result<Response<LookupResponse>, Status> {
+    async fn lookup(&self, request: Request<LookupRequest>) -> RpcResult<Response<LookupResponse>> {
         let runtime = self.clone_inner();
 
         let id = Uuid::parse_str(&request.get_ref().deployment_id)
@@ -410,7 +386,7 @@ impl Cluster {
             .or_insert(stats);
     }
 
-    pub fn get_instance_server_ids(&self, deployment_id: &Uuid) -> Result<Vec<Uuid>, String> {
+    pub fn get_instance_server_ids(&self, deployment_id: &Uuid) -> Result<Vec<Uuid>> {
         println!("instances = {:?}", self.instances.0);
 
         Ok(self
@@ -449,8 +425,8 @@ impl Into<ClusterState> for Cluster {
 }
 
 impl TryFrom<ClusterState> for Cluster {
-    type Error = String;
-    fn try_from(state: ClusterState) -> Result<Self, Self::Error> {
+    type Error = Error;
+    fn try_from(state: ClusterState) -> Result<Self> {
         let group = state
             .group
             .ok_or("Group cannot be empty".to_owned())?
@@ -460,14 +436,13 @@ impl TryFrom<ClusterState> for Cluster {
             .servers
             .into_iter()
             .map(ServerInfo::try_from)
-            .collect::<Result<_, _>>()
-            .map_err(|e| e.to_string())?;
+            .collect::<Result<_>>()?;
 
         let instances = state
             .instances
             .into_iter()
             .map(|i| AppInstancesInfo::try_from(i).map(|ii| (ii.deployment.id, ii)))
-            .collect::<Result<HashMap<_, _, _>, _>>()
+            .collect::<Result<HashMap<_, _, _>>>()
             .map(IdMap)?;
 
         let server_stats = IdMap::new();

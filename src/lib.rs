@@ -1,15 +1,17 @@
 #![feature(test)]
 
-use std::{error::Error, net::SocketAddr};
+use std::net::SocketAddr;
+use std::result::Result as StdResult;
 
-use mac_address::MacAddressError;
 use proto::{AppInstanceLocations, Deployment, Group, Server, ServerState};
 use server::DaemonState;
+use tonic::Status;
 use url::Url;
 use utils::{get_mac, IdMap};
 use uuid::Uuid;
 
 pub mod cmd;
+pub mod error;
 pub mod monitor;
 pub mod proxy;
 pub mod report;
@@ -20,6 +22,9 @@ mod utils;
 pub mod proto {
     tonic::include_proto!("mless");
 }
+
+pub use error::{Error, Result};
+pub type RpcResult<T> = StdResult<T, Status>;
 
 #[derive(Clone, Debug)]
 pub struct ServerInfo {
@@ -59,12 +64,12 @@ impl ServerInfo {
         Self { id, addr }
     }
 
-    fn gen_id() -> Result<Uuid, MacAddressError> {
+    fn gen_id() -> Result<Uuid> {
         let mac = get_mac()?;
         Ok(Uuid::now_v6(&mac.bytes()))
     }
 
-    pub fn as_socket(&self) -> Result<SocketAddr, Box<dyn Error>> {
+    pub fn as_socket(&self) -> Result<SocketAddr> {
         let parsed = Url::parse(&self.addr)?;
         let mut hosts = parsed.socket_addrs(|| None)?;
         return Ok(hosts.pop().ok_or("could not find any hosts".to_string())?);
@@ -99,8 +104,8 @@ impl Into<Server> for ServerInfo {
 }
 
 impl TryFrom<Server> for ServerInfo {
-    type Error = uuid::Error;
-    fn try_from(server: Server) -> Result<Self, Self::Error> {
+    type Error = Error;
+    fn try_from(server: Server) -> Result<Self> {
         let Server { id, addr } = server.clone();
         let id = Uuid::parse_str(&id)?;
 
@@ -121,13 +126,13 @@ impl Into<Group> for GroupInfo {
 }
 
 impl TryFrom<Group> for GroupInfo {
-    type Error = String;
-    fn try_from(group: Group) -> Result<Self, Self::Error> {
+    type Error = Error;
+    fn try_from(group: Group) -> Result<Self> {
         let Group { number, scheduler } = group;
 
         let scheduler_info = match scheduler {
-            Some(s) => s.try_into().map_err(|e: uuid::Error| e.to_string())?,
-            None => return Err("No scheduler".into()),
+            Some(s) => s.try_into()?,
+            None => return Err("No scheduler".to_owned())?,
         };
 
         Ok(Self {
@@ -160,10 +165,10 @@ impl DeploymentInfo {
 }
 
 impl TryFrom<Deployment> for DeploymentInfo {
-    type Error = String;
-    fn try_from(deployment: Deployment) -> Result<Self, Self::Error> {
+    type Error = Error;
+    fn try_from(deployment: Deployment) -> Result<Self> {
         let Deployment { source, id } = deployment;
-        let id = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
+        let id = Uuid::parse_str(&id)?;
         Ok(Self { source, id })
     }
 }
@@ -189,8 +194,8 @@ impl Into<AppInstanceLocations> for AppInstancesInfo {
 }
 
 impl TryFrom<AppInstanceLocations> for AppInstancesInfo {
-    type Error = String;
-    fn try_from(locations: AppInstanceLocations) -> Result<Self, Self::Error> {
+    type Error = Error;
+    fn try_from(locations: AppInstanceLocations) -> Result<Self> {
         let deployment = locations
             .deployment
             .ok_or("Deployment cannot be empty".to_string())?
@@ -200,8 +205,7 @@ impl TryFrom<AppInstanceLocations> for AppInstancesInfo {
             .locations
             .into_iter()
             .map(ServerInfo::try_from)
-            .collect::<Result<_, _>>()
-            .map_err(|e| e.to_string())?;
+            .collect::<Result<_>>()?;
 
         Ok(Self {
             deployment,
