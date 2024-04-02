@@ -1,6 +1,6 @@
-use std::{env::args, error::Error};
+use std::error::Error;
 
-use face::{DetectedFrame, VideoDetector, DEFAULT_VIDEO_FILE};
+use face::{DetectedFrame, VideoDetector};
 use opencv::{
     core, highgui, imgproc,
     videoio::{self, VideoCapture, VideoCaptureTraitConst, CAP_ANY},

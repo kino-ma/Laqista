@@ -8,4 +8,4 @@ service Detector {
 
 message DetectRequest { string video_file = 1; }
 
-message DetectReply { uint32 total_detected = 1; }
+message DetectReply { uint64 total_detected = 1; }

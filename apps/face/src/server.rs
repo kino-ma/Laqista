@@ -6,12 +6,10 @@ use tonic::{Request, Response, Status};
 
 use crate::{
     proto::{detector_server::Detector, DetectReply, DetectRequest},
-    DetectedFrame, FaceDetector, VideoDetector, DEFAULT_VIDEO_FILE,
+    DetectedFrame, VideoDetector, DEFAULT_VIDEO_FILE,
 };
 
-pub struct DetectServer {
-    detector: FaceDetector,
-}
+pub struct DetectServer {}
 
 impl DetectServer {}
 
@@ -28,12 +26,13 @@ impl Detector for DetectServer {
 
         for detected_frame in detector {
             println!("loop");
-            let DetectedFrame { faces, mut frame } = detected_frame;
+            let DetectedFrame { faces, .. } = detected_frame;
             total_detected += faces.len();
         }
 
+        let total_detected = total_detected as _;
         let resp = DetectReply { total_detected };
-        Ok(resp)
+        Ok(Response::new(resp))
     }
 }
 
