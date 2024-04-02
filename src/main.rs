@@ -1,70 +1,24 @@
-use std::env::args;
-use std::thread;
-use std::time::Duration;
+use std::error::Error;
 
-use opencv::prelude::*;
-use opencv::videoio::VideoCapture;
-use opencv::{core, highgui, imgproc, objdetect, types, videoio, Result};
+use clap::Parser;
 
-fn main() -> Result<()> {
-    let mut video = VideoCapture::from_file(&args().nth(1).unwrap(), videoio::CAP_ANY)?;
+use mless::{
+    cmd::{Cli, Commands},
+    server::ServerRunner,
+};
 
-    let window = "video capture";
-    highgui::named_window_def(window)?;
-    let xml = core::find_file_def("haarcascades/haarcascade_frontalface_alt.xml")?;
-    let opened = videoio::VideoCapture::is_opened(&video)?;
-    if !opened {
-        panic!("Unable to open default camera!");
-    }
-    let mut face = objdetect::CascadeClassifier::new(&xml)?;
-    loop {
-        let mut frame = Mat::default();
-        video.read(&mut frame)?;
-        if frame.size()?.width == 0 {
-            thread::sleep(Duration::from_secs(50));
-            continue;
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    let cli = Cli::parse();
+
+    use Commands::*;
+
+    match cli.command {
+        Server(subcmd) => {
+            let runner = ServerRunner::new(subcmd);
+            runner.run().await?;
         }
-        let mut gray = Mat::default();
-        imgproc::cvt_color_def(&frame, &mut gray, imgproc::COLOR_BGR2GRAY)?;
-        let mut reduced = Mat::default();
-        imgproc::resize(
-            &gray,
-            &mut reduced,
-            core::Size {
-                width: 0,
-                height: 0,
-            },
-            0.25f64,
-            0.25f64,
-            imgproc::INTER_LINEAR,
-        )?;
-        let mut faces = types::VectorOfRect::new();
-        face.detect_multi_scale(
-            &reduced,
-            &mut faces,
-            1.1,
-            2,
-            objdetect::CASCADE_SCALE_IMAGE,
-            core::Size {
-                width: 30,
-                height: 30,
-            },
-            core::Size {
-                width: 0,
-                height: 0,
-            },
-        )?;
-        println!("faces: {}", faces.len());
-        for face in faces {
-            println!("face {face:?}");
-            let scaled_face =
-                core::Rect::new(face.x * 4, face.y * 4, face.width * 4, face.height * 4);
-            imgproc::rectangle_def(&mut frame, scaled_face, (0, 255, 0).into())?;
-        }
-        highgui::imshow(window, &frame)?;
-        if highgui::wait_key(10)? > 0 {
-            break;
-        }
-    }
+    };
+
     Ok(())
 }

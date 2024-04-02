@@ -3,12 +3,8 @@ name = "mless"
 version = "0.1.0"
 edition = "2021"
 
-# [lib]
-# name = "mless"
-# path = "src/lib.rs"
-
-# [workspace]
-# members = ["benches"]
+[workspace]
+members = ["apps/*"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

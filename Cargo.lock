@@ -491,6 +491,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "face"
+version = "0.1.0"
+dependencies = [
+ "opencv",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
