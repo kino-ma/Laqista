@@ -33,6 +33,8 @@ serde = { version = "1.0.197", features = ["derive", "serde_derive"] }
 plist = { version = "1.6.1", features = ["serde"] }
 opencv = { version = "0.89.0", features = ["clang-runtime"] }
 
+face = { path = "./apps/face" }
+
 [build-dependencies]
 tonic-build = "0.11"
 

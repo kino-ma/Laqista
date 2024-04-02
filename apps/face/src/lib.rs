@@ -1,7 +1,7 @@
 pub mod detector;
-mod server;
+pub mod server;
 
-mod proto {
+pub mod proto {
     tonic::include_proto!("face");
 }
 

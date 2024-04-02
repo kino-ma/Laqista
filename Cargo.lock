@@ -1074,6 +1074,7 @@ dependencies = [
  "bytes",
  "clap 4.5.3",
  "criterion",
+ "face",
  "futures",
  "h2 0.3.25",
  "http-body 0.4.6",

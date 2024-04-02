@@ -8,6 +8,7 @@ use std::pin::pin;
 use futures::future;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
+use tonic::transport::server::Router;
 use tonic::transport::Channel;
 use tonic::{transport::Server as TransportServer, Request, Response, Status};
 use uuid::Uuid;
@@ -26,6 +27,8 @@ use crate::scheduler::{AuthoritativeScheduler, Cluster};
 use crate::{app, GroupInfo, ServerInfo};
 
 use self::cmd::{ServerCommand, StartCommand};
+
+use face::{proto as face_proto, server::DetectServer};
 
 const DEFAULT_HOST: &'static str = "127.0.0.1:50051";
 
@@ -195,11 +198,7 @@ impl ServerDaemonRuntime {
 
                 let reporter_token = self.start_reporter(group.scheduler_info.clone());
 
-                let grpc_router = TransportServer::builder()
-                    .add_service(ServerDaemonServer::new(self.clone()))
-                    .add_service(app::proto::greeter_server::GreeterServer::new(
-                        app::MyGreeter::default(),
-                    ));
+                let grpc_router = self.common_services();
 
                 grpc_router.serve(self.socket).await?;
 
@@ -213,12 +212,9 @@ impl ServerDaemonRuntime {
 
                 let reporter_token = self.start_reporter(self.info.clone());
 
-                let grpc_server = TransportServer::builder()
-                    .add_service(ServerDaemonServer::new(self.clone()))
-                    .add_service(SchedulerServer::new(scheduler.clone()))
-                    .add_service(app::proto::greeter_server::GreeterServer::new(
-                        app::MyGreeter::default(),
-                    ));
+                let grpc_server = self
+                    .common_services()
+                    .add_service(SchedulerServer::new(scheduler.clone()));
 
                 grpc_server.serve(self.socket).await?;
 
@@ -242,6 +238,17 @@ impl ServerDaemonRuntime {
         tokio::spawn(async move { reporter.start(cloned).await });
 
         token
+    }
+
+    fn common_services(&self) -> Router {
+        TransportServer::builder()
+            .add_service(ServerDaemonServer::new(self.clone()))
+            .add_service(app::proto::greeter_server::GreeterServer::new(
+                app::MyGreeter::default(),
+            ))
+            .add_service(face_proto::detector_server::DetectorServer::new(
+                DetectServer {},
+            ))
     }
 
     fn set_state(&mut self, state: DaemonState) {
