@@ -3,14 +3,15 @@ use std::sync::Arc;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
 use futures::lock::Mutex;
-use mless::app::proto::greeter_client::GreeterClient;
-use mless::app::proto::HelloRequest;
 use mless::proto::{DeployRequest, Deployment, LookupRequest};
 use tokio::runtime::Runtime;
 use tonic::transport::Channel;
 
 use mless::proto::scheduler_client::SchedulerClient;
 use mless::*;
+
+use hello::proto::greeter_client::GreeterClient;
+use hello::proto::HelloRequest;
 
 pub fn bench_scheduled(c: &mut Criterion) {
     let addr = "http://127.0.0.1:50051";
@@ -63,7 +64,7 @@ async fn setup_clients(
         .await
         .expect("failed to connect to the server");
 
-    let app_client = app::proto::greeter_client::GreeterClient::connect(addr.to_owned())
+    let app_client = hello::proto::greeter_client::GreeterClient::connect(addr.to_owned())
         .await
         .unwrap();
 

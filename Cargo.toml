@@ -33,6 +33,7 @@ serde = { version = "1.0.197", features = ["derive", "serde_derive"] }
 plist = { version = "1.6.1", features = ["serde"] }
 opencv = { version = "0.89.0", features = ["clang-runtime"] }
 
+hello = { path = "./apps/hello" }
 face = { path = "./apps/face" }
 
 [build-dependencies]
@@ -43,4 +44,8 @@ criterion = { version = "0.4", features = ["html_reports", "async_tokio"] }
 
 [[bench]]
 name = "greeter"
+harness = false
+
+[[bench]]
+name = "face-image"
 harness = false

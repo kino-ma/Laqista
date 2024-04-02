@@ -1,5 +1,5 @@
 pub mod proto {
-    tonic::include_proto!("app");
+    tonic::include_proto!("hello");
 }
 
 use tonic::{transport::Server, Request, Response, Status};

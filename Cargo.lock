@@ -715,6 +715,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
+name = "hello"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+ "tokio",
+ "tokio-util",
+ "tonic",
+ "tonic-build",
+]
+
+[[package]]
 name = "hermit-abi"
 version = "0.1.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1077,6 +1089,7 @@ dependencies = [
  "face",
  "futures",
  "h2 0.3.25",
+ "hello",
  "http-body 0.4.6",
  "http-body-util",
  "hyper 0.14.28",

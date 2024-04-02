@@ -24,11 +24,12 @@ use crate::report::MetricsReporter;
 use crate::scheduler::mean::MeanGpuScheduler;
 use crate::scheduler::uninit::UninitScheduler;
 use crate::scheduler::{AuthoritativeScheduler, Cluster};
-use crate::{app, GroupInfo, ServerInfo};
+use crate::{GroupInfo, ServerInfo};
 
 use self::cmd::{ServerCommand, StartCommand};
 
 use face::{proto as face_proto, server::DetectServer};
+use hello;
 
 const DEFAULT_HOST: &'static str = "127.0.0.1:50051";
 
@@ -243,8 +244,8 @@ impl ServerDaemonRuntime {
     fn common_services(&self) -> Router {
         TransportServer::builder()
             .add_service(ServerDaemonServer::new(self.clone()))
-            .add_service(app::proto::greeter_server::GreeterServer::new(
-                app::MyGreeter::default(),
+            .add_service(hello::proto::greeter_server::GreeterServer::new(
+                hello::MyGreeter::default(),
             ))
             .add_service(face_proto::detector_server::DetectorServer::new(
                 DetectServer {},

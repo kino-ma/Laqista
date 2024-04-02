@@ -17,10 +17,6 @@ pub mod scheduler;
 pub mod server;
 mod utils;
 
-// sample application
-pub mod app;
-// mod bench;
-
 pub mod proto {
     tonic::include_proto!("mless");
 }

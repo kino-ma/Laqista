@@ -1,0 +1,14 @@
+[package]
+name = "hello"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+prost = "0.12"
+prost-types = "0.12.3"
+tonic = "0.11.0"
+tokio = { version = "1.0.1", features = ["macros", "rt-multi-thread"] }
+tokio-util = "0.7.10"
+
+[build-dependencies]
+tonic-build = "0.11"
