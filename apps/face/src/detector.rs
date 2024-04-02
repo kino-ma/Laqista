@@ -4,15 +4,17 @@ use opencv::types::VectorOfRect;
 use opencv::videoio::VideoCapture;
 use opencv::{core, imgproc, objdetect, types, Result};
 
+pub const DEFAULT_IMAGE_FILE: &'static str =
+    "/Users/kino-ma/Documents/research/mless/dataset/still-people.png";
 pub const DEFAULT_VIDEO_FILE: &'static str =
     "/Users/kino-ma/Documents/research/mless/dataset/people.mp4";
 
-pub struct VideoDetector {
+pub struct Mp4Detector {
     frames: Frames,
     detector: FaceDetector,
 }
 
-impl VideoDetector {
+impl Mp4Detector {
     pub fn new(capture: VideoCapture) -> Self {
         let frames = Frames::new(capture);
         let detector = FaceDetector::new();
@@ -21,7 +23,7 @@ impl VideoDetector {
     }
 }
 
-impl Iterator for VideoDetector {
+impl Iterator for Mp4Detector {
     type Item = DetectedFrame;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -51,9 +53,9 @@ impl FaceDetector {
         Self { classifier }
     }
 
-    pub fn detect(&mut self, frame: Mat) -> Result<DetectedFrame> {
+    pub fn detect(&mut self, frame_bgr: Mat) -> Result<DetectedFrame> {
         let mut gray = Mat::default();
-        imgproc::cvt_color_def(&frame, &mut gray, imgproc::COLOR_BGR2GRAY)?;
+        imgproc::cvt_color_def(&frame_bgr, &mut gray, imgproc::COLOR_BGR2GRAY)?;
 
         let mut reduced = Mat::default();
         imgproc::resize(
@@ -86,7 +88,10 @@ impl FaceDetector {
             },
         )?;
 
-        Ok(DetectedFrame { faces, frame })
+        Ok(DetectedFrame {
+            faces,
+            frame: frame_bgr,
+        })
     }
 }
 

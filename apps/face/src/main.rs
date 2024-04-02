@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use face::{DetectedFrame, VideoDetector};
+use face::{DetectedFrame, Mp4Detector};
 use opencv::{
     core, highgui, imgproc,
     videoio::{self, VideoCapture, VideoCaptureTraitConst, CAP_ANY},
@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         panic!("Unable to open default camera!");
     }
 
-    let detector = VideoDetector::new(capture);
+    let detector = Mp4Detector::new(capture);
 
     for detected_frame in detector {
         println!("loop");
