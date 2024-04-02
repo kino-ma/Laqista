@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package face;
+
+service Detector {
+  rpc DetectFace(DetectRequest) returns (DetectReply) {}
+}
+
+message DetectRequest { string video_file = 1; }
+
+message DetectReply { uint32 total_detected = 1; }
