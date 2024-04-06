@@ -72,7 +72,9 @@ message JoinResponse {
   Group group = 2;
   bool is_scheduler = 3;
   optional Group our_group = 4;
+  optional Nomination nomination = 5;
 }
+message Nomination { ClusterState cluster = 1; }
 
 message LookupRequest {
   string deployment_id = 1;
@@ -108,6 +110,8 @@ service ServerDaemon {
   // App Instance management.
   rpc Spawn(SpawnRequest) returns (SpawnResponse);
   rpc Destroy(DestroyRequest) returns (DestroyResponse);
+
+  rpc Nominate(NominateRequest) returns (NominateResponse);
 
   // In addition, the Server Daemon proxies any requsets that is not to package
   // "mless".
@@ -160,3 +164,6 @@ enum DestroyReason {
   SCALE_IN = 1;
   REMOVED = 2;
 }
+
+message NominateRequest { Nomination nomination = 1; }
+message NominateResponse { bool success = 1; }

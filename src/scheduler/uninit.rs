@@ -57,6 +57,7 @@ impl Scheduler for UninitScheduler {
         let this_group = this_cluster.group.clone();
         let other_cluster = this_cluster.next_cluster(&other);
         let other_group = other_cluster.group.clone();
+        let nomination = Some(other_cluster.to_nomination());
 
         let scheduler = self.create_scheduler(this_cluster, other_cluster);
 
@@ -75,6 +76,7 @@ impl Scheduler for UninitScheduler {
             group: Some(other_group.into()),
             is_scheduler: true,
             our_group: Some(this_group.into()),
+            nomination,
         }))
     }
 

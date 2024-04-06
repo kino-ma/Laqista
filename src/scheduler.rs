@@ -16,8 +16,8 @@ use crate::proto::scheduler_server::Scheduler;
 use crate::proto::server_daemon_client::ServerDaemonClient;
 use crate::proto::{
     ClusterState, DeployRequest, DeployResponse, Deployment, JoinRequest, JoinResponse,
-    LookupRequest, LookupResponse, NotifyRequest, NotifyResponse, ReportRequest, ReportResponse,
-    Server, SpawnRequest, SpawnResponse,
+    LookupRequest, LookupResponse, NominateRequest, Nomination, NotifyRequest, NotifyResponse,
+    ReportRequest, ReportResponse, Server, SpawnRequest, SpawnResponse,
 };
 use crate::utils::IdMap;
 use crate::{AppInstanceMap, AppInstancesInfo, DeploymentInfo, GroupInfo, RpcResult, ServerInfo};
@@ -152,6 +152,25 @@ impl AuthoritativeScheduler {
         Ok(response.into_inner())
     }
 
+    pub async fn nominate_other_scheduler(&self) -> Result<()> {
+        let other_cluster = self.runtime.lock().unwrap().other.clone();
+        let nomination = Some(other_cluster.to_nomination());
+        let new_scheduler = &other_cluster.group.scheduler_info;
+
+        let mut client = self.client(new_scheduler).await?;
+
+        let request = NominateRequest { nomination };
+        let resp = client.nominate(Request::new(request)).await?.into_inner();
+
+        if !resp.success {
+            return Err(Error::Text(
+                "unsuccessful nomination of a new scheduler".to_owned(),
+            ));
+        }
+
+        Ok(())
+    }
+
     pub async fn client(&self, server: &ServerInfo) -> Result<ServerDaemonClient<Channel>> {
         Ok(ServerDaemonClient::connect(server.addr.clone()).await?)
     }
@@ -183,9 +202,14 @@ impl Scheduler for AuthoritativeScheduler {
 
         self.push_server(server);
 
-        self.notify_to_other()
-            .await
-            .map_err(<Error as Into<Status>>::into)?;
+        let notify_err = self.notify_to_other().await;
+
+        match notify_err {
+            Err(Error::TransportError(e)) => self.nominate_other_scheduler().await,
+            Err(e) => Err(e),
+            Ok(_) => Ok(()),
+        }
+        .map_err(<Error as Into<Status>>::into)?;
 
         let group = Some(self.runtime.lock().unwrap().cluster.group.clone().into());
 
@@ -194,6 +218,7 @@ impl Scheduler for AuthoritativeScheduler {
             group,
             is_scheduler: false,
             our_group: None,
+            nomination: None,
         }))
     }
 
@@ -363,6 +388,11 @@ impl Cluster {
         let number = self.group.number + 1;
         let other_group = GroupInfo::with_number(scheduler_info, number);
         Self::with_group(&other_group)
+    }
+
+    pub fn to_nomination(&self) -> Nomination {
+        let cluster = Some((*self).into());
+        Nomination { cluster }
     }
 
     pub fn insert_instance(&mut self, deployment: DeploymentInfo, servers: Vec<ServerInfo>) {
