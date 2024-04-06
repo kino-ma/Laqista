@@ -1,5 +1,3 @@
-pub mod cmd;
-
 use std::net::SocketAddr;
 use std::pin::pin;
 
@@ -8,12 +6,13 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tonic::transport::server::Router;
 use tonic::transport::Channel;
+use tonic::Status;
 use tonic::{transport::Server as TransportServer, Request, Response};
 use uuid::Uuid;
 
 use crate::proto::scheduler_client::SchedulerClient;
 use crate::proto::scheduler_server::SchedulerServer;
-use crate::proto::server_daemon_server::{ServerDaemon, ServerDaemonServer};
+use crate::proto::server_daemon_server::{ServerDaemon as ServerDaemonTrait, ServerDaemonServer};
 use crate::proto::{
     DestroyRequest, DestroyResponse, GetInfoRequest, GetInfoResponse, JoinRequest, MonitorRequest,
     MonitorResponse, NominateRequest, NominateResponse, PingResponse, ServerState, SpawnRequest,
@@ -25,12 +24,16 @@ use crate::scheduler::uninit::UninitScheduler;
 use crate::scheduler::{AuthoritativeScheduler, Cluster};
 use crate::{GroupInfo, Result, RpcResult, ServerInfo};
 
-use self::cmd::{ServerCommand, StartCommand};
-
 use face::{proto as face_proto, server::DetectServer};
 use hello;
 
 const DEFAULT_HOST: &'static str = "127.0.0.1:50051";
+
+#[derive(Debug)]
+pub struct ServerDaemon {
+    pub runtime: ServerDaemonRuntime,
+    pub tx: mpsc::Sender<DaemonState>,
+}
 
 #[derive(Clone, Debug)]
 pub struct ServerDaemonRuntime {
@@ -47,47 +50,6 @@ pub enum DaemonState {
     Joining(String),
     Authoritative(AuthoritativeScheduler),
     Failed,
-}
-
-pub struct ServerRunner {
-    command: ServerCommand,
-}
-
-impl ServerRunner {
-    pub fn new(command: ServerCommand) -> Self {
-        Self { command }
-    }
-
-    pub async fn run(&self) -> Result<()> {
-        use ServerCommand::*;
-
-        match &self.command {
-            Start(subcmd) => self.run_start(&self.command, &subcmd),
-        }
-        .await
-    }
-
-    pub async fn run_start(
-        &self,
-        server_command: &ServerCommand,
-        start_command: &StartCommand,
-    ) -> Result<()> {
-        let mut daemon = self.create_daemon(server_command, start_command)?;
-
-        daemon.start().await
-    }
-
-    pub fn create_daemon(
-        &self,
-        _server_command: &ServerCommand,
-        start_command: &StartCommand,
-    ) -> Result<ServerDaemonRuntime> {
-        let maybe_id = start_command.id.as_deref();
-        let maybe_addr: Option<&str> = Some(&start_command.listen_host);
-        let maybe_bootstrap_addr = start_command.bootstrap_addr.as_deref();
-
-        ServerDaemonRuntime::with_optionals(maybe_id, maybe_addr, maybe_bootstrap_addr)
-    }
 }
 
 impl ServerDaemonRuntime {
@@ -298,7 +260,7 @@ impl ServerDaemonRuntime {
 }
 
 #[tonic::async_trait]
-impl ServerDaemon for ServerDaemonRuntime {
+impl ServerDaemonTrait for ServerDaemonRuntime {
     async fn get_info(
         &self,
         _request: Request<GetInfoRequest>,
@@ -346,9 +308,10 @@ impl ServerDaemon for ServerDaemonRuntime {
 
     async fn nominate(
         &self,
-        request: Request<NominateRequest>,
+        _request: Request<NominateRequest>,
     ) -> RpcResult<Response<NominateResponse>> {
         println!("got nominate!");
+        Err(Status::unimplemented("not implemented"))
     }
 
     async fn monitor(
