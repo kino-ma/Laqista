@@ -55,11 +55,10 @@ impl ServerInfo {
     pub fn new(host: &str) -> Self {
         let id = Self::gen_id().unwrap();
 
-        Self::with_id(host, &id)
+        Self::with_id(host, id)
     }
 
-    pub fn with_id(host: &str, id: &Uuid) -> Self {
-        let id = id.clone();
+    pub fn with_id(host: &str, id: Uuid) -> Self {
         let addr = format!("http://{}", host);
         Self { id, addr }
     }
@@ -148,10 +147,10 @@ impl Into<ServerState> for DaemonState {
 
         match self {
             Self::Starting => Starting,
-            Self::Running(_) => Running,
-            Self::Uninitialized => Uninitialized,
+            Self::Running(_, _) => Running,
+            Self::Uninitialized(_) => Uninitialized,
             Self::Joining(_) => Starting,
-            Self::Authoritative(_) => Authoritative,
+            Self::Authoritative(_, _) => Authoritative,
             Self::Failed => Failed,
         }
     }

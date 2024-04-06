@@ -61,7 +61,7 @@ impl Scheduler for UninitScheduler {
 
         let scheduler = self.create_scheduler(this_cluster, other_cluster);
 
-        let state = DaemonState::Authoritative(scheduler);
+        let state = DaemonState::Authoritative(self.server.clone(), scheduler);
         self.tx
             .send(state)
             .await

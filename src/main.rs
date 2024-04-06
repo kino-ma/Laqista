@@ -14,7 +14,7 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Server(subcmd) => {
-            let runner = ServerRunner::new(subcmd);
+            let mut runner = ServerRunner::new(subcmd);
             runner.run().await?;
         }
     };
