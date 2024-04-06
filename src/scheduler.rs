@@ -205,7 +205,10 @@ impl Scheduler for AuthoritativeScheduler {
         let notify_err = self.notify_to_other().await;
 
         match notify_err {
-            Err(Error::TransportError(e)) => self.nominate_other_scheduler().await,
+            Err(Error::TransportError(e)) => {
+                println!("nominating a new scheduler due to the following error: {e:?}");
+                self.nominate_other_scheduler().await
+            }
             Err(e) => Err(e),
             Ok(_) => Ok(()),
         }
@@ -391,7 +394,7 @@ impl Cluster {
     }
 
     pub fn to_nomination(&self) -> Nomination {
-        let cluster = Some((*self).into());
+        let cluster = Some(self.clone().into());
         Nomination { cluster }
     }
 

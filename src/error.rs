@@ -13,7 +13,7 @@ pub enum Error {
     Text(String),
     Url(ParseError),
     Uuid(uuid::Error),
-    Other(Box<dyn GenericError>),
+    Other(Box<dyn GenericError + Send>),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
