@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 use std::pin::pin;
 
 use futures::future;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Mutex};
 use tokio_util::sync::CancellationToken;
 use tonic::transport::{server::Router, Channel, Server as TransportServer};
 
@@ -14,7 +14,7 @@ use crate::{
     proto::{scheduler_server::SchedulerServer, server_daemon_server::ServerDaemonServer},
     scheduler::{mean::MeanGpuScheduler, Cluster},
 };
-use crate::{GroupInfo, Result, ServerInfo};
+use crate::{Error, GroupInfo, Result, ServerInfo};
 
 use crate::server::{ServerCommand, StartCommand};
 
@@ -27,7 +27,7 @@ pub const DEFAULT_HOST: &'static str = "127.0.0.1:50051";
 pub struct ServerRunner {
     command: ServerCommand,
     socket: SocketAddr,
-    rx: mpsc::Receiver<DaemonState>,
+    rx: Mutex<mpsc::Receiver<DaemonState>>,
     tx: mpsc::Sender<DaemonState>,
 }
 
@@ -44,6 +44,7 @@ pub enum DaemonState {
 impl ServerRunner {
     pub fn new(command: ServerCommand) -> Self {
         let (tx, rx) = mpsc::channel(1);
+        let rx = Mutex::new(rx);
         let socket = DEFAULT_HOST.parse().expect("failed to parse default host");
 
         Self {
@@ -72,11 +73,22 @@ impl ServerRunner {
         let mut state = self.determine_state(server_command, start_command);
 
         loop {
-            state = self.start_service(state).await?;
+            let service_future = self.start_service(state);
+
+            let mut rx = self.rx.lock().await;
+            let rcvd_future = rx.recv();
+
+            // Terminate serving_future by selecting another future
+            state = match future::select(pin!(service_future), pin!(rcvd_future)).await {
+                future::Either::Left((state, _)) => state?,
+                future::Either::Right((state, _)) => {
+                    state.ok_or(Error::Text("received None state from sender".to_owned()))?
+                }
+            };
         }
     }
 
-    pub async fn start_service(&mut self, state: DaemonState) -> Result<DaemonState> {
+    pub async fn start_service(&self, state: DaemonState) -> Result<DaemonState> {
         let cloned_state = state.clone();
 
         match state {
@@ -111,7 +123,7 @@ impl ServerRunner {
         }
     }
 
-    async fn start_uninitialized(&mut self, server: ServerInfo) -> Result<DaemonState> {
+    async fn start_uninitialized(&self, server: ServerInfo) -> Result<DaemonState> {
         let cancel_token = CancellationToken::new();
 
         let scheduler = UninitScheduler::new(server, self.tx.clone(), cancel_token.child_token());
@@ -119,18 +131,11 @@ impl ServerRunner {
         let service = SchedulerServer::new(scheduler);
         let initializing_server = TransportServer::builder().add_service(service);
 
-        let serving_future = initializing_server.serve(self.socket);
-
-        // Terminate serving_future by selecting another future
-        let new_state = match future::select(pin!(serving_future), pin!(self.rx.recv())).await {
-            future::Either::Left(_) => unreachable!(),
-            future::Either::Right((state, _)) => state,
-        }
-        .ok_or("could not receive the scheduler")?;
+        initializing_server.serve(self.socket).await?;
 
         println!("Uninit scheduler successfully cancelled");
 
-        Ok(new_state)
+        unreachable!("state should be sent from UninitScheduler first");
     }
 
     async fn join_cluster(&self, server: ServerInfo, addr: &str) -> Result<DaemonState> {
