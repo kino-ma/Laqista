@@ -16,7 +16,8 @@ use crate::proto::scheduler_server::SchedulerServer;
 use crate::proto::server_daemon_server::{ServerDaemon, ServerDaemonServer};
 use crate::proto::{
     DestroyRequest, DestroyResponse, GetInfoRequest, GetInfoResponse, JoinRequest, MonitorRequest,
-    MonitorResponse, PingResponse, ServerState, SpawnRequest, SpawnResponse,
+    MonitorResponse, NominateRequest, NominateResponse, PingResponse, ServerState, SpawnRequest,
+    SpawnResponse,
 };
 use crate::report::MetricsReporter;
 use crate::scheduler::mean::MeanGpuScheduler;
@@ -341,6 +342,13 @@ impl ServerDaemon for ServerDaemonRuntime {
         let resposne = PingResponse { success: true };
 
         Ok(Response::new(resposne))
+    }
+
+    async fn nominate(
+        &self,
+        request: Request<NominateRequest>,
+    ) -> RpcResult<Response<NominateResponse>> {
+        println!("got nominate!");
     }
 
     async fn monitor(
