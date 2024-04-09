@@ -34,10 +34,10 @@ pub struct ServerRunner {
 #[derive(Clone, Debug)]
 pub enum DaemonState {
     Starting,
-    Running(ServerInfo, GroupInfo),
-    Uninitialized(ServerInfo),
+    Running(GroupInfo),
+    Uninitialized,
     Joining(String),
-    Authoritative(ServerInfo, AuthoritativeScheduler),
+    Authoritative(AuthoritativeScheduler),
     Failed,
 }
 
@@ -60,20 +60,18 @@ impl ServerRunner {
         let command = self.command.clone();
 
         match &command {
-            Start(subcmd) => self.run_start(&command, &subcmd),
+            Start(subcmd) => self.run_start(&subcmd),
         }
         .await
     }
 
-    pub async fn run_start(
-        &mut self,
-        server_command: &ServerCommand,
-        start_command: &StartCommand,
-    ) -> Result<()> {
-        let mut state = self.determine_state(server_command, start_command);
+    pub async fn run_start(&mut self, start_command: &StartCommand) -> Result<()> {
+        let info = self.create_info(start_command)?;
+        let mut state = self.determine_state(start_command);
 
         loop {
-            let service_future = self.start_service(state);
+            let daemon = self.create_daemon(info.clone(), state.clone());
+            let service_future = self.start_service(daemon, state);
 
             let mut rx = self.rx.lock().await;
             let rcvd_future = rx.recv();
@@ -88,12 +86,16 @@ impl ServerRunner {
         }
     }
 
-    pub async fn start_service(&self, state: DaemonState) -> Result<DaemonState> {
-        let cloned_state = state.clone();
+    pub async fn start_service(
+        &self,
+        daemon: ServerDaemon,
+        state: DaemonState,
+    ) -> Result<DaemonState> {
+        let server = daemon.runtime.info.clone();
 
         match state {
             #[allow(unused_must_use)]
-            DaemonState::Uninitialized(server) => {
+            DaemonState::Uninitialized => {
                 println!("Uninitialized. Waiting for others to join...");
                 self.start_uninitialized(server).await
             }
@@ -102,21 +104,17 @@ impl ServerRunner {
                 let server = ServerInfo::new(&self.socket.to_string());
                 self.join_cluster(server, &bootstrap_addr).await
             }
-            DaemonState::Running(server, group) => {
+            DaemonState::Running(group) => {
                 println!("Running a new server...");
                 println!("group = {:?}", group);
-                let daemon = ServerDaemon::with_state(cloned_state, self.tx.clone());
 
                 self.start_running(daemon, server, group).await
             }
-            DaemonState::Authoritative(server, scheduler) => {
+            DaemonState::Authoritative(scheduler) => {
                 println!("Running an Authoritative server...");
-                self.start_authoritative(server, scheduler).await
+                self.start_authoritative(daemon, scheduler).await
             }
-            DaemonState::Starting => {
-                let server = ServerInfo::new(&self.socket.to_string());
-                Ok(DaemonState::Uninitialized(server))
-            }
+            DaemonState::Starting => Ok(DaemonState::Uninitialized),
             DaemonState::Failed => {
                 panic!("invalid state: {:?}", state)
             }
@@ -165,17 +163,19 @@ impl ServerRunner {
 
             let scheduler =
                 AuthoritativeScheduler::new(cluster, other_cluster, Box::new(MeanGpuScheduler {}));
-            Ok(DaemonState::Authoritative(server, scheduler))
+            Ok(DaemonState::Authoritative(scheduler))
         } else {
-            Ok(DaemonState::Running(server, group))
+            Ok(DaemonState::Running(group))
         }
     }
 
     async fn start_authoritative(
         &self,
-        server: ServerInfo,
+        daemon: ServerDaemon,
         scheduler: AuthoritativeScheduler,
     ) -> Result<DaemonState> {
+        let server = daemon.runtime.info.clone();
+
         let scheduler_info = scheduler
             .runtime
             .lock()
@@ -186,9 +186,6 @@ impl ServerRunner {
             .clone();
         let reporter_token = self.start_reporter(server.clone(), scheduler_info);
 
-        let state = DaemonState::Authoritative(server.clone(), scheduler.clone());
-        let daemon = self.create_daemon(state);
-
         let grpc_server = self
             .common_services(daemon)
             .add_service(SchedulerServer::new(scheduler.clone()));
@@ -198,7 +195,7 @@ impl ServerRunner {
         println!("cancel reporter (authoritative)");
         reporter_token.cancel();
 
-        Ok(DaemonState::Authoritative(server, scheduler.clone()))
+        Ok(DaemonState::Authoritative(scheduler.clone()))
     }
 
     async fn start_running(
@@ -216,7 +213,7 @@ impl ServerRunner {
         println!("cancel reporter (running)");
         reporter_token.cancel();
 
-        Ok(DaemonState::Running(server, group.clone()))
+        Ok(DaemonState::Running(group.clone()))
     }
 
     fn start_reporter(&self, server: ServerInfo, scheduler: ServerInfo) -> CancellationToken {
@@ -240,15 +237,20 @@ impl ServerRunner {
             ))
     }
 
-    fn create_daemon(&self, state: DaemonState) -> ServerDaemon {
-        ServerDaemon::with_state(state, self.tx.clone())
+    fn create_daemon(&self, info: ServerInfo, state: DaemonState) -> ServerDaemon {
+        ServerDaemon::with_state(state, info, self.tx.clone())
     }
 
-    pub fn determine_state(
-        &self,
-        _server_command: &ServerCommand,
-        start_command: &StartCommand,
-    ) -> DaemonState {
+    fn create_info(&self, start_command: &StartCommand) -> Result<ServerInfo> {
+        let host = &start_command.listen_host;
+
+        match &start_command.id {
+            Some(id) => ServerInfo::with_id_str(&id, host),
+            None => Ok(ServerInfo::new(host)),
+        }
+    }
+
+    pub fn determine_state(&self, start_command: &StartCommand) -> DaemonState {
         let maybe_bootstrap_addr = start_command.bootstrap_addr.as_deref();
 
         match maybe_bootstrap_addr {
@@ -259,19 +261,5 @@ impl ServerRunner {
 
     async fn scheduler_client(&self, target_addr: &str) -> Result<SchedulerClient<Channel>> {
         Ok(SchedulerClient::connect(target_addr.to_owned()).await?)
-    }
-}
-
-impl DaemonState {
-    pub fn get_server(&self) -> Option<&ServerInfo> {
-        use DaemonState::*;
-
-        match self {
-            Running(server, _) => Some(server),
-            Uninitialized(server) => Some(server),
-            Joining(_) => None,
-            Authoritative(server, _) => Some(server),
-            Failed | Starting => None,
-        }
     }
 }

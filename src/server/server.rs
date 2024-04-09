@@ -21,7 +21,7 @@ pub struct ServerDaemon {
 
 #[derive(Clone, Debug)]
 pub struct ServerDaemonRuntime {
-    info: ServerInfo,
+    pub info: ServerInfo,
 }
 
 impl ServerDaemon {
@@ -32,11 +32,7 @@ impl ServerDaemon {
         Self { runtime, tx, state }
     }
 
-    pub fn with_state(state: DaemonState, tx: mpsc::Sender<DaemonState>) -> Self {
-        let info = state
-            .get_server()
-            .expect(&format!("failed to get server: invalid sate: {state:?}"))
-            .clone();
+    pub fn with_state(state: DaemonState, info: ServerInfo, tx: mpsc::Sender<DaemonState>) -> Self {
         let runtime = ServerDaemonRuntime { info };
 
         Self { runtime, tx, state }
@@ -56,9 +52,9 @@ impl ServerDaemonTrait for ServerDaemon {
 
         use DaemonState::*;
         let group = match &state {
-            Starting | Uninitialized(_) | Failed | Joining(_) => None,
-            Running(_, group) => Some(group.clone().into()),
-            Authoritative(_, scheduler) => Some(
+            Starting | Uninitialized | Failed | Joining(_) => None,
+            Running(group) => Some(group.clone().into()),
+            Authoritative(scheduler) => Some(
                 scheduler
                     .runtime
                     .lock()

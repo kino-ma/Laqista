@@ -63,6 +63,11 @@ impl ServerInfo {
         Self { id, addr }
     }
 
+    pub fn with_id_str(id: &str, host: &str) -> Result<Self> {
+        let id = Uuid::try_parse(&id)?;
+        Ok(Self::with_id(host, id))
+    }
+
     fn gen_id() -> Result<Uuid> {
         let mac = get_mac()?;
         Ok(Uuid::now_v6(&mac.bytes()))
@@ -147,10 +152,10 @@ impl Into<ServerState> for DaemonState {
 
         match self {
             Self::Starting => Starting,
-            Self::Running(_, _) => Running,
-            Self::Uninitialized(_) => Uninitialized,
+            Self::Running(_) => Running,
+            Self::Uninitialized => Uninitialized,
             Self::Joining(_) => Starting,
-            Self::Authoritative(_, _) => Authoritative,
+            Self::Authoritative(_) => Authoritative,
             Self::Failed => Failed,
         }
     }
