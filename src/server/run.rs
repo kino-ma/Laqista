@@ -26,6 +26,8 @@ pub const DEFAULT_HOST: &'static str = "127.0.0.1:50051";
 
 pub struct ServerRunner {
     command: ServerCommand,
+    // FIXME: socket is not known at instantiation of this struct.
+    // Instead, it will be known when it is the "start" command.
     socket: SocketAddr,
     rx: Mutex<mpsc::Receiver<DaemonState>>,
     tx: mpsc::Sender<DaemonState>,
@@ -67,6 +69,8 @@ impl ServerRunner {
 
     pub async fn run_start(&mut self, start_command: &StartCommand) -> Result<()> {
         let info = self.create_info(start_command)?;
+        self.socket = info.as_socket()?;
+
         let mut state = self.determine_state(start_command);
 
         loop {
