@@ -282,10 +282,20 @@ impl Scheduler for AuthoritativeScheduler {
                     source,
                     authoritative: false,
                 })
-                .await
-                .map_err(<Error as Into<Status>>::into)?;
+                .await;
 
-            success &= resp.success;
+            match resp {
+                Err(Error::TransportError(e)) => {
+                    println!("nominating a new scheduler due to the following error: {e:?}");
+                    self.nominate_other_scheduler().await
+                }
+                Err(e) => Err(e),
+                Ok(r) => {
+                    success &= r.success;
+                    Ok(())
+                }
+            }
+            .map_err(<Error as Into<Status>>::into)?;
         }
         println!("notified");
 
