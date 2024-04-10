@@ -16,7 +16,7 @@ use crate::proto::scheduler_client::SchedulerClient;
 use crate::proto::scheduler_server::Scheduler;
 use crate::proto::server_daemon_client::ServerDaemonClient;
 use crate::proto::{
-    ClusterState, DeployRequest, DeployResponse, Deployment, JoinRequest, JoinResponse,
+    ClusterState, DeployRequest, DeployResponse, Deployment, Group, JoinRequest, JoinResponse,
     LookupRequest, LookupResponse, NominateRequest, Nomination, NotifyRequest, NotifyResponse,
     ReportRequest, ReportResponse, Server, SpawnRequest, SpawnResponse,
 };
@@ -185,11 +185,11 @@ impl AuthoritativeScheduler {
         &self,
         result: Result<T>,
         server: &Server,
-    ) -> RpcResult<()> {
+    ) -> RpcResult<Option<DaemonState>> {
         let e = match result {
             Err(Error::TransportError(e)) => e,
             Err(e) => return Err(e.into()),
-            _ => return Ok(()),
+            _ => return Ok(None),
         };
 
         println!("nominating a new scheduler due to the following error: {e:?}");
@@ -220,17 +220,14 @@ impl AuthoritativeScheduler {
         };
 
         match (should_nominate, should_uninitialize) {
-            (_, true) => {
-                return self
-                    .become_uninitialized()
+            (_, true) => Ok(Some(DaemonState::Uninitialized)),
+            (true, false) => {
+                self.nominate_other_scheduler()
                     .await
-                    .map_err(<Error as Into<Status>>::into);
+                    .map_err(<Error as Into<Status>>::into)?;
+                Ok(None)
             }
-            (true, false) => self
-                .nominate_other_scheduler()
-                .await
-                .map_err(<Error as Into<Status>>::into),
-            (false, false) => Ok(()),
+            (false, false) => Ok(None),
         }
     }
 
@@ -277,8 +274,38 @@ impl Scheduler for AuthoritativeScheduler {
         self.push_server(server).await;
 
         let resp = self.notify_to_other().await;
-        let err = self.handle_failed_server(resp, &proto_server).await;
-        err?;
+        let maybe_state = self.handle_failed_server(resp, &proto_server).await?;
+
+        let runtime = self.runtime.lock().await.clone();
+
+        match maybe_state {
+            Some(DaemonState::Uninitialized) => {
+                let our_group = Some(runtime.cluster.group.clone().into());
+                let their_group = Some(Group {
+                    number: runtime.other.group.number,
+                    scheduler: Some(proto_server.clone()),
+                });
+                let cluster = Some(runtime.other.into());
+
+                return Ok(Response::new(JoinResponse {
+                    success: true,
+                    group: their_group,
+                    is_scheduler: true,
+                    our_group,
+                    nomination: Some(Nomination { cluster }),
+                }));
+            }
+            Some(state) => self
+                .tx
+                .lock()
+                .await
+                .send(state)
+                .await
+                .map_err(<Error as From<mpsc::error::SendError<DaemonState>>>::from)
+                .map_err(<Error as Into<Status>>::into)?,
+
+            None => (),
+        }
 
         let group = Some(self.runtime.lock().await.cluster.group.clone().into());
 
