@@ -200,21 +200,24 @@ impl AuthoritativeScheduler {
         let (should_nominate, should_uninitialize) = {
             let mut runtime = self.runtime.lock().await;
 
-            runtime
-                .cluster
-                .remove_server(&id)
-                .ok_or(<Error as Into<Status>>::into(Error::Text(
-                    "could not find the server to remove".to_owned(),
-                )))?;
+            let maybe_removed = runtime.cluster.remove_server(&id);
+            if maybe_removed.is_none() {
+                println!("WARN: failed to remove the server from list: {server:?}");
+            }
 
-            let other_removed = runtime.other.remove_server(&id).ok_or(<Error as Into<
-                Status,
-            >>::into(
-                Error::Text("could not find the server to remove".to_owned()),
-            ))?;
+            let maybe_other_removed = runtime.other.remove_server(&id);
+            if maybe_other_removed.is_none() {}
+
+            let was_other_scheduler = match maybe_other_removed {
+                Some(s) => runtime.other.group.scheduler_info.id == s.id,
+                None => {
+                    println!("WARN: failed to remove the server from list: {server:?}");
+                    false
+                }
+            };
 
             (
-                runtime.other.group.scheduler_info.id == other_removed.id,
+                was_other_scheduler,
                 runtime.cluster.servers.len() + runtime.other.servers.len() <= 1,
             )
         };
