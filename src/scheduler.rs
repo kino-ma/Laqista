@@ -206,12 +206,11 @@ impl AuthoritativeScheduler {
             }
 
             let maybe_other_removed = runtime.other.remove_server(&id);
-            if maybe_other_removed.is_none() {}
 
             let was_other_scheduler = match maybe_other_removed {
                 Some(s) => runtime.other.group.scheduler_info.id == s.id,
                 None => {
-                    println!("WARN: failed to remove the server from list: {server:?}");
+                    println!("WARN: failed to remove the server from other list: {server:?}");
                     false
                 }
             };
@@ -274,10 +273,13 @@ impl Scheduler for AuthoritativeScheduler {
             .try_into()
             .map_err(<Error as Into<Status>>::into)?;
 
-        self.push_server(server).await;
-
         let resp = self.notify_to_other().await;
-        let maybe_state = self.handle_failed_server(resp, &proto_server).await?;
+        let other_scheduler = self.runtime.lock().await.other.group.scheduler_info.clone();
+        let maybe_state = self
+            .handle_failed_server(resp, &other_scheduler.into())
+            .await?;
+
+        self.push_server(server).await;
 
         let runtime = self.runtime.lock().await.clone();
 
@@ -298,27 +300,29 @@ impl Scheduler for AuthoritativeScheduler {
                     nomination: Some(Nomination { cluster }),
                 }));
             }
-            Some(state) => self
-                .tx
-                .lock()
-                .await
-                .send(state)
-                .await
-                .map_err(<Error as From<mpsc::error::SendError<DaemonState>>>::from)
-                .map_err(<Error as Into<Status>>::into)?,
 
-            None => (),
+            s => {
+                if let Some(state) = s {
+                    self.tx
+                        .lock()
+                        .await
+                        .send(state)
+                        .await
+                        .map_err(<Error as From<mpsc::error::SendError<DaemonState>>>::from)
+                        .map_err(<Error as Into<Status>>::into)?;
+                }
+
+                let group = Some(self.runtime.lock().await.cluster.group.clone().into());
+
+                Ok(Response::new(JoinResponse {
+                    success: true,
+                    group,
+                    is_scheduler: false,
+                    our_group: None,
+                    nomination: None,
+                }))
+            }
         }
-
-        let group = Some(self.runtime.lock().await.cluster.group.clone().into());
-
-        Ok(Response::new(JoinResponse {
-            success: true,
-            group,
-            is_scheduler: false,
-            our_group: None,
-            nomination: None,
-        }))
     }
 
     async fn notify(&self, request: Request<NotifyRequest>) -> RpcResult<Response<NotifyResponse>> {
