@@ -197,35 +197,40 @@ impl AuthoritativeScheduler {
         let id =
             Uuid::try_parse(&server.id).map_err(|e| <Error as Into<Status>>::into(e.into()))?;
 
-        let (should_nominate, should_uninitialize) =
-            {
-                let mut runtime = self.runtime.lock().await;
+        let (should_nominate, should_uninitialize) = {
+            let mut runtime = self.runtime.lock().await;
 
-                let removed = runtime.cluster.remove_server(&id).ok_or(<Error as Into<
-                    Status,
-                >>::into(
-                    Error::Text("could not find the server to remove".to_owned()),
-                ))?;
+            runtime
+                .cluster
+                .remove_server(&id)
+                .ok_or(<Error as Into<Status>>::into(Error::Text(
+                    "could not find the server to remove".to_owned(),
+                )))?;
 
-                (
-                    runtime.cluster.group.scheduler_info.id == removed.id,
-                    runtime.cluster.servers.len() <= 1,
-                )
-            };
+            let other_removed = runtime.other.remove_server(&id).ok_or(<Error as Into<
+                Status,
+            >>::into(
+                Error::Text("could not find the server to remove".to_owned()),
+            ))?;
 
-        if should_uninitialize {
-            return self
-                .become_uninitialized()
+            (
+                runtime.other.group.scheduler_info.id == other_removed.id,
+                runtime.cluster.servers.len() + runtime.other.servers.len() <= 1,
+            )
+        };
+
+        match (should_nominate, should_uninitialize) {
+            (_, true) => {
+                return self
+                    .become_uninitialized()
+                    .await
+                    .map_err(<Error as Into<Status>>::into);
+            }
+            (true, false) => self
+                .nominate_other_scheduler()
                 .await
-                .map_err(<Error as Into<Status>>::into);
-        }
-
-        if should_nominate {
-            self.nominate_other_scheduler()
-                .await
-                .map_err(<Error as Into<Status>>::into)
-        } else {
-            Ok(())
+                .map_err(<Error as Into<Status>>::into),
+            (false, false) => Ok(()),
         }
     }
 
