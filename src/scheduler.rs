@@ -171,6 +171,44 @@ impl AuthoritativeScheduler {
         Ok(())
     }
 
+    pub async fn handle_failed_server<T>(
+        &self,
+        result: Result<T>,
+        server: &Server,
+    ) -> RpcResult<()> {
+        let e = match result {
+            Err(Error::TransportError(e)) => e,
+            Err(e) => return Err(e.into()),
+            _ => return Ok(()),
+        };
+
+        println!("nominating a new scheduler due to the following error: {e:?}");
+
+        let id =
+            Uuid::try_parse(&server.id).map_err(|e| <Error as Into<Status>>::into(e.into()))?;
+
+        let should_nominate =
+            {
+                let mut runtime = self.runtime.lock().unwrap();
+
+                let removed = runtime.cluster.remove_server(&id).ok_or(<Error as Into<
+                    Status,
+                >>::into(
+                    Error::Text("could not find the server to remove".to_owned()),
+                ))?;
+
+                runtime.cluster.group.scheduler_info.id == removed.id
+            };
+
+        if should_nominate {
+            self.nominate_other_scheduler()
+                .await
+                .map_err(<Error as Into<Status>>::into)
+        } else {
+            Ok(())
+        }
+    }
+
     pub async fn client(&self, server: &ServerInfo) -> Result<ServerDaemonClient<Channel>> {
         Ok(ServerDaemonClient::connect(server.addr.clone()).await?)
     }
@@ -192,27 +230,21 @@ impl Scheduler for AuthoritativeScheduler {
     async fn join(&self, request: Request<JoinRequest>) -> RpcResult<Response<JoinResponse>> {
         println!("join() called!!");
 
-        let server = request
+        let proto_server = request
             .get_ref()
             .server
             .clone()
-            .expect("server cannot be None")
+            .expect("server cannot be None");
+
+        let server: ServerInfo = proto_server
+            .clone()
             .try_into()
             .map_err(<Error as Into<Status>>::into)?;
 
         self.push_server(server);
 
-        let notify_err = self.notify_to_other().await;
-
-        match notify_err {
-            Err(Error::TransportError(e)) => {
-                println!("nominating a new scheduler due to the following error: {e:?}");
-                self.nominate_other_scheduler().await
-            }
-            Err(e) => Err(e),
-            Ok(_) => Ok(()),
-        }
-        .map_err(<Error as Into<Status>>::into)?;
+        let resp = self.notify_to_other().await;
+        self.handle_failed_server(resp, &proto_server).await?;
 
         let group = Some(self.runtime.lock().unwrap().cluster.group.clone().into());
 
@@ -284,18 +316,11 @@ impl Scheduler for AuthoritativeScheduler {
                 })
                 .await;
 
-            match resp {
-                Err(Error::TransportError(e)) => {
-                    println!("nominating a new scheduler due to the following error: {e:?}");
-                    self.nominate_other_scheduler().await
-                }
-                Err(e) => Err(e),
-                Ok(r) => {
-                    success &= r.success;
-                    Ok(())
-                }
-            }
-            .map_err(<Error as Into<Status>>::into)?;
+            let runtime = self.clone_inner();
+            let other_scheduler = runtime.other.group.scheduler_info;
+
+            self.handle_failed_server(resp, &other_scheduler.into())
+                .await?;
         }
         println!("notified");
 
@@ -427,6 +452,11 @@ impl Cluster {
             .entry(id)
             .and_modify(|s| s.append(stats.stats.clone()))
             .or_insert(stats);
+    }
+
+    pub fn remove_server(&mut self, id: &Uuid) -> Option<ServerInfo> {
+        let index = self.servers.iter().position(|s| &s.id == id)?;
+        Some(self.servers.remove(index))
     }
 
     pub fn get_instance_server_ids(&self, deployment_id: &Uuid) -> Result<Vec<Uuid>> {
