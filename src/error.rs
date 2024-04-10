@@ -1,6 +1,7 @@
 use std::{convert::Infallible, error::Error as GenericError, io};
 
 use mac_address::MacAddressError;
+use tokio::sync::mpsc;
 use tonic::{transport::Error as TransportError, Status};
 
 #[derive(Debug)]
@@ -9,6 +10,7 @@ pub enum Error {
     Mac(MacAddressError),
     NoneError,
     RequestError(Status),
+    SendStateError(mpsc::error::SendError<DaemonState>),
     TransportError(TransportError),
     Text(String),
     Url(ParseError),
@@ -20,6 +22,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 use url::ParseError;
 use Error::*;
+
+use crate::server::DaemonState;
 
 impl Into<Status> for Error {
     fn into(self) -> Status {
@@ -34,6 +38,7 @@ impl Into<String> for Error {
             Mac(err) => format!("error parsing a mac address: {err}"),
             NoneError => "an empty value occured somewhere".to_owned(),
             RequestError(err) => format!("request to another node failed: {err}"),
+            SendStateError(err) => format!("failed to send state via tx: {err}"),
             TransportError(err) => format!("tonic transport error: {err}"),
             Text(err) => err,
             Url(err) => format!("error parsing an url: {err}"),
@@ -70,6 +75,12 @@ impl From<String> for Error {
 impl From<ParseError> for Error {
     fn from(err: ParseError) -> Self {
         Url(err)
+    }
+}
+
+impl From<mpsc::error::SendError<DaemonState>> for Error {
+    fn from(err: mpsc::error::SendError<DaemonState>) -> Self {
+        SendStateError(err)
     }
 }
 

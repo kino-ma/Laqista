@@ -37,7 +37,7 @@ impl UninitScheduler {
 
     pub fn create_scheduler(&self, this: Cluster, other: Cluster) -> AuthoritativeScheduler {
         let scheduler = Box::new(MeanGpuScheduler {});
-        AuthoritativeScheduler::new(this, other, scheduler)
+        AuthoritativeScheduler::new(this, other, scheduler, self.tx.clone())
     }
 }
 

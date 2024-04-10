@@ -54,16 +54,9 @@ impl ServerDaemonTrait for ServerDaemon {
         let group = match &state {
             Starting | Uninitialized | Failed | Joining(_) => None,
             Running(group) => Some(group.clone().into()),
-            Authoritative(scheduler) => Some(
-                scheduler
-                    .runtime
-                    .lock()
-                    .unwrap()
-                    .cluster
-                    .group
-                    .clone()
-                    .into(),
-            ),
+            Authoritative(scheduler) => {
+                Some(scheduler.runtime.lock().await.cluster.group.clone().into())
+            }
         };
 
         let state: ServerState = state.clone().into();

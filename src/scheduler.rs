@@ -5,8 +5,9 @@ pub mod uninit;
 
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
+use tokio::sync::{mpsc, Mutex};
 use tonic::transport::Channel;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -19,6 +20,7 @@ use crate::proto::{
     LookupRequest, LookupResponse, NominateRequest, Nomination, NotifyRequest, NotifyResponse,
     ReportRequest, ReportResponse, Server, SpawnRequest, SpawnResponse,
 };
+use crate::server::DaemonState;
 use crate::utils::IdMap;
 use crate::{AppInstanceMap, AppInstancesInfo, DeploymentInfo, GroupInfo, RpcResult, ServerInfo};
 use crate::{Error, Result};
@@ -29,6 +31,7 @@ use self::stats::{ServerStats, StatsMap};
 #[derive(Debug)]
 pub struct AuthoritativeScheduler {
     pub runtime: Arc<Mutex<SchedulerRuntime>>,
+    pub tx: Arc<Mutex<mpsc::Sender<DaemonState>>>,
 }
 
 #[derive(Clone, Debug)]
@@ -48,7 +51,12 @@ pub struct Cluster {
 }
 
 impl AuthoritativeScheduler {
-    pub fn new(cluster: Cluster, other: Cluster, scheduler: Box<dyn DeploymentScheduler>) -> Self {
+    pub fn new(
+        cluster: Cluster,
+        other: Cluster,
+        scheduler: Box<dyn DeploymentScheduler>,
+        tx: mpsc::Sender<DaemonState>,
+    ) -> Self {
         let runtime = Arc::new(Mutex::new(SchedulerRuntime {
             cluster,
             other,
@@ -56,11 +64,13 @@ impl AuthoritativeScheduler {
             deployments: IdMap::new(),
         }));
 
-        Self { runtime }
+        let tx = Arc::new(Mutex::new(tx));
+
+        Self { runtime, tx }
     }
 
-    pub fn push_server(&self, server: ServerInfo) {
-        self.runtime.lock().unwrap().cluster.servers.push(server);
+    pub async fn push_server(&self, server: ServerInfo) {
+        self.runtime.lock().await.cluster.servers.push(server);
     }
 
     pub async fn deploy_to_other(&self, request: DeployRequest) -> Result<DeployResponse> {
@@ -83,7 +93,7 @@ impl AuthoritativeScheduler {
     pub async fn notify_to_other(&self) -> Result<()> {
         let mut client = self.other_client().await?;
 
-        let runtime = SchedulerRuntime::clone_inner(&self.runtime);
+        let runtime = SchedulerRuntime::clone_inner(&self.runtime).await;
         let cluster = Some(runtime.cluster.try_into()?);
         let request = Request::new(NotifyRequest { cluster });
 
@@ -104,7 +114,7 @@ impl AuthoritativeScheduler {
 
         let target_server = {
             println!("taking lock of runtime to get scheduler and stats");
-            let runtime = self.runtime.lock().unwrap();
+            let runtime = self.runtime.lock().await;
             println!("took lock");
 
             runtime
@@ -131,7 +141,7 @@ impl AuthoritativeScheduler {
         // Update deployments information and instances information atomicly
         {
             println!("taking lock of runtime");
-            let mut runtime = self.runtime.lock().unwrap();
+            let mut runtime = self.runtime.lock().await;
             runtime
                 .deployments
                 .0
@@ -153,7 +163,7 @@ impl AuthoritativeScheduler {
     }
 
     pub async fn nominate_other_scheduler(&self) -> Result<()> {
-        let other_cluster = self.runtime.lock().unwrap().other.clone();
+        let other_cluster = self.runtime.lock().await.other.clone();
         let nomination = Some(other_cluster.to_nomination());
         let new_scheduler = &other_cluster.group.scheduler_info;
 
@@ -187,9 +197,9 @@ impl AuthoritativeScheduler {
         let id =
             Uuid::try_parse(&server.id).map_err(|e| <Error as Into<Status>>::into(e.into()))?;
 
-        let should_nominate =
+        let (should_nominate, should_uninitialize) =
             {
-                let mut runtime = self.runtime.lock().unwrap();
+                let mut runtime = self.runtime.lock().await;
 
                 let removed = runtime.cluster.remove_server(&id).ok_or(<Error as Into<
                     Status,
@@ -197,8 +207,18 @@ impl AuthoritativeScheduler {
                     Error::Text("could not find the server to remove".to_owned()),
                 ))?;
 
-                runtime.cluster.group.scheduler_info.id == removed.id
+                (
+                    runtime.cluster.group.scheduler_info.id == removed.id,
+                    runtime.cluster.servers.len() <= 1,
+                )
             };
+
+        if should_uninitialize {
+            return self
+                .become_uninitialized()
+                .await
+                .map_err(<Error as Into<Status>>::into);
+        }
 
         if should_nominate {
             self.nominate_other_scheduler()
@@ -209,19 +229,27 @@ impl AuthoritativeScheduler {
         }
     }
 
+    pub async fn become_uninitialized(&self) -> Result<()> {
+        let tx = self.tx.lock().await;
+
+        let state = DaemonState::Uninitialized;
+
+        tx.send(state).await.map_err(|e| e.into())
+    }
+
     pub async fn client(&self, server: &ServerInfo) -> Result<ServerDaemonClient<Channel>> {
         Ok(ServerDaemonClient::connect(server.addr.clone()).await?)
     }
 
     pub async fn other_client(&self) -> Result<SchedulerClient<Channel>> {
-        let other_addr = self.runtime.lock().unwrap().other.get_addr().to_owned();
+        let other_addr = self.runtime.lock().await.other.get_addr().to_owned();
         println!("creating other_client ({})", other_addr);
 
         return Ok(SchedulerClient::connect(other_addr).await?);
     }
 
-    pub fn clone_inner(&self) -> SchedulerRuntime {
-        SchedulerRuntime::clone_inner(&self.runtime)
+    pub async fn clone_inner(&self) -> SchedulerRuntime {
+        SchedulerRuntime::clone_inner(&self.runtime).await
     }
 }
 
@@ -241,12 +269,13 @@ impl Scheduler for AuthoritativeScheduler {
             .try_into()
             .map_err(<Error as Into<Status>>::into)?;
 
-        self.push_server(server);
+        self.push_server(server).await;
 
         let resp = self.notify_to_other().await;
-        self.handle_failed_server(resp, &proto_server).await?;
+        let err = self.handle_failed_server(resp, &proto_server).await;
+        err?;
 
-        let group = Some(self.runtime.lock().unwrap().cluster.group.clone().into());
+        let group = Some(self.runtime.lock().await.cluster.group.clone().into());
 
         Ok(Response::new(JoinResponse {
             success: true,
@@ -263,7 +292,7 @@ impl Scheduler for AuthoritativeScheduler {
         let NotifyRequest { cluster: state } = request.into_inner();
         let state = state.expect("State cannot be None");
 
-        let mut lock = self.runtime.lock().unwrap();
+        let mut lock = self.runtime.lock().await;
         let runtime = lock.borrow_mut();
         runtime.other = state.try_into().map_err(Status::aborted)?;
 
@@ -281,7 +310,7 @@ impl Scheduler for AuthoritativeScheduler {
 
         let stats = ServerStats::from_stats(server, windows);
 
-        let mut lock = self.runtime.lock().unwrap();
+        let mut lock = self.runtime.lock().await;
         let runtime = lock.borrow_mut();
 
         runtime.cluster.insert_stats(stats);
@@ -316,7 +345,7 @@ impl Scheduler for AuthoritativeScheduler {
                 })
                 .await;
 
-            let runtime = self.clone_inner();
+            let runtime = self.clone_inner().await;
             let other_scheduler = runtime.other.group.scheduler_info;
 
             self.handle_failed_server(resp, &other_scheduler.into())
@@ -331,7 +360,7 @@ impl Scheduler for AuthoritativeScheduler {
     }
 
     async fn lookup(&self, request: Request<LookupRequest>) -> RpcResult<Response<LookupResponse>> {
-        let runtime = self.clone_inner();
+        let runtime = self.clone_inner().await;
 
         let id = Uuid::parse_str(&request.get_ref().deployment_id)
             .map_err(|e| Status::aborted(e.to_string()))?;
@@ -359,9 +388,12 @@ impl Scheduler for AuthoritativeScheduler {
 
 impl Clone for AuthoritativeScheduler {
     fn clone(&self) -> Self {
-        let runtime = SchedulerRuntime::clone_inner(&self.runtime);
+        let runtime = self.runtime.clone();
+        let tx = self.tx.clone();
+
         Self {
-            runtime: Arc::new(Mutex::new(runtime)),
+            runtime: runtime,
+            tx,
         }
     }
 }
@@ -387,9 +419,9 @@ impl SchedulerRuntime {
         Arc::new(Mutex::new(self))
     }
 
-    pub fn clone_inner(arc: &Arc<Mutex<Self>>) -> Self {
+    pub async fn clone_inner(arc: &Arc<Mutex<Self>>) -> Self {
         println!("WARN: cloning SchedulerRuntime");
-        arc.lock().unwrap().clone()
+        arc.lock().await.clone()
     }
 }
 

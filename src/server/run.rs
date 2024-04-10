@@ -165,8 +165,12 @@ impl ServerRunner {
             let cluster = Cluster::with_group(&group);
             let other_cluster = Cluster::with_group(&other.try_into()?);
 
-            let scheduler =
-                AuthoritativeScheduler::new(cluster, other_cluster, Box::new(MeanGpuScheduler {}));
+            let scheduler = AuthoritativeScheduler::new(
+                cluster,
+                other_cluster,
+                Box::new(MeanGpuScheduler {}),
+                self.tx.clone(),
+            );
             Ok(DaemonState::Authoritative(scheduler))
         } else {
             Ok(DaemonState::Running(group))
@@ -183,7 +187,7 @@ impl ServerRunner {
         let scheduler_info = scheduler
             .runtime
             .lock()
-            .unwrap()
+            .await
             .cluster
             .group
             .scheduler_info
