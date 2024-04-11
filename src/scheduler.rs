@@ -5,23 +5,25 @@ pub mod uninit;
 
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
-use std::error::Error;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
+use tokio::sync::{mpsc, Mutex};
 use tonic::transport::Channel;
-use tonic::{Code, Request, Response, Status};
+use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
 use crate::proto::scheduler_client::SchedulerClient;
 use crate::proto::scheduler_server::Scheduler;
 use crate::proto::server_daemon_client::ServerDaemonClient;
 use crate::proto::{
-    ClusterState, DeployRequest, DeployResponse, Deployment, JoinRequest, JoinResponse,
-    LookupRequest, LookupResponse, NotifyRequest, NotifyResponse, ReportRequest, ReportResponse,
-    SpawnRequest, SpawnResponse,
+    ClusterState, DeployRequest, DeployResponse, Deployment, Group, JoinRequest, JoinResponse,
+    LookupRequest, LookupResponse, NominateRequest, Nomination, NotifyRequest, NotifyResponse,
+    ReportRequest, ReportResponse, Server, SpawnRequest, SpawnResponse,
 };
+use crate::server::DaemonState;
 use crate::utils::IdMap;
-use crate::{AppInstanceMap, AppInstancesInfo, DeploymentInfo, GroupInfo, ServerInfo};
+use crate::{AppInstanceMap, AppInstancesInfo, DeploymentInfo, GroupInfo, RpcResult, ServerInfo};
+use crate::{Error, Result};
 
 use self::interface::DeploymentScheduler;
 use self::stats::{ServerStats, StatsMap};
@@ -29,6 +31,7 @@ use self::stats::{ServerStats, StatsMap};
 #[derive(Debug)]
 pub struct AuthoritativeScheduler {
     pub runtime: Arc<Mutex<SchedulerRuntime>>,
+    pub tx: Arc<Mutex<mpsc::Sender<DaemonState>>>,
 }
 
 #[derive(Clone, Debug)]
@@ -48,7 +51,12 @@ pub struct Cluster {
 }
 
 impl AuthoritativeScheduler {
-    pub fn new(cluster: Cluster, other: Cluster, scheduler: Box<dyn DeploymentScheduler>) -> Self {
+    pub fn new(
+        cluster: Cluster,
+        other: Cluster,
+        scheduler: Box<dyn DeploymentScheduler>,
+        tx: mpsc::Sender<DaemonState>,
+    ) -> Self {
         let runtime = Arc::new(Mutex::new(SchedulerRuntime {
             cluster,
             other,
@@ -56,17 +64,16 @@ impl AuthoritativeScheduler {
             deployments: IdMap::new(),
         }));
 
-        Self { runtime }
+        let tx = Arc::new(Mutex::new(tx));
+
+        Self { runtime, tx }
     }
 
-    pub fn push_server(&self, server: ServerInfo) {
-        self.runtime.lock().unwrap().cluster.servers.push(server);
+    pub async fn push_server(&self, server: ServerInfo) {
+        self.runtime.lock().await.cluster.servers.push(server);
     }
 
-    pub async fn deploy_to_other(
-        &self,
-        request: DeployRequest,
-    ) -> Result<DeployResponse, Box<dyn Error>> {
+    pub async fn deploy_to_other(&self, request: DeployRequest) -> Result<DeployResponse> {
         let mut client = self.other_client().await?;
         let request = Request::new(request);
 
@@ -83,10 +90,10 @@ impl AuthoritativeScheduler {
         Ok(response.into_inner())
     }
 
-    pub async fn notify_to_other(&self) -> Result<(), Box<dyn Error>> {
+    pub async fn notify_to_other(&self) -> Result<()> {
         let mut client = self.other_client().await?;
 
-        let runtime = SchedulerRuntime::clone_inner(&self.runtime);
+        let runtime = SchedulerRuntime::clone_inner(&self.runtime).await;
         let cluster = Some(runtime.cluster.try_into()?);
         let request = Request::new(NotifyRequest { cluster });
 
@@ -100,15 +107,25 @@ impl AuthoritativeScheduler {
         Ok(())
     }
 
-    pub async fn deploy_in_us(
-        &self,
-        request: SpawnRequest,
-    ) -> Result<SpawnResponse, Box<dyn Error>> {
-        let runtime = self.clone_inner();
-        let target_server = runtime
-            .scheduler
-            .schedule(&runtime.cluster.server_stats)
-            .ok_or(Status::new(Code::Aborted, "failed to schedule new job"))?;
+    pub async fn deploy_in_us(&self, deployment: DeploymentInfo) -> Result<SpawnResponse> {
+        let request = SpawnRequest {
+            deployment: Some(deployment.clone().into()),
+        };
+
+        let target_server = {
+            println!("taking lock of runtime to get scheduler and stats");
+            let runtime = self.runtime.lock().await;
+            println!("took lock");
+
+            runtime
+                .scheduler
+                .schedule(&runtime.cluster.server_stats)
+                .unwrap_or({
+                    println!("WARN: failed to schedule. Using the first server");
+                    runtime.cluster.servers[0].clone()
+                })
+        };
+        println!("got target server = {:?}", &target_server);
 
         let mut client = self.client(&target_server).await?;
 
@@ -117,6 +134,23 @@ impl AuthoritativeScheduler {
         let response = client.spawn(request).await?;
         if !response.get_ref().success {
             return Err("Unsuccessful spawn".into());
+        }
+
+        println!("spawend successfully");
+
+        // Update deployments information and instances information atomicly
+        {
+            println!("taking lock of runtime");
+            let mut runtime = self.runtime.lock().await;
+            runtime
+                .deployments
+                .0
+                .insert(deployment.id, deployment.clone());
+
+            runtime
+                .cluster
+                .insert_instance(deployment, vec![target_server]);
+            println!("freeing runtime");
         }
 
         println!(
@@ -128,86 +162,194 @@ impl AuthoritativeScheduler {
         Ok(response.into_inner())
     }
 
-    pub async fn client(
+    pub async fn nominate_other_scheduler(&self) -> Result<()> {
+        let other_cluster = self.runtime.lock().await.other.clone();
+        let nomination = Some(other_cluster.to_nomination());
+        let new_scheduler = &other_cluster.group.scheduler_info;
+
+        let mut client = self.client(new_scheduler).await?;
+
+        let request = NominateRequest { nomination };
+        let resp = client.nominate(Request::new(request)).await?.into_inner();
+
+        if !resp.success {
+            return Err(Error::Text(
+                "unsuccessful nomination of a new scheduler".to_owned(),
+            ));
+        }
+
+        Ok(())
+    }
+
+    pub async fn handle_failed_server<T>(
         &self,
-        server: &ServerInfo,
-    ) -> Result<ServerDaemonClient<Channel>, Box<dyn Error>> {
+        result: Result<T>,
+        server: &Server,
+    ) -> RpcResult<Option<DaemonState>> {
+        let e = match result {
+            Err(Error::TransportError(e)) => e,
+            Err(e) => return Err(e.into()),
+            _ => return Ok(None),
+        };
+
+        println!("nominating a new scheduler due to the following error: {e:?}");
+
+        let id =
+            Uuid::try_parse(&server.id).map_err(|e| <Error as Into<Status>>::into(e.into()))?;
+
+        let (should_nominate, should_uninitialize) = {
+            let mut runtime = self.runtime.lock().await;
+
+            let maybe_removed = runtime.cluster.remove_server(&id);
+            if maybe_removed.is_none() {
+                println!("WARN: failed to remove the server from list: {server:?}");
+            }
+
+            let maybe_other_removed = runtime.other.remove_server(&id);
+
+            let was_other_scheduler = match maybe_other_removed {
+                Some(s) => runtime.other.group.scheduler_info.id == s.id,
+                None => {
+                    println!("WARN: failed to remove the server from other list: {server:?}");
+                    false
+                }
+            };
+
+            (
+                was_other_scheduler,
+                runtime.cluster.servers.len() + runtime.other.servers.len() <= 1,
+            )
+        };
+
+        match (should_nominate, should_uninitialize) {
+            (_, true) => Ok(Some(DaemonState::Uninitialized)),
+            (true, false) => {
+                self.nominate_other_scheduler()
+                    .await
+                    .map_err(<Error as Into<Status>>::into)?;
+                Ok(None)
+            }
+            (false, false) => Ok(None),
+        }
+    }
+
+    pub async fn become_uninitialized(&self) -> Result<()> {
+        let tx = self.tx.lock().await;
+
+        let state = DaemonState::Uninitialized;
+
+        tx.send(state).await.map_err(|e| e.into())
+    }
+
+    pub async fn client(&self, server: &ServerInfo) -> Result<ServerDaemonClient<Channel>> {
         Ok(ServerDaemonClient::connect(server.addr.clone()).await?)
     }
 
-    pub async fn other_client(&self) -> Result<SchedulerClient<Channel>, Box<dyn Error>> {
-        let other_addr = self.runtime.lock().unwrap().other.get_addr().to_owned();
+    pub async fn other_client(&self) -> Result<SchedulerClient<Channel>> {
+        let other_addr = self.runtime.lock().await.other.get_addr().to_owned();
         println!("creating other_client ({})", other_addr);
 
         return Ok(SchedulerClient::connect(other_addr).await?);
     }
 
-    pub fn clone_inner(&self) -> SchedulerRuntime {
-        SchedulerRuntime::clone_inner(&self.runtime)
+    pub async fn clone_inner(&self) -> SchedulerRuntime {
+        SchedulerRuntime::clone_inner(&self.runtime).await
     }
 }
 
 #[tonic::async_trait]
 impl Scheduler for AuthoritativeScheduler {
-    async fn join(&self, request: Request<JoinRequest>) -> Result<Response<JoinResponse>, Status> {
+    async fn join(&self, request: Request<JoinRequest>) -> RpcResult<Response<JoinResponse>> {
         println!("join() called!!");
 
-        let server = request
+        let proto_server = request
             .get_ref()
             .server
             .clone()
-            .expect("server cannot be None")
+            .expect("server cannot be None");
+
+        let server: ServerInfo = proto_server
+            .clone()
             .try_into()
-            .map_err(|e: uuid::Error| Status::aborted(e.to_string()))?;
+            .map_err(<Error as Into<Status>>::into)?;
 
-        self.push_server(server);
+        let resp = self.notify_to_other().await;
+        let other_scheduler = self.runtime.lock().await.other.group.scheduler_info.clone();
+        let maybe_state = self
+            .handle_failed_server(resp, &other_scheduler.into())
+            .await?;
 
-        self.notify_to_other().await.map_err(|e| {
-            Status::aborted(format!("failed to notify to the other scheduler: {}", e))
-        })?;
+        self.push_server(server).await;
 
-        let group = Some(self.runtime.lock().unwrap().cluster.group.clone().into());
+        let runtime = self.runtime.lock().await.clone();
 
-        Ok(Response::new(JoinResponse {
-            success: true,
-            group,
-            is_scheduler: false,
-            our_group: None,
-        }))
+        match maybe_state {
+            Some(DaemonState::Uninitialized) => {
+                let our_group = Some(runtime.cluster.group.clone().into());
+                let their_group = Some(Group {
+                    number: runtime.other.group.number,
+                    scheduler: Some(proto_server.clone()),
+                });
+                let cluster = Some(runtime.other.into());
+
+                return Ok(Response::new(JoinResponse {
+                    success: true,
+                    group: their_group,
+                    is_scheduler: true,
+                    our_group,
+                    nomination: Some(Nomination { cluster }),
+                }));
+            }
+
+            s => {
+                if let Some(state) = s {
+                    self.tx
+                        .lock()
+                        .await
+                        .send(state)
+                        .await
+                        .map_err(<Error as From<mpsc::error::SendError<DaemonState>>>::from)
+                        .map_err(<Error as Into<Status>>::into)?;
+                }
+
+                let group = Some(self.runtime.lock().await.cluster.group.clone().into());
+
+                Ok(Response::new(JoinResponse {
+                    success: true,
+                    group,
+                    is_scheduler: false,
+                    our_group: None,
+                    nomination: None,
+                }))
+            }
+        }
     }
 
-    async fn notify(
-        &self,
-        request: Request<NotifyRequest>,
-    ) -> Result<Response<NotifyResponse>, Status> {
+    async fn notify(&self, request: Request<NotifyRequest>) -> RpcResult<Response<NotifyResponse>> {
         println!("notify() called!!");
 
         let NotifyRequest { cluster: state } = request.into_inner();
         let state = state.expect("State cannot be None");
 
-        let mut lock = self.runtime.lock().unwrap();
+        let mut lock = self.runtime.lock().await;
         let runtime = lock.borrow_mut();
         runtime.other = state.try_into().map_err(Status::aborted)?;
 
         Ok(Response::new(NotifyResponse { success: true }))
     }
 
-    async fn report(
-        &self,
-        request: Request<ReportRequest>,
-    ) -> Result<Response<ReportResponse>, Status> {
-        println!("report() called!!");
+    async fn report(&self, request: Request<ReportRequest>) -> RpcResult<Response<ReportResponse>> {
+        // println!("report() called!!");
 
         let ReportRequest { server, windows } = request.into_inner();
 
-        let server: ServerInfo = server
-            .ok_or(Status::aborted("server cannot be empty"))?
-            .try_into()
-            .map_err(|e| Status::aborted(format!("failed to parse server info: {}", e)))?;
+        let server: Server = server.ok_or(Status::aborted("server cannot be empty"))?;
+        let server = ServerInfo::try_from(server);
+        let server = server.map_err(|e| <Error as Into<Status>>::into(e))?;
 
         let stats = ServerStats::from_stats(server, windows);
 
-        let mut lock = self.runtime.lock().unwrap();
+        let mut lock = self.runtime.lock().await;
         let runtime = lock.borrow_mut();
 
         runtime.cluster.insert_stats(stats);
@@ -215,10 +357,7 @@ impl Scheduler for AuthoritativeScheduler {
         Ok(Response::new(ReportResponse { success: true }))
     }
 
-    async fn deploy(
-        &self,
-        request: Request<DeployRequest>,
-    ) -> Result<Response<DeployResponse>, Status> {
+    async fn deploy(&self, request: Request<DeployRequest>) -> RpcResult<Response<DeployResponse>> {
         println!("deploy() called!!");
 
         let DeployRequest {
@@ -228,23 +367,14 @@ impl Scheduler for AuthoritativeScheduler {
 
         let deployment_info = DeploymentInfo::new(source.clone());
         let deployment: Deployment = deployment_info.clone().into();
+        println!("created info");
 
         let mut success = true;
 
-        let resp = self
-            .deploy_in_us(SpawnRequest {
-                deployment: Some(deployment.clone()),
-            })
-            .await
-            .map_err(|e| Status::aborted(e.to_string()))?;
-
-        self.runtime
-            .lock()
-            .unwrap()
-            .deployments
-            .0
-            .insert(deployment_info.id, deployment_info);
+        let resp = self.deploy_in_us(deployment_info).await;
+        let resp = resp.map_err(<Error as Into<Status>>::into)?;
         success &= resp.success;
+        println!("got resp");
 
         if authoritative {
             let resp = self
@@ -252,11 +382,15 @@ impl Scheduler for AuthoritativeScheduler {
                     source,
                     authoritative: false,
                 })
-                .await
-                .map_err(|e| Status::aborted(e.to_string()))?;
+                .await;
 
-            success &= resp.success;
+            let runtime = self.clone_inner().await;
+            let other_scheduler = runtime.other.group.scheduler_info;
+
+            self.handle_failed_server(resp, &other_scheduler.into())
+                .await?;
         }
+        println!("notified");
 
         Ok(Response::new(DeployResponse {
             success,
@@ -264,11 +398,8 @@ impl Scheduler for AuthoritativeScheduler {
         }))
     }
 
-    async fn lookup(
-        &self,
-        request: Request<LookupRequest>,
-    ) -> Result<Response<LookupResponse>, Status> {
-        let runtime = self.clone_inner();
+    async fn lookup(&self, request: Request<LookupRequest>) -> RpcResult<Response<LookupResponse>> {
+        let runtime = self.clone_inner().await;
 
         let id = Uuid::parse_str(&request.get_ref().deployment_id)
             .map_err(|e| Status::aborted(e.to_string()))?;
@@ -296,9 +427,12 @@ impl Scheduler for AuthoritativeScheduler {
 
 impl Clone for AuthoritativeScheduler {
     fn clone(&self) -> Self {
-        let runtime = SchedulerRuntime::clone_inner(&self.runtime);
+        let runtime = self.runtime.clone();
+        let tx = self.tx.clone();
+
         Self {
-            runtime: Arc::new(Mutex::new(runtime)),
+            runtime: runtime,
+            tx,
         }
     }
 }
@@ -324,16 +458,16 @@ impl SchedulerRuntime {
         Arc::new(Mutex::new(self))
     }
 
-    pub fn clone_inner(arc: &Arc<Mutex<Self>>) -> Self {
+    pub async fn clone_inner(arc: &Arc<Mutex<Self>>) -> Self {
         println!("WARN: cloning SchedulerRuntime");
-        arc.lock().unwrap().clone()
+        arc.lock().await.clone()
     }
 }
 
 impl Cluster {
     pub fn new(scheduler: &ServerInfo) -> Self {
         let group = GroupInfo::new(scheduler);
-        let servers = vec![];
+        let servers = vec![scheduler.clone()];
         let instances = AppInstanceMap::new();
         let server_stats = StatsMap::new();
 
@@ -347,7 +481,7 @@ impl Cluster {
 
     pub fn with_group(group: &GroupInfo) -> Self {
         let group = group.clone();
-        let servers = vec![];
+        let servers = vec![group.scheduler_info.clone()];
         let instances = AppInstanceMap::new();
         let server_stats = StatsMap::new();
 
@@ -365,23 +499,40 @@ impl Cluster {
         Self::with_group(&other_group)
     }
 
-    pub fn insert_stats(&mut self, stats: ServerStats) {
-        let id = stats.server.id;
-        let entry = self.server_stats.0.get_mut(&stats.server.id);
-
-        let ptr = match entry {
-            Some(ptr) => ptr,
-            None => {
-                let stats = ServerStats::new(stats.server);
-                self.server_stats.0.insert(id, stats);
-                self.server_stats.0.get_mut(&id).unwrap()
-            }
-        };
-
-        ptr.append(stats.stats)
+    pub fn to_nomination(&self) -> Nomination {
+        let cluster = Some(self.clone().into());
+        Nomination { cluster }
     }
 
-    pub fn get_instance_server_ids(&self, deployment_id: &Uuid) -> Result<Vec<Uuid>, String> {
+    pub fn insert_instance(&mut self, deployment: DeploymentInfo, servers: Vec<ServerInfo>) {
+        let id = deployment.id;
+        self.instances
+            .0
+            .entry(id)
+            .and_modify(|i| i.servers.append(&mut servers.clone()))
+            .or_insert(AppInstancesInfo {
+                deployment,
+                servers,
+            });
+    }
+
+    pub fn insert_stats(&mut self, stats: ServerStats) {
+        let id = stats.server.id;
+        self.server_stats
+            .0
+            .entry(id)
+            .and_modify(|s| s.append(stats.stats.clone()))
+            .or_insert(stats);
+    }
+
+    pub fn remove_server(&mut self, id: &Uuid) -> Option<ServerInfo> {
+        let index = self.servers.iter().position(|s| &s.id == id)?;
+        Some(self.servers.remove(index))
+    }
+
+    pub fn get_instance_server_ids(&self, deployment_id: &Uuid) -> Result<Vec<Uuid>> {
+        println!("instances = {:?}", self.instances.0);
+
         Ok(self
             .instances
             .0
@@ -418,8 +569,8 @@ impl Into<ClusterState> for Cluster {
 }
 
 impl TryFrom<ClusterState> for Cluster {
-    type Error = String;
-    fn try_from(state: ClusterState) -> Result<Self, Self::Error> {
+    type Error = Error;
+    fn try_from(state: ClusterState) -> Result<Self> {
         let group = state
             .group
             .ok_or("Group cannot be empty".to_owned())?
@@ -429,14 +580,13 @@ impl TryFrom<ClusterState> for Cluster {
             .servers
             .into_iter()
             .map(ServerInfo::try_from)
-            .collect::<Result<_, _>>()
-            .map_err(|e| e.to_string())?;
+            .collect::<Result<_>>()?;
 
         let instances = state
             .instances
             .into_iter()
             .map(|i| AppInstancesInfo::try_from(i).map(|ii| (ii.deployment.id, ii)))
-            .collect::<Result<HashMap<_, _, _>, _>>()
+            .collect::<Result<HashMap<_, _, _>>>()
             .map(IdMap)?;
 
         let server_stats = IdMap::new();

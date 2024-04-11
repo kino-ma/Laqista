@@ -1,11 +1,11 @@
 use clap::{Args, Subcommand};
 
-#[derive(Subcommand)]
+#[derive(Clone, Subcommand)]
 pub enum ServerCommand {
     Start(StartCommand),
 }
 
-#[derive(Args)]
+#[derive(Args, Clone)]
 pub struct StartCommand {
     #[arg(short = 's', long = "server")]
     pub bootstrap_addr: Option<String>,

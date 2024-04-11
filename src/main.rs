@@ -1,21 +1,20 @@
-use std::error::Error;
-
 use clap::Parser;
 
 use mless::{
     cmd::{Cli, Commands},
     server::ServerRunner,
+    Result,
 };
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     use Commands::*;
 
     match cli.command {
         Server(subcmd) => {
-            let runner = ServerRunner::new(subcmd);
+            let mut runner = ServerRunner::new(subcmd);
             runner.run().await?;
         }
     };

@@ -11,7 +11,7 @@ use crate::{
         ReportResponse,
     },
     server::DaemonState,
-    ServerInfo,
+    Error, ServerInfo,
 };
 
 use super::{mean::MeanGpuScheduler, AuthoritativeScheduler, Cluster};
@@ -37,7 +37,7 @@ impl UninitScheduler {
 
     pub fn create_scheduler(&self, this: Cluster, other: Cluster) -> AuthoritativeScheduler {
         let scheduler = Box::new(MeanGpuScheduler {});
-        AuthoritativeScheduler::new(this, other, scheduler)
+        AuthoritativeScheduler::new(this, other, scheduler, self.tx.clone())
     }
 }
 
@@ -51,12 +51,13 @@ impl Scheduler for UninitScheduler {
             .server
             .ok_or(Status::aborted("Server cannot be empty"))?;
         let other: ServerInfo =
-            ServerInfo::try_from(other_server).map_err(|e| Status::aborted(e.to_string()))?;
+            ServerInfo::try_from(other_server).map_err(<Error as Into<Status>>::into)?;
 
         let this_cluster = Cluster::new(&self.server);
         let this_group = this_cluster.group.clone();
         let other_cluster = this_cluster.next_cluster(&other);
         let other_group = other_cluster.group.clone();
+        let nomination = Some(other_cluster.to_nomination());
 
         let scheduler = self.create_scheduler(this_cluster, other_cluster);
 
@@ -75,6 +76,7 @@ impl Scheduler for UninitScheduler {
             group: Some(other_group.into()),
             is_scheduler: true,
             our_group: Some(this_group.into()),
+            nomination,
         }))
     }
 

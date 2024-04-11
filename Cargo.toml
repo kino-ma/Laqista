@@ -3,6 +3,9 @@ name = "mless"
 version = "0.1.0"
 edition = "2021"
 
+[workspace]
+members = ["apps/*"]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [profile.dev]
@@ -28,6 +31,21 @@ uuid = { version = "1.8.0", features = ["v4", "v6", "std", "rng"] }
 mac_address = "1.1.5"
 serde = { version = "1.0.197", features = ["derive", "serde_derive"] }
 plist = { version = "1.6.1", features = ["serde"] }
+opencv = { version = "0.89.0", features = ["clang-runtime"] }
+
+hello = { path = "./apps/hello" }
+face = { path = "./apps/face" }
 
 [build-dependencies]
 tonic-build = "0.11"
+
+[dev-dependencies]
+criterion = { version = "0.4", features = ["html_reports", "async_tokio"] }
+
+[[bench]]
+name = "greeter"
+harness = false
+
+[[bench]]
+name = "face-image"
+harness = false
