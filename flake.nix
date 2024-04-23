@@ -18,6 +18,7 @@
         pkgs-stable = import nixpkgs-stable { inherit system overlays; };
 
         rust-components = pkgs.fenix.complete.withComponents [ "cargo" "rust-src" "rustc" "rustfmt" ];
+        rust-linux-components = pkgs.targets.x86_64-unknown-linux-gnu.complete.withComponents [ "rust-src" "rustc" ];
 
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
       in

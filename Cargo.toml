@@ -11,6 +11,9 @@ members = ["apps/*"]
 [profile.dev]
 opt-level = 0
 
+[features]
+face = ["dep:face"]
+
 [dependencies]
 axum = "0.6.9"
 bytes = "1.1.0"
@@ -21,6 +24,7 @@ http-body = "0.4.4"
 http-body-util = "0.1"
 hyper = { version = "0.14.26", features = ["full"] }
 hyper-util = { version = "0.1.1", features = ["full"] }
+nom = "7.1.3"
 tonic = "0.11.0"
 prost = "0.12"
 prost-types = "0.12.3"
@@ -31,10 +35,9 @@ uuid = { version = "1.8.0", features = ["v4", "v6", "std", "rng"] }
 mac_address = "1.1.5"
 serde = { version = "1.0.197", features = ["derive", "serde_derive"] }
 plist = { version = "1.6.1", features = ["serde"] }
-opencv = { version = "0.89.0", features = ["clang-runtime"] }
 
 hello = { path = "./apps/hello" }
-face = { path = "./apps/face" }
+face = { path = "./apps/face", optional = true }
 
 [build-dependencies]
 tonic-build = "0.11"
