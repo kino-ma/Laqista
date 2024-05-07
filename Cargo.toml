@@ -4,15 +4,16 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace]
-members = ["apps/*"]
+# members = ["apps/*"]
+members = ["apps/hello"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [profile.dev]
 opt-level = 0
 
-[features]
-face = ["dep:face"]
+# [features]
+# face = ["dep:face"]
 
 [dependencies]
 axum = "0.6.9"
@@ -37,7 +38,7 @@ serde = { version = "1.0.197", features = ["derive", "serde_derive"] }
 plist = { version = "1.6.1", features = ["serde"] }
 
 hello = { path = "./apps/hello" }
-face = { path = "./apps/face", optional = true }
+# face = { path = "./apps/face", optional = true }
 
 [build-dependencies]
 tonic-build = "0.11"
@@ -49,6 +50,6 @@ criterion = { version = "0.4", features = ["html_reports", "async_tokio"] }
 name = "greeter"
 harness = false
 
-[[bench]]
-name = "face-image"
-harness = false
+# [[bench]]
+# name = "face-image"
+# harness = false
