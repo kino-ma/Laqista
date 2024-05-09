@@ -38,6 +38,7 @@ serde = { version = "1.0.197", features = ["derive", "serde_derive"] }
 plist = { version = "1.6.1", features = ["serde"] }
 
 hello = { path = "./apps/hello" }
+chrono = "0.4.38"
 # face = { path = "./apps/face", optional = true }
 
 [build-dependencies]

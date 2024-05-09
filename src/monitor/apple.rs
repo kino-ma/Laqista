@@ -1,10 +1,10 @@
 use std::{
     io::{BufRead, BufReader, Lines},
     process::{self, ChildStdout, Command},
-    time::{Duration, SystemTime},
 };
 
 use bytes::BytesMut;
+use chrono::DateTime;
 use plist::Date;
 use serde::{Deserialize, Serialize};
 use tokio::{sync::mpsc, task::JoinHandle};
@@ -17,8 +17,8 @@ pub struct MetricsMonitor {}
 
 #[derive(Clone, Debug)]
 pub struct MetricsWindow {
-    start: SystemTime,
-    end: SystemTime,
+    start: DateTime,
+    end: DateTime,
     metrics: PowerMetrics,
 }
 
