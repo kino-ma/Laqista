@@ -10,7 +10,7 @@ use crate::proto::{MonitorWindow, ResourceUtilization, TimeWindow};
 
 use crate::monitor::SendMetrics;
 
-// exmaple output: 1529693401.317127: gpu 0.00%, ee 0.00%, vgt 0.00%, ta 0.00%, sx 0.00%, sh 0.00%, spi 0.00%, sc 0.00%, pa 0.00%, db 0.00%, cb 0.00%, vram 0.04% 2.06mb, gtt 0.04% 2.56mb
+use super::parse::radeon_top;
 
 pub struct MetricsMonitor {}
 
@@ -110,7 +110,8 @@ impl Iterator for MetricsReader {
     fn next(&mut self) -> Option<Self::Item> {
         let line = self.inner.next()?.ok()?;
 
-        radeon_top(line)
+        let (_, metrics) = radeon_top(&line).ok()?;
+        Some(metrics)
     }
 }
 
