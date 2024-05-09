@@ -1,12 +1,15 @@
 use std::{
     io::{BufRead, BufReader, Lines},
     process::{self, ChildStdout, Command},
-    time::{Duration, SystemTime},
 };
 
+use chrono::{DateTime, TimeDelta, Utc};
 use tokio::{sync::mpsc, task::JoinHandle};
 
-use crate::proto::{MonitorWindow, ResourceUtilization, TimeWindow};
+use crate::{
+    proto::{MonitorWindow, ResourceUtilization, TimeWindow},
+    utils::datetime_to_prost,
+};
 
 use crate::monitor::SendMetrics;
 
@@ -16,7 +19,7 @@ pub struct MetricsMonitor {}
 
 #[derive(Clone, Debug)]
 pub struct RadeonMetrics {
-    pub time: SystemTime,
+    pub timestamp: DateTime<Utc>,
     pub gpu: f64,
     pub ee: f64,
     pub vgt: f64,
@@ -44,12 +47,15 @@ impl MetricsMonitor {
 
 impl RadeonMetrics {
     pub fn time_window(&self) -> TimeWindow {
-        let start = self.time;
-        let end = start + Duration::from_secs(1);
+        let start = self.timestamp;
+        let end = start + TimeDelta::seconds(1);
+
+        let start = datetime_to_prost(start);
+        let end = datetime_to_prost(end);
 
         TimeWindow {
-            start: Some(start.into()),
-            end: Some(end.into()),
+            start: Some(start),
+            end: Some(end),
         }
     }
 }
