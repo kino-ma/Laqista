@@ -1,4 +1,4 @@
-use std::{char, num::ParseIntError};
+use std::{char, collections::HashMap, num::ParseIntError};
 
 use chrono::{DateTime, Utc};
 use nom::{
@@ -6,6 +6,7 @@ use nom::{
     bytes::complete::{tag, take_while1},
     character::complete::{alpha1, i64 as text_i64, u32 as text_u32, u64 as text_u64},
     error::{ErrorKind, ParseError},
+    multi::separated_list1,
     Err as NomErr, IResult,
 };
 
@@ -56,8 +57,9 @@ pub enum AbsoluteUtilization {
 pub fn radeon_top(input: &str) -> Result<&str, RadeonMetrics> {
     let (input, ts) = timestamp(input)?;
     let (input, _colon) = tag(": ")(input)?;
+    let (input, map) = utilization_map(input)?;
 
-    let metrics = RadeonMetrics { timestamp: ts };
+    let metrics = RadeonMetrics {} // desiriaslize;
 
     Ok((input, metrics))
 }
@@ -72,6 +74,14 @@ fn timestamp(input: &str) -> Result<&str, DateTime<Utc>> {
         .ok_or(NomErr::Error(MetricsParseError::Timestamp { secs, nsecs }))?;
 
     Ok((input, dt))
+}
+
+fn utilization_map(input: &str) -> Result<&str, HashMap<String, ResourceUtilization>> {
+    let (input, list) = separated_list1(tag(", "), resource_utilzation)(input)?;
+
+    let map = list.into_iter().map(|u| (u.name.clone(), u)).collect();
+
+    Ok((input, map))
 }
 
 fn resource_utilzation(input: &str) -> Result<&str, ResourceUtilization> {
