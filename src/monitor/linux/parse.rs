@@ -12,6 +12,7 @@ use nom::{
 
 use super::radeon::RadeonMetrics;
 
+#[allow(unused)]
 #[derive(Debug)]
 pub enum MetricsParseError<I> {
     Timestamp { secs: i64, nsecs: u32 },
@@ -41,6 +42,7 @@ pub struct ResourceUtilization {
     util: Utilization,
 }
 
+#[allow(unused)]
 #[derive(Debug)]
 pub enum Utilization {
     Id {
@@ -52,6 +54,7 @@ pub enum Utilization {
     },
 }
 
+#[allow(unused)]
 #[derive(Debug)]
 pub enum AbsoluteUtilization {
     None,
