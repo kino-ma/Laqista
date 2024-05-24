@@ -15,6 +15,7 @@ use super::radeon::RadeonMetrics;
 pub enum MetricsParseError<I> {
     Timestamp { secs: i64, nsecs: u32 },
     Int(ParseIntError),
+    KeyError(String),
     Nom(I, ErrorKind),
 }
 type Result<I, O> = IResult<I, O, MetricsParseError<I>>;
@@ -59,7 +60,7 @@ pub fn radeon_top(input: &str) -> Result<&str, RadeonMetrics> {
     let (input, _colon) = tag(": ")(input)?;
     let (input, map) = utilization_map(input)?;
 
-    let metrics = RadeonMetrics {} // desiriaslize;
+    let (_, metrics) = radeon_from_map(map, ts)?;
 
     Ok((input, metrics))
 }
@@ -146,7 +147,7 @@ fn frac_u64(input: &str) -> Result<&str, u64> {
     let (input, _) = dot(input)?;
     let (input, frac) = text_u64(input)?;
 
-    let num = (int << 8) & frac;
+    let num = (int << 32) & frac;
 
     Ok((input, num))
 }
@@ -171,4 +172,50 @@ fn space(input: &str) -> Result<&str, ()> {
 fn dot(input: &str) -> Result<&str, ()> {
     let (input, _) = tag(".")(input)?;
     Ok((input, ()))
+}
+
+macro_rules! get_key {
+    ($map:expr, $key:expr) => {{
+        let value = $map
+            .get($key)
+            .ok_or(NomErr::Error(MetricsParseError::KeyError($key.to_string())))?;
+
+        let ratio = match value.util {
+            Utilization::Id { .. } => unimplemented!("id is not supported"),
+            Utilization::Percent { ratio, .. } => coerce_f64(ratio),
+        };
+
+        ratio
+    }};
+}
+
+fn radeon_from_map(
+    map: HashMap<String, ResourceUtilization>,
+    timestamp: DateTime<Utc>,
+) -> Result<&'static str, RadeonMetrics> {
+    let out = RadeonMetrics {
+        timestamp,
+        gpu: get_key!(map, "gpu"),
+        ee: get_key!(map, "ee"),
+        vgt: get_key!(map, "vgt"),
+        ta: get_key!(map, "ta"),
+        sx: get_key!(map, "ex"),
+        sh: get_key!(map, "sh"),
+        spi: get_key!(map, "spi"),
+        sc: get_key!(map, "sc"),
+        pa: get_key!(map, "pa"),
+        db: get_key!(map, "db"),
+        cb: get_key!(map, "cb"),
+        vram: get_key!(map, "vram"),
+        git: get_key!(map, "git"),
+    };
+
+    Ok(("", out))
+}
+
+fn coerce_f64(frac: u64) -> f64 {
+    let int = frac >> 32;
+    let frac = frac & 0xffff_ffff;
+
+    (int as f64) + (frac as f64 * 0.01)
 }
