@@ -1,5 +1,5 @@
 use std::{
-    io::{BufRead, BufReader, Lines},
+    io::{BufRead, BufReader, Error as IOError, Lines},
     process::{self, ChildStdout, Command},
 };
 
@@ -110,9 +110,19 @@ impl MetricsReader {
 impl Iterator for MetricsReader {
     type Item = RadeonMetrics;
     fn next(&mut self) -> Option<Self::Item> {
-        let line = self.inner.next()?.ok()?;
+        let read_result = self
+            .inner
+            .next()
+            .unwrap_or(Err(IOError::other("unexpected end of lines")));
 
-        let (_, metrics) = radeon_top(&line).ok()?;
+        let line = read_result
+            .map_err(|e| println!("ERR: MetricsReader.next(): failed to read line: {e}"))
+            .ok()?;
+
+        let (_, metrics) = radeon_top(&line)
+            .map_err(|e| println!("ERR: MetricsReader.next(): failed to parse: {e}"))
+            .ok()?;
+
         Some(metrics)
     }
 }
