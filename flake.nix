@@ -21,6 +21,8 @@
         rust-linux-components = pkgs.targets.x86_64-unknown-linux-gnu.complete.withComponents [ "rust-src" "rustc" ];
 
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
+
+        system-specific-pkgs = if system == "x86_64-linux" then [ pkgs.radeontop ] else [];
       in
       {
         devShell = pkgs.mkShell {
@@ -37,7 +39,8 @@
               python311Packages.grpcio-tools
               jq
               gnuplot
-            ];
+            ] 
+            ++ system-specific-pkgs;
 
 
           RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
