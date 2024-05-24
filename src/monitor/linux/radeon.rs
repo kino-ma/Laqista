@@ -32,7 +32,7 @@ pub struct RadeonMetrics {
     pub db: f64,
     pub cb: f64,
     pub vram: f64,
-    pub git: f64,
+    pub gtt: f64,
 }
 
 impl MetricsMonitor {

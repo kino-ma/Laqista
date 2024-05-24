@@ -33,6 +33,7 @@ impl<I> ParseError<I> for MetricsParseError<I> {
 
 // exmaple output: 1715302360.857296: bus 06, gpu 5.00%, ee 0.00%, vgt 0.83%, ta 5.00%, sx 5.00%, sh 0.00%, spi 5.00%, sc 5.00%, pa 0.83%, db 5.00%, cb 5.00%, vram 19.57% 400.73mb, gtt 2.08% 42.61mb, mclk inf% 0.355ghz, sclk 38.53% 0.328ghz
 
+#[derive(Debug)]
 pub struct ResourceUtilization {
     name: String,
     // util is utilization in %.
@@ -40,6 +41,7 @@ pub struct ResourceUtilization {
     util: Utilization,
 }
 
+#[derive(Debug)]
 pub enum Utilization {
     Id {
         id: u64,
@@ -50,6 +52,7 @@ pub enum Utilization {
     },
 }
 
+#[derive(Debug)]
 pub enum AbsoluteUtilization {
     None,
     Mb(u64),
@@ -68,9 +71,8 @@ pub fn radeon_top(input: &str) -> Result<&str, RadeonMetrics> {
 
 fn timestamp(input: &str) -> Result<&str, DateTime<Utc>> {
     let (input, secs) = text_i64(input)?;
+    let (input, _) = dot(input)?;
     let (input, nsecs) = text_u32(input)?;
-
-    let (input, _) = tag(": ")(input)?;
 
     let dt = DateTime::from_timestamp(secs, nsecs)
         .ok_or(NomErr::Error(MetricsParseError::Timestamp { secs, nsecs }))?;
@@ -128,12 +130,14 @@ fn absolute_utilization(input: &str) -> Result<&str, AbsoluteUtilization> {
 }
 
 fn absolute_utilization_mb(input: &str) -> Result<&str, AbsoluteUtilization> {
+    let (input, _) = space(input)?;
     let (input, mb) = frac_u64(input)?;
     let (input, _) = tag("mb")(input)?;
     Ok((input, AbsoluteUtilization::Mb(mb)))
 }
 
 fn absolute_utilization_ghz(input: &str) -> Result<&str, AbsoluteUtilization> {
+    let (input, _) = space(input)?;
     let (input, ghz) = frac_u64(input)?;
     let (input, _) = tag("ghz")(input)?;
     Ok((input, AbsoluteUtilization::Ghz(ghz)))
@@ -179,7 +183,10 @@ macro_rules! get_key {
     ($map:expr, $key:expr) => {{
         let value = $map
             .get($key)
-            .ok_or(NomErr::Error(MetricsParseError::KeyError($key.to_string())))?;
+            .ok_or(NomErr::Error(MetricsParseError::KeyError(format!(
+                "Key '{} not found. map = ({:?})",
+                $key, $map
+            ))))?;
 
         let ratio = match value.util {
             Utilization::Id { .. } => unimplemented!("id is not supported"),
@@ -200,7 +207,7 @@ fn radeon_from_map(
         ee: get_key!(map, "ee"),
         vgt: get_key!(map, "vgt"),
         ta: get_key!(map, "ta"),
-        sx: get_key!(map, "ex"),
+        sx: get_key!(map, "sx"),
         sh: get_key!(map, "sh"),
         spi: get_key!(map, "spi"),
         sc: get_key!(map, "sc"),
@@ -208,7 +215,7 @@ fn radeon_from_map(
         db: get_key!(map, "db"),
         cb: get_key!(map, "cb"),
         vram: get_key!(map, "vram"),
-        git: get_key!(map, "git"),
+        gtt: get_key!(map, "gtt"),
     };
 
     Ok(("", out))
