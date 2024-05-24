@@ -12,6 +12,7 @@ use nom::{
 
 use super::radeon::RadeonMetrics;
 
+#[derive(Debug)]
 pub enum MetricsParseError<I> {
     Timestamp { secs: i64, nsecs: u32 },
     Int(ParseIntError),
@@ -218,4 +219,16 @@ fn coerce_f64(frac: u64) -> f64 {
     let frac = frac & 0xffff_ffff;
 
     (int as f64) + (frac as f64 * 0.01)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    const RADEON_TOP_SAMPLE: &'static str = "1715302360.857296: bus 06, gpu 5.00%, ee 0.00%, vgt 0.83%, ta 5.00%, sx 5.00%, sh 0.00%, spi 5.00%, sc 5.00%, pa 0.83%, db 5.00%, cb 5.00%, vram 19.57% 400.73mb, gtt 2.08% 42.61mb, mclk inf% 0.355ghz, sclk 38.53% 0.328ghz";
+
+    #[test]
+    fn parse_radeon() {
+        radeon_top(&RADEON_TOP_SAMPLE).expect("failed to parse radeon_top");
+    }
 }
