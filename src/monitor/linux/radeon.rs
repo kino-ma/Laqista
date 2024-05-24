@@ -11,7 +11,7 @@ use crate::{
     utils::datetime_to_prost,
 };
 
-use super::parse::radeon_top;
+use super::parse::{header_line, metrics_line};
 
 pub struct RadeonMonitor {}
 
@@ -37,7 +37,8 @@ impl RadeonMonitor {
         let stdout = cmd.stdout.expect("faile to get child's stdout");
         let reader = BufReader::new(stdout);
 
-        let reader: MetricsReader = MetricsReader::new(reader.lines());
+        let mut reader: MetricsReader = MetricsReader::new(reader.lines());
+        reader.skip_header();
 
         for metrics in reader {
             let window = metrics.into();
@@ -99,27 +100,46 @@ impl Into<MonitorWindow> for RadeonMetrics {
 type StdoutLines = Lines<BufReader<ChildStdout>>;
 struct MetricsReader {
     inner: StdoutLines,
+    seen_header: bool,
 }
 
 impl MetricsReader {
     pub fn new(lines: StdoutLines) -> Self {
-        Self { inner: lines }
+        Self {
+            inner: lines,
+            seen_header: false,
+        }
+    }
+
+    pub fn skip_header(&mut self) -> String {
+        if self.seen_header {
+            println!("WARN: MetricsReader.skip_header(): we have already seen a header");
+        }
+
+        let line = self.next_inner().expect("EOF");
+        header_line(&line).expect("attempt to skip a non-header line");
+
+        // On successful parse, return the original string directly
+        line
+    }
+
+    fn next_inner(&mut self) -> Option<String> {
+        let read_result = self
+            .inner
+            .next()
+            .unwrap_or(Err(IOError::other("unexpected end of lines")));
+
+        read_result
+            .map_err(|e| println!("ERR: MetricsReader.next_inner(): failed to read line: {e}"))
+            .ok()
     }
 }
 
 impl Iterator for MetricsReader {
     type Item = RadeonMetrics;
     fn next(&mut self) -> Option<Self::Item> {
-        let read_result = self
-            .inner
-            .next()
-            .unwrap_or(Err(IOError::other("unexpected end of lines")));
-
-        let line = read_result
-            .map_err(|e| println!("ERR: MetricsReader.next(): failed to read line: {e}"))
-            .ok()?;
-
-        let (_, metrics) = radeon_top(&line)
+        let line = self.next_inner()?;
+        let (_, metrics) = metrics_line(&line)
             .map_err(|e| println!("ERR: MetricsReader.next(): failed to parse: {e}"))
             .ok()?;
 

@@ -3,7 +3,7 @@ use std::{char, collections::HashMap, num::ParseIntError};
 use chrono::{DateTime, Utc};
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_while1},
+    bytes::complete::{tag, take_till, take_while1},
     character::complete::{alpha1, i64 as text_i64, u32 as text_u32, u64 as text_u64},
     error::{ErrorKind, ParseError},
     multi::separated_list1,
@@ -18,6 +18,7 @@ pub enum MetricsParseError<I> {
     Timestamp { secs: i64, nsecs: u32 },
     Int(ParseIntError),
     KeyError(String),
+    NotHeaderLine,
     Nom(I, ErrorKind),
 }
 type Result<I, O> = IResult<I, O, MetricsParseError<I>>;
@@ -62,7 +63,15 @@ pub enum AbsoluteUtilization {
     Ghz(u64),
 }
 
-pub fn radeon_top(input: &str) -> Result<&str, RadeonMetrics> {
+pub fn header_line(input: &str) -> Result<&str, &str> {
+    if !input.starts_with("Dumping to") {
+        return Err(NomErr::Error(MetricsParseError::NotHeaderLine));
+    }
+
+    nextline(input)
+}
+
+pub fn metrics_line(input: &str) -> Result<&str, RadeonMetrics> {
     let (input, ts) = timestamp(input)?;
     let (input, _colon) = tag(": ")(input)?;
     let (input, map) = utilization_map(input)?;
@@ -182,6 +191,14 @@ fn dot(input: &str) -> Result<&str, ()> {
     Ok((input, ()))
 }
 
+fn nextline(input: &str) -> Result<&str, &str> {
+    take_till(is_lf)(input)
+}
+
+fn is_lf(input: char) -> bool {
+    input == '\n'
+}
+
 macro_rules! get_key {
     ($map:expr, $key:expr) => {{
         let value = $map
@@ -239,6 +256,6 @@ mod test {
 
     #[test]
     fn parse_radeon() {
-        radeon_top(&RADEON_TOP_SAMPLE).expect("failed to parse radeon_top");
+        metrics_line(&RADEON_TOP_SAMPLE).expect("failed to parse radeon_top");
     }
 }
