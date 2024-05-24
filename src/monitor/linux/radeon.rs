@@ -4,18 +4,52 @@ use std::{
 };
 
 use chrono::{DateTime, TimeDelta, Utc};
-use tokio::{sync::mpsc, task::JoinHandle};
+use tokio::sync::mpsc;
 
 use crate::{
     proto::{MonitorWindow, ResourceUtilization, TimeWindow},
     utils::datetime_to_prost,
 };
 
-use crate::monitor::SendMetrics;
-
 use super::parse::radeon_top;
 
-pub struct MetricsMonitor {}
+pub struct RadeonMonitor {}
+
+impl RadeonMonitor {
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    pub fn commands() -> Vec<&'static str> {
+        vec!["radeontop", "--dump", "-"]
+    }
+
+    pub async fn run(&self, tx: mpsc::Sender<MonitorWindow>) -> ! {
+        println!("start start");
+        let commands = Self::commands();
+
+        let cmd = Command::new(commands[0])
+            .args(&commands[1..])
+            .stdout(process::Stdio::piped())
+            .spawn()
+            .expect("failed to spawn monitor process");
+
+        let stdout = cmd.stdout.expect("faile to get child's stdout");
+        let reader = BufReader::new(stdout);
+
+        let reader: MetricsReader = MetricsReader::new(reader.lines());
+
+        for metrics in reader {
+            let window = metrics.into();
+            tx.send(window)
+                .await
+                .map_err(|e| format!("failed to send metrics: {}", e))
+                .expect("failed to send metrics");
+        }
+
+        unreachable!()
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct RadeonMetrics {
@@ -35,16 +69,6 @@ pub struct RadeonMetrics {
     pub gtt: f64,
 }
 
-impl MetricsMonitor {
-    pub fn new() -> Self {
-        Self {}
-    }
-
-    pub fn commands() -> Vec<&'static str> {
-        vec!["radeontop", "--dump", "-"]
-    }
-}
-
 impl RadeonMetrics {
     pub fn time_window(&self) -> TimeWindow {
         let start = self.timestamp;
@@ -57,34 +81,6 @@ impl RadeonMetrics {
             start: Some(start),
             end: Some(end),
         }
-    }
-}
-
-impl SendMetrics for MetricsMonitor {
-    fn spawn(&self, tx: mpsc::Sender<MonitorWindow>) -> JoinHandle<()> {
-        tokio::spawn(async move {
-            println!("start start");
-            let commands = Self::commands();
-
-            let cmd = Command::new(commands[0])
-                .args(&commands[1..])
-                .stdout(process::Stdio::piped())
-                .spawn()
-                .expect("failed to spawn monitor process");
-
-            let stdout = cmd.stdout.expect("faile to get child's stdout");
-            let reader = BufReader::new(stdout);
-
-            let reader: MetricsReader = MetricsReader::new(reader.lines());
-
-            for metrics in reader {
-                let window = metrics.into();
-                tx.send(window)
-                    .await
-                    .map_err(|e| format!("failed to send metrics: {}", e))
-                    .expect("failed to send metrics");
-            }
-        })
     }
 }
 
