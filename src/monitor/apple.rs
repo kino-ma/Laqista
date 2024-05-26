@@ -1,15 +1,19 @@
 use std::{
     io::{BufRead, BufReader, Lines},
     process::{self, ChildStdout, Command},
+    time::SystemTime,
 };
 
 use bytes::BytesMut;
-use chrono::DateTime;
+use chrono::{DateTime, TimeDelta, Utc};
 use plist::Date;
 use serde::{Deserialize, Serialize};
 use tokio::{sync::mpsc, task::JoinHandle};
 
-use crate::proto::{MonitorWindow, ResourceUtilization, TimeWindow};
+use crate::{
+    proto::{MonitorWindow, ResourceUtilization, TimeWindow},
+    utils::datetime_to_prost,
+};
 
 use super::SendMetrics;
 
@@ -17,8 +21,8 @@ pub struct MetricsMonitor {}
 
 #[derive(Clone, Debug)]
 pub struct MetricsWindow {
-    start: DateTime,
-    end: DateTime,
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
     metrics: PowerMetrics,
 }
 
@@ -109,8 +113,10 @@ impl Gpu {
 
 impl Into<MetricsWindow> for PowerMetrics {
     fn into(self) -> MetricsWindow {
-        let end = self.timestamp.into();
-        let duration = Duration::from_nanos(self.elapsed_ns as u64);
+        let st: SystemTime = self.timestamp.into();
+        let end: DateTime<Utc> = st.into();
+
+        let duration = TimeDelta::nanoseconds(self.elapsed_ns);
         let start = end - duration;
 
         MetricsWindow {
@@ -178,8 +184,8 @@ impl<'a> Iterator for MetricsReader {
 
 impl MetricsWindow {
     pub fn time_window(&self) -> TimeWindow {
-        let start = Some(self.start.into());
-        let end = Some(self.end.into());
+        let start = Some(datetime_to_prost(self.start));
+        let end = Some(datetime_to_prost(self.end));
 
         TimeWindow { start, end }
     }
