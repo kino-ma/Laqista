@@ -12,8 +12,8 @@ members = ["apps/hello"]
 [profile.dev]
 opt-level = 0
 
-# [features]
-# face = ["dep:face"]
+[features]
+face = ["dep:face"]
 
 [dependencies]
 axum = "0.6.9"
@@ -39,7 +39,7 @@ plist = { version = "1.6.1", features = ["serde"] }
 
 hello = { path = "./apps/hello" }
 chrono = "0.4.38"
-# face = { path = "./apps/face", optional = true }
+face = { path = "./apps/face", optional = true }
 
 [build-dependencies]
 tonic-build = "0.11"
@@ -51,6 +51,6 @@ criterion = { version = "0.4", features = ["html_reports", "async_tokio"] }
 name = "greeter"
 harness = false
 
-# [[bench]]
-# name = "face-image"
-# harness = false
+[[bench]]
+name = "face-image"
+harness = false
