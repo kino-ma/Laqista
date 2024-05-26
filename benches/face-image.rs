@@ -39,7 +39,7 @@ pub fn bench_face_image(c: &mut Criterion) {
     );
 
     group.bench_with_input(
-        BenchmarkId::new("face image direct", "<App client>"),
+        BenchmarkId::new("face image direct", "<client>"),
         &arc_app_client,
         |b, app_client| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
