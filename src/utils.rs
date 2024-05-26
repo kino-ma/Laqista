@@ -1,9 +1,9 @@
 use std::{
     collections::{hash_map::Iter, HashMap},
     fmt::Debug,
-    time::{Duration, SystemTime},
 };
 
+use chrono::{DateTime, Timelike, Utc};
 use mac_address::{get_mac_address, MacAddress, MacAddressError};
 use prost_types::Timestamp;
 use uuid::Uuid;
@@ -57,11 +57,9 @@ pub fn mul_as_percent(x: i64, percent: i64) -> i64 {
     (x * y) as i64
 }
 
-pub fn _prost_to_system_time(timestamp: &Timestamp) -> SystemTime {
-    let system_time = SystemTime::now();
-
-    let ts_from_epoch = Duration::from_secs(timestamp.seconds as u64);
-    let ts_nanos = Duration::from_nanos(timestamp.nanos as u64);
-
-    system_time - ts_from_epoch - ts_nanos
+pub fn datetime_to_prost(dt: DateTime<Utc>) -> Timestamp {
+    Timestamp {
+        seconds: dt.second() as _,
+        nanos: dt.nanosecond() as _,
+    }
 }

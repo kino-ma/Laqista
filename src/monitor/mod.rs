@@ -1,8 +1,8 @@
 #[cfg(target_os = "macos")]
-pub mod darwin;
+pub mod apple;
 
 #[cfg(target_os = "macos")]
-pub use darwin::*;
+pub use apple::*;
 
 #[cfg(target_os = "linux")]
 pub mod linux;

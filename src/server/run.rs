@@ -20,6 +20,7 @@ use crate::server::{ServerCommand, StartCommand};
 
 use super::ServerDaemon;
 
+#[cfg(feature = "face")]
 use face::{proto as face_proto, server::DetectServer};
 
 pub const DEFAULT_HOST: &'static str = "127.0.0.1:50051";
@@ -235,14 +236,19 @@ impl ServerRunner {
     }
 
     fn common_services(&self, daemon: ServerDaemon) -> Router {
-        TransportServer::builder()
+        let router = TransportServer::builder()
             .add_service(ServerDaemonServer::new(daemon))
             .add_service(hello::proto::greeter_server::GreeterServer::new(
                 hello::MyGreeter::default(),
-            ))
-            .add_service(face_proto::detector_server::DetectorServer::new(
-                DetectServer {},
-            ))
+            ));
+
+        #[cfg(feature = "face")]
+        let router = {
+            use face_proto::detector_server::DetectorServer;
+            router.add_service(DetectorServer::new(DetectServer {}))
+        };
+
+        router
     }
 
     fn create_daemon(&self, info: ServerInfo, state: DaemonState) -> ServerDaemon {
