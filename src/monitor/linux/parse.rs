@@ -256,6 +256,35 @@ mod test {
 
     #[test]
     fn parse_radeon() {
-        metrics_line(&RADEON_TOP_SAMPLE).expect("failed to parse radeon_top");
+        let (_, metrics) = metrics_line(&RADEON_TOP_SAMPLE).expect("failed to parse radeon_top");
+        assert_eq!(metrics.gpu, 5.0);
+    }
+
+    #[test]
+    fn parse_resource_utilization() {
+        let (_, util) = resource_utilzation("gpu 5.00%").unwrap();
+        let (_, expected) = frac_u64("5.0").unwrap();
+
+        assert_eq!(util.name, "gpu");
+
+        match util.util {
+            Utilization::Id { .. } => panic!("shoud not be Id"),
+            Utilization::Percent { ratio, .. } => assert_eq!(ratio, expected),
+        }
+    }
+
+    #[test]
+    fn parse_frac_u64() {
+        let (_, frac) = frac_u64("1.5").unwrap();
+        let one_point_five = (1u64 << 32) + 50;
+        assert_eq!(frac, one_point_five);
+    }
+
+    #[test]
+    fn test_coerce_f64() {
+        let one_point_five = (1u64 << 32) + 50;
+        let out = coerce_f64(one_point_five);
+
+        assert_eq!(out, 1.5);
     }
 }
