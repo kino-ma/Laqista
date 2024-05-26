@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_till, take_while1},
-    character::complete::{alpha1, i64 as text_i64, u32 as text_u32, u64 as text_u64},
+    character::complete::{alpha1, digit1, i64 as text_i64, u32 as text_u32, u64 as text_u64},
     error::{ErrorKind, ParseError},
     multi::separated_list1,
     Err as NomErr, IResult,
@@ -50,7 +50,7 @@ pub enum Utilization {
         id: u64,
     },
     Percent {
-        ratio: u64,
+        ratio: Fraction,
         abs: AbsoluteUtilization,
     },
 }
@@ -59,8 +59,26 @@ pub enum Utilization {
 #[derive(Debug)]
 pub enum AbsoluteUtilization {
     None,
-    Mb(u64),
-    Ghz(u64),
+    Mb(Fraction),
+    Ghz(Fraction),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Fraction {
+    int: u64,
+    frac: u64,
+}
+
+impl Fraction {
+    fn new(int: u64, frac: u64) -> Self {
+        Fraction { int, frac }
+    }
+}
+
+impl Into<f64> for Fraction {
+    fn into(self) -> f64 {
+        (self.int as f64) + (self.frac as f64 * 0.01)
+    }
 }
 
 pub fn header_line(input: &str) -> Result<&str, &str> {
@@ -124,7 +142,7 @@ fn utilization_id(input: &str) -> Result<&str, Utilization> {
 }
 
 fn utilization_percent(input: &str) -> Result<&str, Utilization> {
-    let (input, ratio) = frac_u64(input)?;
+    let (input, ratio) = fraction(input)?;
     let (input, _percent) = tag("%")(input)?;
     let (input, abs) = absolute_utilization(input)?;
 
@@ -143,14 +161,14 @@ fn absolute_utilization(input: &str) -> Result<&str, AbsoluteUtilization> {
 
 fn absolute_utilization_mb(input: &str) -> Result<&str, AbsoluteUtilization> {
     let (input, _) = space(input)?;
-    let (input, mb) = frac_u64(input)?;
+    let (input, mb) = fraction(input)?;
     let (input, _) = tag("mb")(input)?;
     Ok((input, AbsoluteUtilization::Mb(mb)))
 }
 
 fn absolute_utilization_ghz(input: &str) -> Result<&str, AbsoluteUtilization> {
     let (input, _) = space(input)?;
-    let (input, ghz) = frac_u64(input)?;
+    let (input, ghz) = fraction(input)?;
     let (input, _) = tag("ghz")(input)?;
     Ok((input, AbsoluteUtilization::Ghz(ghz)))
 }
@@ -159,14 +177,27 @@ fn absolute_utilization_none(input: &str) -> Result<&str, AbsoluteUtilization> {
     Ok((input, AbsoluteUtilization::None))
 }
 
-fn frac_u64(input: &str) -> Result<&str, u64> {
+fn fraction(input: &str) -> Result<&str, Fraction> {
     let (input, int) = text_u64(input)?;
     let (input, _) = dot(input)?;
-    let (input, frac) = text_u64(input)?;
+    let (input, frac) = fractional_part(input)?;
 
-    let num = (int << 32) & frac;
+    let out = Fraction::new(int, frac);
 
-    Ok((input, num))
+    Ok((input, out))
+}
+
+fn fractional_part(input: &str) -> Result<&str, u64> {
+    let (input, frac_part) = digit1(input)?;
+    let (_, num) = text_u64(frac_part)?;
+
+    let out = match frac_part.len() {
+        1 => num * 10,
+        2 => num,
+        _ => unreachable!("fractional part must be 1 or 2 characters. got {frac_part}"),
+    };
+
+    Ok((input, out))
 }
 
 fn hex(input: &str) -> Result<&str, u64> {
@@ -210,7 +241,7 @@ macro_rules! get_key {
 
         let ratio = match value.util {
             Utilization::Id { .. } => unimplemented!("id is not supported"),
-            Utilization::Percent { ratio, .. } => coerce_f64(ratio),
+            Utilization::Percent { ratio, .. } => ratio.into(),
         };
 
         ratio
@@ -241,13 +272,6 @@ fn radeon_from_map(
     Ok(("", out))
 }
 
-fn coerce_f64(frac: u64) -> f64 {
-    let int = frac >> 32;
-    let frac = frac & 0xffff_ffff;
-
-    (int as f64) + (frac as f64 * 0.01)
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -263,7 +287,7 @@ mod test {
     #[test]
     fn parse_resource_utilization() {
         let (_, util) = resource_utilzation("gpu 5.00%").unwrap();
-        let (_, expected) = frac_u64("5.0").unwrap();
+        let (_, expected) = fraction("5.0").unwrap();
 
         assert_eq!(util.name, "gpu");
 
@@ -275,15 +299,15 @@ mod test {
 
     #[test]
     fn parse_frac_u64() {
-        let (_, frac) = frac_u64("1.5").unwrap();
-        let one_point_five = (1u64 << 32) + 50;
+        let (_, frac) = fraction("1.5").unwrap();
+        let one_point_five = Fraction { int: 1, frac: 50 };
         assert_eq!(frac, one_point_five);
     }
 
     #[test]
-    fn test_coerce_f64() {
-        let one_point_five = (1u64 << 32) + 50;
-        let out = coerce_f64(one_point_five);
+    fn test_into_f64() {
+        let frac = Fraction::new(1, 50);
+        let out: f64 = frac.into();
 
         assert_eq!(out, 1.5);
     }
