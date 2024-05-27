@@ -13,7 +13,7 @@ use mless::*;
 use hello::proto::greeter_client::GreeterClient;
 use hello::proto::HelloRequest;
 
-pub fn bench_scheduled(c: &mut Criterion) {
+pub fn bench_greeter(c: &mut Criterion) {
     let addr = "http://127.0.0.1:50051";
 
     let runtime = Runtime::new().unwrap();
@@ -24,9 +24,11 @@ pub fn bench_scheduled(c: &mut Criterion) {
     let arc_client = Arc::new(Mutex::new(client));
     let arc_app_client = Arc::new(Mutex::new(app_client));
 
-    c.bench_with_input(
+    let mut group = c.benchmark_group("Greeter");
+
+    group.bench_with_input(
         BenchmarkId::new("scheduled", "<client>"),
-        &(arc_client, arc_app_client),
+        &(arc_client, arc_app_client.clone()),
         |b, (client, app_client)| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
                 let mut client = client.lock().await;
@@ -35,18 +37,9 @@ pub fn bench_scheduled(c: &mut Criterion) {
             })
         },
     );
-}
 
-pub fn bench_direct(c: &mut Criterion) {
-    let addr = "http://127.0.0.1:50051";
-
-    let runtime = Runtime::new().unwrap();
-    let (_, app_client, _) = runtime.block_on(async { setup_clients(addr).await });
-
-    let arc_app_client = Arc::new(Mutex::new(app_client));
-
-    c.bench_with_input(
-        BenchmarkId::new("direct", "<App client>"),
+    group.bench_with_input(
+        BenchmarkId::new("direct", "<client>"),
         &arc_app_client,
         |b, app_client| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
@@ -110,5 +103,5 @@ async fn run_direct(app_client: &mut GreeterClient<Channel>) {
     app_client.say_hello(request).await.unwrap();
 }
 
-criterion_group!(benches, bench_scheduled, bench_direct);
+criterion_group!(benches, bench_greeter);
 criterion_main!(benches);

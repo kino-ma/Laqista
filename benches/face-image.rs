@@ -12,7 +12,7 @@ use mless::proto::scheduler_client::SchedulerClient;
 use mless::proto::{DeployRequest, Deployment, LookupRequest};
 use mless::*;
 
-pub fn bench_face_image_scheduled(c: &mut Criterion) {
+pub fn bench_face_image(c: &mut Criterion) {
     let addr = "http://127.0.0.1:50051";
 
     let runtime = Runtime::new().unwrap();
@@ -24,9 +24,11 @@ pub fn bench_face_image_scheduled(c: &mut Criterion) {
     let arc_client = Arc::new(Mutex::new(client));
     let arc_app_client = Arc::new(Mutex::new(detector_client));
 
-    c.bench_with_input(
+    let mut group = c.benchmark_group("Face image");
+
+    group.bench_with_input(
         BenchmarkId::new("face image scheduled", "<client>"),
-        &(arc_client, arc_app_client),
+        &(arc_client, arc_app_client.clone()),
         |b, (client, app_client)| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
                 let mut client = client.lock().await;
@@ -35,18 +37,9 @@ pub fn bench_face_image_scheduled(c: &mut Criterion) {
             })
         },
     );
-}
 
-pub fn bench_face_image_direct(c: &mut Criterion) {
-    let addr = "http://127.0.0.1:50051";
-
-    let runtime = Runtime::new().unwrap();
-    let (_, app_client, _) = runtime.block_on(async { setup_clients(addr).await });
-
-    let arc_app_client = Arc::new(Mutex::new(app_client));
-
-    c.bench_with_input(
-        BenchmarkId::new("face image direct", "<App client>"),
+    group.bench_with_input(
+        BenchmarkId::new("face image direct", "<client>"),
         &arc_app_client,
         |b, app_client| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
@@ -114,5 +107,5 @@ async fn run_direct(detector_client: &mut DetectorClient<Channel>) {
     detector_client.detect_face(request).await.unwrap();
 }
 
-criterion_group!(benches, bench_face_image_scheduled, bench_face_image_direct);
+criterion_group!(benches, bench_face_image);
 criterion_main!(benches);
