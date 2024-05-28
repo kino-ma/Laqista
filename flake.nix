@@ -28,6 +28,20 @@
         devShell = pkgs.mkShell {
           nativeBuildInputs = with pkgs;
             [
+              llvmPackages.libclang.lib
+              clang
+              bison
+              flex
+              fontforge
+              makeWrapper
+              pkg-config
+              gnumake
+              gcc
+              libiconv
+              autoconf
+              automake
+              libtool
+
               rust-components
               rust-analyzer-nightly
               protobuf
@@ -44,6 +58,7 @@
 
 
           RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
+          LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
         };
 
         packages = rec {
@@ -52,7 +67,7 @@
               inherit (cargoToml.package) name version;
               src = ./.;
               cargoLock.lockFile = ./Cargo.lock;
-              nativeBuildInputs = with pkgs; [ protobuf pkgs-stable.opencv pkg-config ];
+              nativeBuildInputs = with pkgs; [ libclang clang protobuf pkgs-stable.opencv pkg-config ];
             };
 
           default = mless;
