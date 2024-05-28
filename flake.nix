@@ -17,8 +17,9 @@
         pkgs = import nixpkgs { inherit system overlays; };
         pkgs-stable = import nixpkgs-stable { inherit system overlays; };
 
-        rust-components = pkgs.fenix.complete.withComponents [ "cargo" "rust-src" "rustc" "rustfmt" ];
+        rust-components = pkgs.fenix.complete.toolchain;
         rust-linux-components = pkgs.targets.x86_64-unknown-linux-gnu.complete.withComponents [ "rust-src" "rustc" ];
+        rustPlatform = pkgs.makeRustPlatform { cargo = rust-components; rustc = rust-components; };
 
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
 
@@ -36,6 +37,7 @@
               makeWrapper
               pkg-config
               gnumake
+              ml
               gcc
               libiconv
               autoconf
@@ -57,12 +59,12 @@
             ++ system-specific-pkgs;
 
 
-          RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
+          RUST_SRC_PATH = "${pkgs.fenix.complete.rust-src}/lib/rustlib/src/rust/";
           LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
         };
 
         packages = rec {
-          mless = pkgs.rustPlatform.buildRustPackage
+          mless = rustPlatform.buildRustPackage
             {
               inherit (cargoToml.package) name version;
               src = ./.;
