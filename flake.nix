@@ -37,7 +37,6 @@
               makeWrapper
               pkg-config
               gnumake
-              ml
               gcc
               libiconv
               autoconf
@@ -61,6 +60,7 @@
 
           RUST_SRC_PATH = "${pkgs.fenix.complete.rust-src}/lib/rustlib/src/rust/";
           LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
+          LD_LIBRARY_PATH = "${pkgs.libclang.lib}/lib";
         };
 
         packages = rec {
@@ -70,6 +70,13 @@
               src = ./.;
               cargoLock.lockFile = ./Cargo.lock;
               nativeBuildInputs = with pkgs; [ libclang clang protobuf pkgs-stable.opencv pkg-config ];
+
+              RUST_SRC_PATH = "${pkgs.fenix.complete.rust-src}/lib/rustlib/src/rust/";
+              LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
+              LD_LIBRARY_PATH = "${pkgs.libclang.lib}/lib";
+              OPENCV_INCLUDE_PATHS = "${pkgs-stable.opencv}/include";
+              OPENCV_LINK_PATHS = "${pkgs-stable.opencv}/lib";
+              OPENCV_LINK_LIBS = "opencv_world470";
             };
 
           default = mless;
