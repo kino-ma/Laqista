@@ -68,15 +68,25 @@
             {
               inherit (cargoToml.package) name version;
               src = ./.;
+
               cargoLock.lockFile = ./Cargo.lock;
-              nativeBuildInputs = with pkgs; [ libclang clang protobuf pkgs-stable.opencv pkg-config ];
+              cargoLock.outputHashes = {
+                "opencv-0.92.0" = "sha256-/QhucAJfwObhX2eO43s114x5Zxf1ZrWqCtUhvt8lN5w=";
+              };
+
+              # Inputs for both of build&runtime environment
+              propagatedBuildInputs = with pkgs; [ libclang libclang.lib clang protobuf pkgs-stable.opencv pkg-config ];
+              buildInputs = with pkgs; [ libclang libclang.lib clang protobuf pkgs-stable.opencv pkg-config ];
+              nativeBuildInputs = with pkgs; [ libclang libclang.lib clang protobuf pkgs-stable.opencv pkg-config ];
 
               RUST_SRC_PATH = "${pkgs.fenix.complete.rust-src}/lib/rustlib/src/rust/";
+              PROTOC = "${pkgs.protobuf}/bin/protoc";
               LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
               LD_LIBRARY_PATH = "${pkgs.libclang.lib}/lib";
-              OPENCV_INCLUDE_PATHS = "${pkgs-stable.opencv}/include";
+              CLANG_PATH = "${pkgs.clang}/bin/clang";
+              OPENCV_INCLUDE_PATHS = "${pkgs-stable.opencv}/include/opencv4";
               OPENCV_LINK_PATHS = "${pkgs-stable.opencv}/lib";
-              OPENCV_LINK_LIBS = "opencv_world470";
+              OPENCV_LINK_LIBS = "+opencv_face";
             };
 
           default = mless;
