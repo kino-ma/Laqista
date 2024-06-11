@@ -60,7 +60,7 @@
 
           RUST_SRC_PATH = "${pkgs.fenix.complete.rust-src}/lib/rustlib/src/rust/";
           LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
-          LD_LIBRARY_PATH = "${pkgs.libclang.lib}/lib";
+          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc pkgs.libclang pkgs-stable.opencv ];
         };
 
         packages = rec {
@@ -76,12 +76,12 @@
 
               # Inputs for both of build&runtime environment
               nativeBuildInputs = with pkgs; [ libclang libclang.lib clang protobuf pkgs-stable.opencv pkg-config ];
-              buildInputs = with pkgs; [ pkgs-stable.opencv stdenv.cc.cc.lib lld ];
+              buildInputs = with pkgs; [ stdenv.cc.cc pkgs-stable.opencv stdenv.cc.cc.lib lld ];
 
               RUST_SRC_PATH = "${pkgs.fenix.complete.rust-src}/lib/rustlib/src/rust/";
               PROTOC = "${pkgs.protobuf}/bin/protoc";
               LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
-              LD_LIBRARY_PATH = "${pkgs.libclang.lib}/lib";
+              LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc ];
               CLANG_PATH = "${pkgs.clang}/bin/clang";
               OPENCV_INCLUDE_PATHS = "${pkgs-stable.opencv}/include/opencv4";
               OPENCV_LINK_PATHS = "${pkgs-stable.opencv}/lib";
