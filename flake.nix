@@ -23,7 +23,7 @@
 
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
 
-        system-specific-pkgs = if system == "x86_64-linux" then [ pkgs.radeontop ] else [];
+        system-specific-pkgs = if system == "x86_64-linux" then [ pkgs.radeontop ] else [ ];
       in
       {
         devShell = pkgs.mkShell {
@@ -54,7 +54,7 @@
               python311Packages.grpcio-tools
               jq
               gnuplot
-            ] 
+            ]
             ++ system-specific-pkgs;
 
 
