@@ -70,9 +70,6 @@
               src = ./.;
 
               cargoLock.lockFile = ./Cargo.lock;
-              cargoLock.outputHashes = {
-                "opencv-0.92.0" = "sha256-/QhucAJfwObhX2eO43s114x5Zxf1ZrWqCtUhvt8lN5w=";
-              };
 
               # Inputs for both of build&runtime environment
               nativeBuildInputs = with pkgs; [ libclang libclang.lib clang protobuf pkgs-stable.opencv pkg-config ];
