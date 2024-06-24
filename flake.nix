@@ -24,6 +24,7 @@
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
 
         system-specific-pkgs = if system == "x86_64-linux" then [ pkgs.radeontop ] else [ ];
+        staticOpencv = ./thirdparty/opencv;
       in
       {
         devShell = pkgs.mkShell {
@@ -48,7 +49,7 @@
               protobuf
               iconv
               grpcurl
-              pkgs-stable.opencv
+              staticOpencv
               pkg-config
               python311
               python311Packages.grpcio-tools
@@ -72,8 +73,8 @@
               cargoLock.lockFile = ./Cargo.lock;
 
               # Inputs for both of build&runtime environment
-              nativeBuildInputs = with pkgs; [ libclang libclang.lib clang protobuf pkgs-stable.opencv pkg-config ];
-              buildInputs = with pkgs; [ stdenv.cc.cc pkgs-stable.opencv stdenv.cc.cc.lib lld ];
+              nativeBuildInputs = with pkgs; [ libclang libclang.lib clang protobuf staticOpencv pkg-config ];
+              buildInputs = with pkgs; [ stdenv.cc.cc staticOpencv stdenv.cc.cc.lib lld ];
 
               RUST_SRC_PATH = "${pkgs.fenix.complete.rust-src}/lib/rustlib/src/rust/";
               PROTOC = "${pkgs.protobuf}/bin/protoc";

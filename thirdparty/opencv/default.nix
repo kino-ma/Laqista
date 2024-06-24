@@ -44,6 +44,8 @@
 , cudaPackages ? { }
 , nvidia-optical-flow-sdk
 
+, buildStatic ? true
+
 , enableLto ? true
 , enableUnfree ? false
 , enableIpp ? false
@@ -450,6 +452,8 @@ effectiveStdenv.mkDerivation {
     "-DOPENCL_LIBRARY=${ocl-icd}/lib/libOpenCL.so"
   ] ++ lib.optionals enablePython [
     "-DOPENCV_SKIP_PYTHON_LOADER=ON"
+  ] ++ lib.optionals buildStatic [
+    "-DBUILD_SHARED_LIBS=OFF"
   ];
 
   postBuild = lib.optionalString enableDocs ''
