@@ -422,6 +422,7 @@ effectiveStdenv.mkDerivation {
           (enableCuda && effectiveStdenv.cc.isClang)
       )
     ))
+    (opencvFlag "ITT" false)
   ] ++ lib.optionals enableCuda [
     "-DCUDA_FAST_MATH=ON"
     "-DCUDA_NVCC_FLAGS=--expt-relaxed-constexpr"
