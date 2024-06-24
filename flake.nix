@@ -73,7 +73,7 @@
               cargoLock.lockFile = ./Cargo.lock;
 
               # Inputs for both of build&runtime environment
-              nativeBuildInputs = with pkgs; [ libclang libclang.lib clang protobuf staticOpencv pkg-config ];
+              nativeBuildInputs = with pkgs; [ zlib ocl-icd libclang libclang.lib clang protobuf staticOpencv pkg-config ];
               buildInputs = with pkgs; [ stdenv.cc.cc staticOpencv stdenv.cc.cc.lib lld ];
 
               RUST_SRC_PATH = "${pkgs.fenix.complete.rust-src}/lib/rustlib/src/rust/";
