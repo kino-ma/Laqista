@@ -251,7 +251,7 @@ effectiveStdenv.mkDerivation {
   outputs = [
     "out"
     "cxxdev"
-    "package_tests"
+    # "package_tests"
   ];
   cudaPropagateToOutput = "cxxdev";
 
