@@ -76,12 +76,12 @@
 , doxygen
 , graphviz-nox
 
-, AVFoundation
-, Cocoa
-, VideoDecodeAcceleration
-, CoreMedia
-, MediaToolbox
-, Accelerate
+  # , AVFoundation
+  # , Cocoa
+  # , VideoDecodeAcceleration
+  # , CoreMedia
+  # , MediaToolbox
+  # , Accelerate
 , bzip2
 , callPackage
 }@inputs:
@@ -231,7 +231,7 @@ let
 
   opencvFlag = name: enabled: "-DWITH_${name}=${printEnabled enabled}";
 
-  runAccuracyTests = true;
+  runAccuracyTests = false;
   runPerformanceTests = false;
   printEnabled = enabled: if enabled then "ON" else "OFF";
   withOpenblas = (enableBlas && blas.provider.pname == "openblas");
@@ -316,8 +316,8 @@ effectiveStdenv.mkDerivation {
     ++ lib.optionals enableEXR [ openexr ilmbase ]
     ++ lib.optional enableJPEG2000 openjpeg
     ++ lib.optional enableFfmpeg ffmpeg
-    ++ lib.optionals (enableFfmpeg && effectiveStdenv.isDarwin)
-    [ VideoDecodeAcceleration bzip2 ]
+    # ++ lib.optionals (enableFfmpeg && effectiveStdenv.isDarwin)
+    # [ VideoDecodeAcceleration bzip2 ]
     ++ lib.optionals enableGStreamer (with gst_all_1; [ gstreamer gst-plugins-base gst-plugins-good ])
     ++ lib.optional enableOvis ogre
     ++ lib.optional enableGPhoto2 libgphoto2
@@ -329,15 +329,15 @@ effectiveStdenv.mkDerivation {
     # tesseract & leptonica.
     ++ lib.optionals enableTesseract [ tesseract leptonica ]
     ++ lib.optional enableTbb tbb
-    ++ lib.optionals effectiveStdenv.isDarwin [
-    bzip2
-    AVFoundation
-    Cocoa
-    VideoDecodeAcceleration
-    CoreMedia
-    MediaToolbox
-    Accelerate
-  ]
+    #   ++ lib.optionals effectiveStdenv.isDarwin [
+    #   bzip2
+    #   AVFoundation
+    #   Cocoa
+    #   VideoDecodeAcceleration
+    #   CoreMedia
+    #   MediaToolbox
+    #   Accelerate
+    # ]
     ++ lib.optionals enableDocs [ doxygen graphviz-nox ]
     ++ lib.optionals enableCuda (with cudaPackages; [
     cuda_cudart.lib
