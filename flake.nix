@@ -24,7 +24,7 @@
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
 
         system-specific-pkgs = if system == "x86_64-linux" then [ pkgs.radeontop ] else [ ];
-        staticOpencv = ./thirdparty/opencv;
+        staticOpencv = pkgs.callPackage ./thirdparty/opencv { };
       in
       {
         devShell = pkgs.mkShell {
@@ -61,7 +61,7 @@
 
           RUST_SRC_PATH = "${pkgs.fenix.complete.rust-src}/lib/rustlib/src/rust/";
           LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
-          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc pkgs.libclang pkgs-stable.opencv ];
+          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc pkgs.libclang staticOpencv ];
         };
 
         packages = rec {
@@ -81,8 +81,8 @@
               LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
               LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc ];
               CLANG_PATH = "${pkgs.clang}/bin/clang";
-              OPENCV_INCLUDE_PATHS = "${pkgs-stable.opencv}/include/opencv4";
-              OPENCV_LINK_PATHS = "${pkgs-stable.opencv}/lib";
+              OPENCV_INCLUDE_PATHS = "${staticOpencv}/include/opencv4";
+              OPENCV_LINK_PATHS = "${staticOpencv}/lib";
               OPENCV_LINK_LIBS = "+opencv_face";
             };
 
