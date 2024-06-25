@@ -384,7 +384,6 @@ effectiveStdenv.mkDerivation {
   cmakeFlags = [
     "-DOPENCV_GENERATE_PKGCONFIG=ON"
     "-DWITH_OPENMP=ON"
-    "-DBUILD_PROTOBUF=OFF"
     "-DProtobuf_PROTOC_EXECUTABLE=${lib.getExe buildPackages.protobuf_21}"
     "-DPROTOBUF_UPDATE_FILES=ON"
     "-DOPENCV_ENABLE_NONFREE=${printEnabled enableUnfree}"
@@ -453,8 +452,10 @@ effectiveStdenv.mkDerivation {
     "-DOPENCL_LIBRARY=${ocl-icd}/lib/libOpenCL.so"
   ] ++ lib.optionals enablePython [
     "-DOPENCV_SKIP_PYTHON_LOADER=ON"
+    "-DPYTHON_EXECUTABLE=${pythonPackages.python}"
   ] ++ lib.optionals buildStatic [
     "-DBUILD_SHARED_LIBS=OFF"
+    "-DOPENCV_FORCE_3RDPARTY_BUILD=ON"
   ];
 
   postBuild = lib.optionalString enableDocs ''
