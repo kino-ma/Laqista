@@ -24,7 +24,6 @@
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
 
         system-specific-pkgs = if system == "x86_64-linux" then [ pkgs.radeontop ] else [ ];
-        staticOpencv = pkgs.callPackage ./thirdparty/opencv { };
       in
       {
         devShell = pkgs.mkShell {
@@ -49,7 +48,7 @@
               protobuf
               iconv
               grpcurl
-              staticOpencv
+              pkgs-stable.opencv
               pkg-config
               python311
               python311Packages.grpcio-tools
@@ -61,7 +60,7 @@
 
           RUST_SRC_PATH = "${pkgs.fenix.complete.rust-src}/lib/rustlib/src/rust/";
           LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
-          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc pkgs.libclang staticOpencv ];
+          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc pkgs.libclang pkgs-stable.opencv ];
         };
 
         packages = rec {
@@ -73,16 +72,16 @@
               cargoLock.lockFile = ./Cargo.lock;
 
               # Inputs for both of build&runtime environment
-              nativeBuildInputs = with pkgs; [ zlib ocl-icd pcre boost gflags protobuf_21 libclang libclang.lib clang protobuf staticOpencv pkg-config ];
-              buildInputs = with pkgs; [ stdenv.cc.cc staticOpencv stdenv.cc.cc.lib lld zlib ocl-icd ];
+              nativeBuildInputs = with pkgs; [ libclang libclang.lib clang protobuf pkgs-stable.opencv pkg-config ];
+              buildInputs = with pkgs; [ stdenv.cc.cc pkgs-stable.opencv stdenv.cc.cc.lib lld ];
 
               RUST_SRC_PATH = "${pkgs.fenix.complete.rust-src}/lib/rustlib/src/rust/";
               PROTOC = "${pkgs.protobuf}/bin/protoc";
               LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
-              LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath ([ pkgs.stdenv.cc.cc ] ++ (with pkgs; [ zlib ocl-icd pcre boost gflags protobuf_21 libclang libclang.lib clang protobuf staticOpencv pkg-config ]));
+              LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc ];
               CLANG_PATH = "${pkgs.clang}/bin/clang";
-              OPENCV_INCLUDE_PATHS = "${staticOpencv}/include/opencv4";
-              OPENCV_LINK_PATHS = "${staticOpencv}/lib";
+              OPENCV_INCLUDE_PATHS = "${pkgs-stable.opencv}/include/opencv4";
+              OPENCV_LINK_PATHS = "${pkgs-stable.opencv}/lib";
               OPENCV_LINK_LIBS = "+opencv_face";
             };
 
