@@ -13,6 +13,7 @@ members = ["apps/hello"]
 opt-level = 0
 
 [features]
+default = ["face"]
 face = ["dep:face"]
 
 [dependencies]
