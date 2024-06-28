@@ -1,9 +1,3 @@
-use opencv::objdetect::CascadeClassifier;
-use opencv::prelude::*;
-use opencv::types::VectorOfRect;
-use opencv::videoio::VideoCapture;
-use opencv::{core, imgproc, objdetect, types, Result};
-
 pub const DEFAULT_IMAGE_FILE: &'static str =
     "/Users/kino-ma/Documents/research/mless/dataset/still-people.png";
 pub const DEFAULT_VIDEO_FILE: &'static str =

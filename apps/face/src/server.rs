@@ -1,9 +1,3 @@
-use opencv::{
-    core::Mat,
-    imgcodecs::{imread, IMREAD_COLOR},
-    videoio::{self, VideoCapture},
-    Result,
-};
 use tonic::{Request, Response, Status};
 
 use crate::{

@@ -1,10 +1,6 @@
 use std::error::Error;
 
 use face::{DetectedFrame, Mp4Detector};
-use opencv::{
-    core, highgui, imgproc,
-    videoio::{self, VideoCapture, VideoCaptureTraitConst, CAP_ANY},
-};
 
 fn main() -> Result<(), Box<dyn Error>> {
     // let maybe_filename = args().nth(1);
