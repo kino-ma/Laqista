@@ -1,115 +1,80 @@
+use std::{borrow::Cow, collections::HashMap, error::Error, path::Path};
+
+use wonnx::{
+    utils::{InputTensor, OutputTensor},
+    Session, SessionError,
+};
+
 pub const DEFAULT_IMAGE_FILE: &'static str =
     "/Users/kino-ma/Documents/research/mless/dataset/still-people.png";
 pub const DEFAULT_VIDEO_FILE: &'static str =
     "/Users/kino-ma/Documents/research/mless/dataset/people.mp4";
 
-pub struct Mp4Detector {
-    frames: Frames,
-    detector: FaceDetector,
-}
-
-impl Mp4Detector {
-    pub fn new(capture: VideoCapture) -> Self {
-        let frames = Frames::new(capture);
-        let detector = FaceDetector::new();
-
-        Self { frames, detector }
-    }
-}
-
-impl Iterator for Mp4Detector {
-    type Item = DetectedFrame;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let frame = self.frames.next()?;
-
-        match self.detector.detect(frame) {
-            Ok(v) => Some(v),
-            _ => None,
-        }
-    }
+pub struct FaceDetector {
+    session: Session,
 }
 
 pub struct DetectedFrame {
-    pub frame: Mat,
-    pub faces: VectorOfRect,
+    pub frame: OutputTensor,
+    pub faces: OutputTensor,
 }
 
-pub struct FaceDetector {
-    classifier: CascadeClassifier,
+pub struct DetectionInputs<'a> {
+    input: &'a [f32],
+}
+
+pub struct DetectionOutputs {
+    scores: Vec<f32>,
+    boxes: Vec<f32>,
 }
 
 impl FaceDetector {
-    pub fn new() -> Self {
-        let xml = core::find_file_def("haarcascades/haarcascade_frontalface_alt.xml").unwrap();
-        let classifier = objdetect::CascadeClassifier::new(&xml).unwrap();
-
-        Self { classifier }
+    pub fn new(session: Session) -> Self {
+        Self { session }
     }
 
-    pub fn detect(&mut self, frame_bgr: Mat) -> Result<DetectedFrame> {
-        let mut gray = Mat::default();
-        imgproc::cvt_color_def(&frame_bgr, &mut gray, imgproc::COLOR_BGR2GRAY)?;
+    pub async fn create_default() -> Result<Self, SessionError> {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("models")
+            .join("face_detector_640.onnx");
 
-        let mut reduced = Mat::default();
-        imgproc::resize(
-            &gray,
-            &mut reduced,
-            core::Size {
-                width: 0,
-                height: 0,
-            },
-            0.25f64,
-            0.25f64,
-            imgproc::INTER_LINEAR,
-        )?;
+        let session = Session::from_path(path).await?;
 
-        let mut faces = types::VectorOfRect::new();
+        Ok(Self::new(session))
+    }
 
-        self.classifier.detect_multi_scale(
-            &reduced,
-            &mut faces,
-            1.1,
-            2,
-            objdetect::CASCADE_SCALE_IMAGE,
-            core::Size {
-                width: 30,
-                height: 30,
-            },
-            core::Size {
-                width: 0,
-                height: 0,
-            },
-        )?;
+    pub async fn detect<'a>(
+        &mut self,
+        input: DetectionInputs<'a>,
+    ) -> Result<DetectionOutputs, Box<dyn Error>> {
+        let cow = Cow::Borrowed(input.input);
+        let tensor = InputTensor::F32(cow);
 
-        Ok(DetectedFrame {
-            faces,
-            frame: frame_bgr,
-        })
+        let mut inputs = HashMap::new();
+        inputs.insert("input".to_owned(), tensor);
+
+        let result = self.session.run(&inputs).await?;
+        let outputs = result.try_into()?;
+
+        Ok(outputs)
     }
 }
 
-struct Frames {
-    capture: VideoCapture,
-}
+impl TryFrom<HashMap<String, OutputTensor>> for DetectionOutputs {
+    type Error = String;
+    fn try_from(mut result: HashMap<String, OutputTensor>) -> Result<Self, Self::Error> {
+        let scores = result
+            .remove("scores")
+            .ok_or("scores not found".to_owned())?;
+        let boxes = result.remove("boxes").ok_or("boxes not found".to_owned())?;
 
-impl Frames {
-    pub fn new(capture: VideoCapture) -> Self {
-        Self { capture }
-    }
-}
-
-impl Iterator for Frames {
-    type Item = Mat;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut frame = Mat::default();
-
-        let read_result = self.capture.read(&mut frame);
-
-        match read_result {
-            Ok(true) => Some(frame),
-            _ => return None,
+        use OutputTensor::F32;
+        match (scores, boxes) {
+            (F32(s), F32(b)) => Ok(Self {
+                scores: s,
+                boxes: b,
+            }),
+            _ => Err("invalid type of scores or boxes".to_owned()),
         }
     }
 }
