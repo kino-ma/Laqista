@@ -20,12 +20,12 @@ pub struct DetectedFrame {
 }
 
 pub struct DetectionInputs<'a> {
-    input: &'a [f32],
+    pub input: &'a [f32],
 }
 
 pub struct DetectionOutputs {
-    scores: Vec<f32>,
-    boxes: Vec<f32>,
+    pub scores: Vec<f32>,
+    pub boxes: Vec<f32>,
 }
 
 impl FaceDetector {
