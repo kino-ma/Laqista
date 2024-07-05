@@ -20,7 +20,6 @@
 
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
 
-        system-specific-pkgs = if system == "x86_64-linux" then [ pkgs.radeontop ] else [ ];
       in
       {
         devShell = pkgs.mkShell {
@@ -53,7 +52,20 @@
               jq
               gnuplot
             ]
-            ++ system-specific-pkgs;
+            ++ pkgs.lib.optionals (system == "x86_64-linux") [ pkgs.radeontop ]
+            ++ pkgs.lib.optionals (pkgs.stdenv.isDarwin) (with pkgs; with darwin.apple_sdk.frameworks; [
+              llvmPackages.libcxxStdenv
+              llvmPackages.libcxxClang
+              llvmPackages.libcxx
+              darwin.libobjc
+              darwin.libiconv
+              libiconv
+              Security
+              SystemConfiguration
+              AppKit
+              WebKit
+              CoreFoundation
+            ]);
 
 
           RUST_SRC_PATH = "${pkgs.fenix.complete.rust-src}/lib/rustlib/src/rust/";
