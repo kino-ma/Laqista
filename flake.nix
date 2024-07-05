@@ -15,8 +15,7 @@
         overlays = [ fenix.overlays.default ];
         pkgs = import nixpkgs { inherit system overlays; };
 
-        rust-components = pkgs.fenix.complete.toolchain;
-        rust-linux-components = pkgs.targets.x86_64-unknown-linux-gnu.complete.withComponents [ "rust-src" "rustc" ];
+        rust-components = pkgs.fenix.minimal.toolchain;
         rustPlatform = pkgs.makeRustPlatform { cargo = rust-components; rustc = rust-components; };
 
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
