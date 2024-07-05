@@ -5,11 +5,6 @@ use wonnx::{
     Session, SessionError,
 };
 
-pub const DEFAULT_IMAGE_FILE: &'static str =
-    "/Users/kino-ma/Documents/research/mless/dataset/still-people.png";
-pub const DEFAULT_VIDEO_FILE: &'static str =
-    "/Users/kino-ma/Documents/research/mless/dataset/people.mp4";
-
 pub struct FaceDetector {
     session: Session,
 }
