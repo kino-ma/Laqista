@@ -18,6 +18,8 @@
         rust-components = pkgs.fenix.minimal.toolchain;
         rustPlatform = pkgs.makeRustPlatform { cargo = rust-components; rustc = rust-components; };
 
+        wonnx = pkgs.callPackage ./thirdparty/wonnx/default.nix { };
+
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
 
       in
@@ -51,6 +53,8 @@
               python311Packages.onnxruntime
               jq
               gnuplot
+
+              wonnx
             ]
             ++ pkgs.lib.optionals (system == "x86_64-linux") [ pkgs.radeontop ]
             ++ pkgs.lib.optionals (pkgs.stdenv.isDarwin) (with pkgs; with darwin.apple_sdk.frameworks; [
