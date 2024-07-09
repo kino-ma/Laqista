@@ -15,8 +15,19 @@
         overlays = [ fenix.overlays.default ];
         pkgs = import nixpkgs { inherit system overlays; };
 
-        rust-components = pkgs.fenix.minimal.toolchain;
-        rustPlatform = pkgs.makeRustPlatform { cargo = rust-components; rustc = rust-components; };
+        rust-components = with pkgs.fenix; combine [
+          default.rustc
+          default.cargo
+          default.rust-std
+          default.rust-docs
+          default.rustfmt-preview
+          default.clippy-preview
+          latest.rust-src
+        ];
+        rustPlatform = pkgs.makeRustPlatform {
+          cargo = rust-components;
+          rustc = rust-components;
+        };
 
         wonnx = pkgs.callPackage ./thirdparty/wonnx/default.nix { };
 
