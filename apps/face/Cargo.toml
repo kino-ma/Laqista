@@ -12,6 +12,7 @@ tokio-util = "0.7.10"
 wonnx = "0.5.1"
 ndarray = "0.15.6"
 image = "0.25.1"
+serde = { version = "1.0.204", features = ["derive"] }
 
 [build-dependencies]
 tonic-build = "0.11"
