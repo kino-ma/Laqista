@@ -1,16 +1,12 @@
-use std::{collections::HashMap, error::Error, path::Path};
+use std::{error::Error, path::Path};
 
-use wonnx::{
-    utils::{InputTensor, OutputTensor},
-    Session as GpuSession, SessionError,
-};
+use wonnx::{Session as GpuSession, SessionError};
+
+use crate::tensor::{Inputs, Outputs};
 
 pub struct Session {
     inner: GpuSession,
 }
-
-pub type Inputs<'a> = HashMap<String, InputTensor<'a>>;
-pub type Outputs = HashMap<String, OutputTensor>;
 
 impl Session {
     pub fn new(inner: GpuSession) -> Self {
