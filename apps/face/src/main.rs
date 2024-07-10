@@ -1,6 +1,11 @@
-use std::{collections::HashMap, error::Error};
+use std::{
+    collections::HashMap,
+    error::Error,
+    io::{BufRead, BufReader},
+    path::Path,
+};
 
-use face::{open_default, Session};
+use face::{open_default, tensor::Inputs, Session};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -12,19 +17,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let frame = open_default();
 
     println!("creating detector");
-    let mut session = Session::from_path(path).await?;
+    let mut session = Session::from_path(model_path).await?;
 
     println!("creating input");
     let input = frame
         .as_slice()
-        .expect("failed to convert input image to slice");
-    let inputs = HashMap::from([("data", input)]);
+        .expect("failed to convert input image to slice")
+        .into();
+    let inputs: Inputs = HashMap::from([("data".to_owned(), input)]);
 
     println!("detecting");
-    let outputs = detector.detect(inputs).await?;
+    let outputs = session.detect(&inputs).await?;
 
-    println!("result: {result:?}");
-    let probabilities = result.into_iter().next().unwrap().1;
+    println!("result: {outputs:?}");
+    let probabilities = outputs.into_iter().next().unwrap().1;
     let probabilities: Vec<f32> = probabilities.try_into().unwrap();
     let mut probabilities = probabilities.iter().enumerate().collect::<Vec<_>>();
     probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());
