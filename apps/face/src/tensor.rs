@@ -4,3 +4,15 @@ use wonnx::utils::{InputTensor, OutputTensor};
 
 pub type Inputs<'a> = HashMap<String, InputTensor<'a>>;
 pub type Outputs = HashMap<String, OutputTensor>;
+
+pub trait AsInputs {
+    fn as_inputs<'a>(&'a self) -> Inputs<'a>;
+}
+
+pub trait TryFromOutputs
+where
+    Self: Sized,
+{
+    type Error: Sized;
+    fn try_from_outputs(outputs: Outputs) -> Result<Self, Self::Error>;
+}
