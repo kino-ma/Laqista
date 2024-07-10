@@ -3,12 +3,8 @@ syntax = "proto3";
 package face;
 
 service Detector {
-  rpc DetectVideo(DetectVideoRequest) returns (DetectVideoReply) {}
   rpc DetectFace(DetectRequest) returns (DetectReply) {}
 }
 
-message DetectRequest { string image_file = 1; }
-message DetectReply { uint64 total_detected = 1; }
-
-message DetectVideoRequest { string video_file = 1; }
-message DetectVideoReply { uint64 total_detected = 1; }
+message DetectRequest { repeated float data = 1; }
+message DetectReply { repeated float squeezenet0_flatten0_reshape0 = 1; }
