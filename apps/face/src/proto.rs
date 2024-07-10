@@ -1,6 +1,6 @@
 use wonnx::utils::{InputTensor, OutputTensor};
 
-use crate::tensor::{AsInputs, Inputs, Outputs, TryFromOutputs};
+use crate::tensor::{AsInputs, Inputs, Outputs};
 
 tonic::include_proto!("face");
 
@@ -12,9 +12,10 @@ impl AsInputs for DetectRequest {
     }
 }
 
-impl TryFromOutputs for DetectReply {
+impl TryFrom<Outputs> for DetectReply {
     type Error = String;
-    fn try_from_outputs(mut outputs: Outputs) -> Result<Self, Self::Error> {
+
+    fn try_from(mut outputs: Outputs) -> Result<Self, Self::Error> {
         let data = outputs
             .remove("squeezenet0_flatten0_reshape0")
             .ok_or("Value not found for key".to_owned())?;
