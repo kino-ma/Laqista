@@ -2,9 +2,7 @@ pub mod detector;
 pub mod server;
 pub mod tensor;
 
-pub mod proto {
-    tonic::include_proto!("face");
-}
+pub mod proto;
 
 use std::path::{Path, PathBuf};
 
