@@ -1,51 +1,32 @@
-use tonic::{Request, Response, Status};
+use std::{error::Error, marker::PhantomData};
 
 use crate::{
-    open_default,
-    proto::{
-        detector_server::Detector, DetectReply, DetectRequest, DetectVideoReply, DetectVideoRequest,
-    },
-    DetectionInputs, DetectionOutputs, FaceDetector,
+    tensor::{AsInputs, Outputs},
+    Session,
 };
 
-pub struct DetectServer {}
+pub struct AbtsractServer<I: AsInputs, O: TryFrom<Outputs>> {
+    session: Session,
+    /// Phantom field for combine I/O types for this struct
+    phantom: PhantomData<(I, O)>,
+}
 
-impl DetectServer {}
-
-#[tonic::async_trait]
-impl Detector for DetectServer {
-    async fn detect_video(
-        &self,
-        _request: Request<DetectVideoRequest>,
-    ) -> Result<Response<DetectVideoReply>, Status> {
-        unimplemented!("MP4 is not supported");
+impl<I: AsInputs, O: TryFrom<Outputs>> AbtsractServer<I, O> {
+    pub fn new(session: Session) -> Self {
+        Self {
+            session,
+            phantom: PhantomData,
+        }
     }
 
-    async fn detect_face(
-        &self,
-        _request: Request<DetectRequest>,
-    ) -> Result<Response<DetectReply>, Status> {
-        let frame = open_default();
-        let mut detector = FaceDetector::create_default().await.map_err(|e| {
-            Status::aborted(format!(
-                "failed to create detector session: {}",
-                Status::aborted(e.to_string())
-            ))
-        })?;
+    pub async fn infer(&mut self, input: I) -> Result<O, Box<dyn Error>>
+    where
+        <O as TryFrom<Outputs>>::Error: std::error::Error + 'static,
+    {
+        let input = input.as_inputs();
+        let output = self.session.detect(&input).await?;
+        let reply = O::try_from(output)?;
 
-        let input = frame
-            .as_slice()
-            .expect("failed to convert input image to slice");
-        let input = DetectionInputs { input };
-
-        let DetectionOutputs { boxes, .. } = detector
-            .detect(input)
-            .await
-            .map_err(|e| Status::aborted(e.to_string()))?;
-
-        let resp = DetectReply {
-            total_detected: boxes.len() as _,
-        };
-        Ok(Response::new(resp))
+        Ok(reply)
     }
 }
