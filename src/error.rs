@@ -6,6 +6,7 @@ use tonic::{transport::Error as TransportError, Status};
 
 #[derive(Debug)]
 pub enum Error {
+    AppInstantiation(String), // FIXME: This error should contain actual error type returned from the application
     Io(io::Error),
     Mac(MacAddressError),
     NoneError,
@@ -34,6 +35,7 @@ impl Into<Status> for Error {
 impl Into<String> for Error {
     fn into(self) -> String {
         match self {
+            AppInstantiation(err) => format!("error instantiating an application: {err}"),
             Io(err) => format!("io error: {err}"),
             Mac(err) => format!("error parsing a mac address: {err}"),
             NoneError => "an empty value occured somewhere".to_owned(),

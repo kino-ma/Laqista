@@ -37,3 +37,9 @@ pub fn open(
         (channels[c] as f32) / 255.0
     })
 }
+
+pub fn model_path() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("models")
+        .join("opt-squeeze.onnx")
+}

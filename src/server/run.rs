@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 use std::pin::pin;
 
+use face::server::FaceServer;
 use futures::future;
 use tokio::sync::{mpsc, Mutex};
 use tokio_util::sync::CancellationToken;
@@ -197,6 +198,7 @@ impl ServerRunner {
 
         let grpc_server = self
             .common_services(daemon)
+            .await?
             .add_service(SchedulerServer::new(scheduler.clone()));
 
         grpc_server.serve(self.socket).await?;
@@ -215,7 +217,7 @@ impl ServerRunner {
     ) -> Result<DaemonState> {
         let reporter_token = self.start_reporter(server.clone(), group.scheduler_info.clone());
 
-        let grpc_router = self.common_services(daemon);
+        let grpc_router = self.common_services(daemon).await?;
 
         grpc_router.serve(self.socket).await?;
 
@@ -235,7 +237,7 @@ impl ServerRunner {
         token
     }
 
-    fn common_services(&self, daemon: ServerDaemon) -> Router {
+    async fn common_services(&self, daemon: ServerDaemon) -> Result<Router> {
         let router = TransportServer::builder()
             .add_service(ServerDaemonServer::new(daemon))
             .add_service(hello::proto::greeter_server::GreeterServer::new(
@@ -245,10 +247,14 @@ impl ServerRunner {
         #[cfg(feature = "face")]
         let router = {
             use face_proto::detector_server::DetectorServer;
-            router.add_service(DetectorServer::new(DetectServer {}))
+            let inner_server = FaceServer::create()
+                .await
+                .map_err(|e| Error::AppInstantiation(e.to_string()))?;
+            let server = DetectorServer::new(inner_server);
+            router.add_service(server)
         };
 
-        router
+        Ok(router)
     }
 
     fn create_daemon(&self, info: ServerInfo, state: DaemonState) -> ServerDaemon {
