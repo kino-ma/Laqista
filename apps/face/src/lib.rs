@@ -1,12 +1,7 @@
-pub mod detector;
-pub mod server;
-pub mod tensor;
-
 pub mod proto;
 
 use std::path::{Path, PathBuf};
 
-pub use detector::*;
 use image::{imageops::FilterType, ImageBuffer, Pixel, Rgb};
 
 pub fn open_default() -> ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<[usize; 4]>> {

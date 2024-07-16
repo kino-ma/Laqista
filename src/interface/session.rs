@@ -2,7 +2,7 @@ use std::{error::Error, path::Path};
 
 use wonnx::{Session as GpuSession, SessionError};
 
-use crate::tensor::{Inputs, Outputs};
+use tensor::{Inputs, Outputs};
 
 pub struct Session {
     inner: GpuSession,
