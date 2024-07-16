@@ -1,4 +1,4 @@
-use mless_core::tensor::{AsInputs, Inputs, Outputs};
+use mless_core::tensor::{AsInputs, Inputs, Outputs, OutputsParseError};
 use wonnx::utils::{InputTensor, OutputTensor};
 
 tonic::include_proto!("face");
@@ -11,20 +11,24 @@ impl AsInputs for DetectRequest {
     }
 }
 
+const SQUEEZENET_OUTPUT: &'static str = "squeezenet0_flatten0_reshape0";
+
 impl TryFrom<Outputs> for DetectReply {
-    type Error = String;
+    type Error = OutputsParseError;
 
     fn try_from(mut outputs: Outputs) -> Result<Self, Self::Error> {
+        use OutputsParseError::*;
+
         let data = outputs
-            .remove("squeezenet0_flatten0_reshape0")
-            .ok_or("Value not found for key".to_owned())?;
+            .remove(SQUEEZENET_OUTPUT)
+            .ok_or(KeyNotFound(SQUEEZENET_OUTPUT))?;
 
         if let OutputTensor::F32(coerced) = data {
             Ok(Self {
                 squeezenet0_flatten0_reshape0: coerced,
             })
         } else {
-            Err("Invalid data type for output".to_owned())
+            Err(InvalidDataType)
         }
     }
 }
