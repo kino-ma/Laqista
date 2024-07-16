@@ -1,8 +1,8 @@
 use std::{error::Error, marker::PhantomData};
 
 use crate::{
+    session::Session,
     tensor::{AsInputs, Outputs},
-    Session,
 };
 
 pub struct AbtsractServer<I: AsInputs, O: TryFrom<Outputs>> {

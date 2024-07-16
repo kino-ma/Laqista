@@ -1741,6 +1741,9 @@ dependencies = [
 [[package]]
 name = "mless-core"
 version = "0.1.0"
+dependencies = [
+ "wonnx",
+]
 
 [[package]]
 name = "multimap"
