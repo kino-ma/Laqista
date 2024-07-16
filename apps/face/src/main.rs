@@ -1,52 +1,59 @@
-use std::error::Error;
-
-use face::{DetectedFrame, Mp4Detector};
-use opencv::{
-    core, highgui, imgproc,
-    videoio::{self, VideoCapture, VideoCaptureTraitConst, CAP_ANY},
+use std::{
+    collections::HashMap,
+    error::Error,
+    io::{BufRead, BufReader},
+    path::Path,
 };
 
-fn main() -> Result<(), Box<dyn Error>> {
-    // let maybe_filename = args().nth(1);
-    // let filename = maybe_filename.as_deref().unwrap_or(DEFAULT_VIDEO_FILE);
+use face::{open_default, tensor::Inputs, Session};
 
-    // let capture = VideoCapture::from_file(filename, videoio::CAP_ANY)?;
-    let capture = VideoCapture::new(0, CAP_ANY).unwrap();
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    let model_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("models")
+        .join("opt-squeeze.onnx");
 
-    let window = "video capture";
-    highgui::named_window_def(window)?;
-    let opened = videoio::VideoCapture::is_opened(&capture)?;
-    if !opened {
-        panic!("Unable to open default camera!");
-    }
+    println!("opening frame");
+    let frame = open_default();
 
-    let detector = Mp4Detector::new(capture);
+    println!("creating detector");
+    let mut session = Session::from_path(model_path).await?;
 
-    for detected_frame in detector {
-        println!("loop");
-        let DetectedFrame { faces, mut frame } = detected_frame;
+    println!("creating input");
+    let input = frame
+        .as_slice()
+        .expect("failed to convert input image to slice")
+        .into();
+    let inputs: Inputs = HashMap::from([("data".to_owned(), input)]);
 
-        println!("faces: {}", faces.len());
+    println!("detecting");
+    let outputs = session.detect(&inputs).await?;
 
-        for face in faces.iter() {
-            println!("face {face:?}");
-            let scaled_face =
-                core::Rect::new(face.x * 4, face.y * 4, face.width * 4, face.height * 4);
-            println!("sealed");
+    println!("result: {outputs:?}");
+    let probabilities = outputs.into_iter().next().unwrap().1;
+    let probabilities: Vec<f32> = probabilities.try_into().unwrap();
+    let mut probabilities = probabilities.iter().enumerate().collect::<Vec<_>>();
+    probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());
 
-            imgproc::rectangle_def(&mut frame, scaled_face, (0, 255, 0).into())?;
-            println!("rected");
-        }
-        println!("inner end");
+    let class_labels = get_imagenet_labels();
 
-        println!("faces {faces:?}");
-        highgui::imshow(window, &frame)?;
-        println!("showed");
-        if highgui::wait_key(10)? > 0 {
-            break;
-        }
-        println!("next");
+    for i in 0..10 {
+        println!(
+            "Infered result: {} of class: {}",
+            class_labels[probabilities[i].0], probabilities[i].0
+        );
+        println!("details: {:?}", probabilities[i]);
     }
 
     Ok(())
+}
+
+fn get_imagenet_labels() -> Vec<String> {
+    // Download the ImageNet class labels, matching SqueezeNet's classes.
+    let labels_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("models")
+        .join("squeeze-labels.txt");
+    let file = BufReader::new(std::fs::File::open(labels_path).unwrap());
+
+    file.lines().map(|line| line.unwrap()).collect()
 }

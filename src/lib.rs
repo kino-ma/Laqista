@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 pub mod cmd;
 pub mod error;
+pub mod interface;
 pub mod monitor;
 pub mod proxy;
 pub mod report;

@@ -1,7 +1,6 @@
 {
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    nixpkgs-stable.url = "github:nixos/nixpkgs/nixos-23.11";
     flake-utils.url = "github:numtide/flake-utils";
 
     fenix = {
@@ -10,20 +9,30 @@
     };
   };
 
-  outputs = { self, nixpkgs, nixpkgs-stable, flake-utils, fenix }:
+  outputs = { self, nixpkgs, flake-utils, fenix }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         overlays = [ fenix.overlays.default ];
         pkgs = import nixpkgs { inherit system overlays; };
-        pkgs-stable = import nixpkgs-stable { inherit system overlays; };
 
-        rust-components = pkgs.fenix.complete.toolchain;
-        rust-linux-components = pkgs.targets.x86_64-unknown-linux-gnu.complete.withComponents [ "rust-src" "rustc" ];
-        rustPlatform = pkgs.makeRustPlatform { cargo = rust-components; rustc = rust-components; };
+        rust-components = with pkgs.fenix; combine [
+          default.rustc
+          default.cargo
+          default.rust-std
+          default.rust-docs
+          default.rustfmt-preview
+          default.clippy-preview
+          latest.rust-src
+        ];
+        rustPlatform = pkgs.makeRustPlatform {
+          cargo = rust-components;
+          rustc = rust-components;
+        };
+
+        wonnx = pkgs.callPackage ./thirdparty/wonnx/default.nix { };
 
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
 
-        system-specific-pkgs = if system == "x86_64-linux" then [ pkgs.radeontop ] else [ ];
       in
       {
         devShell = pkgs.mkShell {
@@ -48,19 +57,35 @@
               protobuf
               iconv
               grpcurl
-              pkgs-stable.opencv
               pkg-config
               python311
               python311Packages.grpcio-tools
+              python311Packages.onnx
+              python311Packages.onnxruntime
               jq
               gnuplot
+
+              wonnx
             ]
-            ++ system-specific-pkgs;
+            ++ pkgs.lib.optionals (system == "x86_64-linux") [ pkgs.radeontop ]
+            ++ pkgs.lib.optionals (pkgs.stdenv.isDarwin) (with pkgs; with darwin.apple_sdk.frameworks; [
+              llvmPackages.libcxxStdenv
+              llvmPackages.libcxxClang
+              llvmPackages.libcxx
+              darwin.libobjc
+              darwin.libiconv
+              libiconv
+              Security
+              SystemConfiguration
+              AppKit
+              WebKit
+              CoreFoundation
+            ]);
 
 
           RUST_SRC_PATH = "${pkgs.fenix.complete.rust-src}/lib/rustlib/src/rust/";
           LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
-          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc pkgs.libclang pkgs-stable.opencv ];
+          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc pkgs.libclang ];
         };
 
         packages = rec {
@@ -72,17 +97,14 @@
               cargoLock.lockFile = ./Cargo.lock;
 
               # Inputs for both of build&runtime environment
-              nativeBuildInputs = with pkgs; [ libclang libclang.lib clang protobuf pkgs-stable.opencv pkg-config ];
-              buildInputs = with pkgs; [ stdenv.cc.cc pkgs-stable.opencv stdenv.cc.cc.lib lld ];
+              nativeBuildInputs = with pkgs; [ libclang libclang.lib clang protobuf pkg-config ];
+              buildInputs = with pkgs; [ stdenv.cc.cc stdenv.cc.cc.lib lld ];
 
               RUST_SRC_PATH = "${pkgs.fenix.complete.rust-src}/lib/rustlib/src/rust/";
               PROTOC = "${pkgs.protobuf}/bin/protoc";
               LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
               LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc ];
               CLANG_PATH = "${pkgs.clang}/bin/clang";
-              OPENCV_INCLUDE_PATHS = "${pkgs-stable.opencv}/include/opencv4";
-              OPENCV_LINK_PATHS = "${pkgs-stable.opencv}/lib";
-              OPENCV_LINK_LIBS = "+opencv_face";
             };
 
           default = mless;
