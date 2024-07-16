@@ -1,4 +1,5 @@
 pub mod proto;
+pub mod server;
 
 use std::path::{Path, PathBuf};
 
