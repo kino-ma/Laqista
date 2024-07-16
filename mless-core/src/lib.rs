@@ -1,3 +1,3 @@
-mod server;
-mod session;
-mod tensor;
+pub mod server;
+pub mod session;
+pub mod tensor;

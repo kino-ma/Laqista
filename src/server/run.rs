@@ -21,7 +21,7 @@ use crate::server::{ServerCommand, StartCommand};
 use super::ServerDaemon;
 
 #[cfg(feature = "face")]
-use face::{proto as face_proto, server::DetectServer};
+use face::proto as face_proto;
 
 pub const DEFAULT_HOST: &'static str = "127.0.0.1:50051";
 

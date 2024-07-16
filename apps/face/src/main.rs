@@ -5,7 +5,8 @@ use std::{
     path::Path,
 };
 
-use face::{open_default, tensor::Inputs, Session};
+use face::open_default;
+use mless_core::{session::Session, tensor::Inputs};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {

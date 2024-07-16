@@ -1,11 +1,10 @@
+use mless_core::tensor::{AsInputs, Inputs, Outputs};
 use wonnx::utils::{InputTensor, OutputTensor};
-
-use crate::tensor::{AsInputs, Inputs, Outputs};
 
 tonic::include_proto!("face");
 
 impl AsInputs for DetectRequest {
-    fn as_inputs<'a>(&'a self) -> crate::tensor::Inputs<'a> {
+    fn as_inputs<'a>(&'a self) -> Inputs<'a> {
         let data = (&self.data).into();
         let input = InputTensor::F32(data);
         Inputs::from([("data".to_owned(), input)])

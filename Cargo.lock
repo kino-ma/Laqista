@@ -758,6 +758,7 @@ name = "face"
 version = "0.1.0"
 dependencies = [
  "image",
+ "mless-core",
  "ndarray",
  "prost",
  "prost-types",
