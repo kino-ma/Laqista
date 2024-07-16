@@ -1,9 +1,13 @@
+use std::sync::Arc;
+
 use mless_core::server::AbtsractServer;
+use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
 
 use crate::proto::{detector_server::Detector, DetectReply, DetectRequest};
 
-pub struct FaceServer(AbtsractServer<DetectRequest, DetectReply>);
+type ServerPointer = Arc<Mutex<AbtsractServer<DetectRequest, DetectReply>>>;
+pub struct FaceServer(ServerPointer);
 
 #[tonic::async_trait]
 impl Detector for FaceServer {
@@ -11,11 +15,16 @@ impl Detector for FaceServer {
         &self,
         request: Request<DetectRequest>,
     ) -> Result<Response<DetectReply>, Status> {
-        let out = self
+        let inner_request = request.into_inner();
+
+        let reply = self
             .0
-            .infer(input)
+            .lock()
+            .await
+            .infer(inner_request)
             .await
             .map_err(|e| Status::aborted(format!("could not run inference: {e}")))?;
-        Ok(())
+
+        Ok(Response::new(reply))
     }
 }
