@@ -6,10 +6,10 @@ use tonic::{Request, Response, Status};
 
 use crate::{
     model_path,
-    proto::{detector_server::Detector, DetectReply, DetectRequest},
+    proto::{detector_server::Detector, InferReply, InferRequest},
 };
 
-type ServerPointer = Arc<Mutex<AbtsractServer<DetectRequest, DetectReply>>>;
+type ServerPointer = Arc<Mutex<AbtsractServer<InferRequest, InferReply>>>;
 pub struct FaceServer(ServerPointer);
 
 impl FaceServer {
@@ -25,10 +25,7 @@ impl FaceServer {
 
 #[tonic::async_trait]
 impl Detector for FaceServer {
-    async fn detect_face(
-        &self,
-        request: Request<DetectRequest>,
-    ) -> Result<Response<DetectReply>, Status> {
+    async fn infer(&self, request: Request<InferRequest>) -> Result<Response<InferReply>, Status> {
         let inner_request = request.into_inner();
 
         let reply = self
