@@ -758,6 +758,7 @@ name = "face"
 version = "0.1.0"
 dependencies = [
  "image",
+ "mless-core",
  "ndarray",
  "prost",
  "prost-types",
@@ -1736,6 +1737,13 @@ dependencies = [
  "tonic-build",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "mless-core"
+version = "0.1.0"
+dependencies = [
+ "wonnx",
 ]
 
 [[package]]

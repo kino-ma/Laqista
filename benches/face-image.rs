@@ -94,16 +94,12 @@ async fn run_scheduled(
     // let mut app_client = app::proto::greeter_client::GreeterClient::connect(addr)
     //     .await
     //     .unwrap();
-    let request = DetectRequest {
-        image_file: "".to_owned(),
-    };
+    let request = DetectRequest { data: vec![] };
     detector_client.detect_face(request).await.unwrap();
 }
 
 async fn run_direct(detector_client: &mut DetectorClient<Channel>) {
-    let request = DetectRequest {
-        image_file: "".to_owned(),
-    };
+    let request = DetectRequest { data: vec![] };
     detector_client.detect_face(request).await.unwrap();
 }
 

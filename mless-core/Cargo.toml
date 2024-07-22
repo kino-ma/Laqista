@@ -1,0 +1,7 @@
+[package]
+name = "mless-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+wonnx = "0.5.1"
