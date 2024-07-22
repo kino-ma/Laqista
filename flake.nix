@@ -65,6 +65,8 @@
               jq
               gnuplot
 
+              cargo-generate
+              wasm-pack
               wonnx
             ]
             ++ pkgs.lib.optionals (system == "x86_64-linux") [ pkgs.radeontop ]

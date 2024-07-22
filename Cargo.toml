@@ -5,7 +5,7 @@ edition = "2021"
 
 [workspace]
 # members = ["apps/*"]
-members = ["apps/hello", "mless-core"]
+members = [ "apps/face-wasm", "apps/hello", "mless-core"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
