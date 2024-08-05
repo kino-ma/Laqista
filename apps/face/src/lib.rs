@@ -8,7 +8,7 @@ use image::{imageops::FilterType, ImageBuffer, Pixel, Rgb};
 pub fn open_default() -> ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<[usize; 4]>> {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../")
-        .join("data/still-people.png");
+        .join("data/pelican.jpeg");
 
     open(path)
 }
