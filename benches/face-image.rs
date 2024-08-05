@@ -3,7 +3,7 @@ use std::sync::Arc;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
 use face::proto::detector_client::DetectorClient;
-use face::proto::DetectRequest;
+use face::proto::InferRequest;
 use futures::lock::Mutex;
 use tokio::runtime::Runtime;
 use tonic::transport::Channel;
@@ -94,13 +94,13 @@ async fn run_scheduled(
     // let mut app_client = app::proto::greeter_client::GreeterClient::connect(addr)
     //     .await
     //     .unwrap();
-    let request = DetectRequest { data: vec![] };
-    detector_client.detect_face(request).await.unwrap();
+    let request = InferRequest { data: vec![] };
+    detector_client.infer(request).await.unwrap();
 }
 
 async fn run_direct(detector_client: &mut DetectorClient<Channel>) {
-    let request = DetectRequest { data: vec![] };
-    detector_client.detect_face(request).await.unwrap();
+    let request = InferRequest { data: vec![] };
+    detector_client.infer(request).await.unwrap();
 }
 
 criterion_group!(benches, bench_face_image);
