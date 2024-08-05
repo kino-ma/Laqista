@@ -6,7 +6,9 @@ use tonic::{Request, Response, Status};
 
 use crate::{
     model_path,
-    proto::{detector_server::Detector, InferReply, InferRequest},
+    proto::{
+        detector_server::Detector, DetectionReply, DetectionRequest, InferReply, InferRequest,
+    },
 };
 
 type ServerPointer = Arc<Mutex<AbtsractServer<InferRequest, InferReply>>>;
@@ -37,5 +39,12 @@ impl Detector for FaceServer {
             .map_err(|e| Status::aborted(format!("could not run inference: {e}")))?;
 
         Ok(Response::new(reply))
+    }
+
+    async fn run_detection(
+        &self,
+        request: Request<DetectionRequest>,
+    ) -> Result<Response<DetectionReply>, Status> {
+        todo!()
     }
 }
