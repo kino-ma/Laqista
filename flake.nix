@@ -30,6 +30,7 @@
         };
 
         wonnx = pkgs.callPackage ./thirdparty/wonnx/default.nix { };
+        ultralytics = pkgs.callPackage ./thirdparty/ultralytics/default.nix { };
 
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
 
@@ -68,6 +69,7 @@
               cargo-generate
               wasm-pack
               wonnx
+              (builtins.trace ultralytics.outPath ultralytics)
             ]
             ++ pkgs.lib.optionals (system == "x86_64-linux") [ pkgs.radeontop ]
             ++ pkgs.lib.optionals (pkgs.stdenv.isDarwin) (with pkgs; with darwin.apple_sdk.frameworks; [
