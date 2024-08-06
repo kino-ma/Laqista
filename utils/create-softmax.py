@@ -2,22 +2,16 @@ import sys
 
 import onnx
 
-softmax = onnx.helper.make_node(
-    "Softmax", inputs=["squeezenet0_flatten0_reshape0"], outputs=["probabilities"]
-)
+softmax = onnx.helper.make_node("Softmax", inputs=["X"], outputs=["Y"])
 
-squeezenet0_flatten0_reshape0 = onnx.helper.make_tensor_value_info(
-    "squeezenet0_flatten0_reshape0", onnx.TensorProto.FLOAT, shape=[1, 1000]
-)
-probabilities = onnx.helper.make_tensor_value_info(
-    "probabilities", onnx.TensorProto.FLOAT, shape=[1, 1000]
-)
+X = onnx.helper.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=[1, 1000])
+Y = onnx.helper.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=[1, 1000])
 
 graph = onnx.helper.make_graph(
     [softmax],
     "softmax",
-    inputs=[squeezenet0_flatten0_reshape0],
-    outputs=[probabilities],
+    inputs=[X],
+    outputs=[Y],
 )
 
 model = onnx.helper.make_model(graph)
