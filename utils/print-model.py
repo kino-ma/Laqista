@@ -1,11 +1,17 @@
 import sys
 
 import onnx
+
 import onnxruntime
 
 model = onnx.load(sys.argv[1])
 onnx.checker.check_model(model)
 
+print(f"Model Version:\t{model.model_version}")
+print(f"IR Version:\t{model.ir_version}")
+# print(f"Serialized:\n{model.SerializeToString()}")
+
+print("Graph:")
 print(onnx.helper.printable_graph(model.graph))
 
 session = onnxruntime.InferenceSession(sys.argv[1])
