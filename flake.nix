@@ -1,6 +1,7 @@
 {
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    nixpkgs-761000d.url = "github:nixos/nixpkgs/761000dcedb985c798ef08c74ce54deb6d7c989f";
     flake-utils.url = "github:numtide/flake-utils";
 
     fenix = {
@@ -9,11 +10,12 @@
     };
   };
 
-  outputs = { self, nixpkgs, flake-utils, fenix }:
+  outputs = { self, nixpkgs, nixpkgs-761000d, flake-utils, fenix }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         overlays = [ fenix.overlays.default ];
         pkgs = import nixpkgs { inherit system overlays; };
+        pkgs-761000d = import nixpkgs-761000d { inherit system overlays; };
 
         rust-components = with pkgs.fenix; combine [
           default.rustc
@@ -31,6 +33,7 @@
 
         wonnx = pkgs.callPackage ./thirdparty/wonnx/default.nix { };
 
+        onnx-12 = pkgs-761000d.python310Packages.onnx;
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
 
       in
@@ -60,7 +63,7 @@
               pkg-config
               python311
               python311Packages.grpcio-tools
-              python311Packages.onnx
+              onnx-12
               python311Packages.onnxruntime
               jq
               gnuplot
