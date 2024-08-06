@@ -13,4 +13,4 @@ converted = version_converter.convert_version(model, onnx_ir_version)
 onnx.checker.check_model(converted)
 
 onnx.save(converted, output_path)
-print(f"Saved Softmax graph to {output_path}")
+print(f"Saved Up/Downgraded graph to {output_path}")
