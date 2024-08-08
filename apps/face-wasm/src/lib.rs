@@ -39,13 +39,14 @@ pub fn main(image_png: &[u8]) -> DetectionResult {
     let mut probabilities = probabilities.iter().enumerate().collect::<Vec<_>>();
     probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());
 
-    let class_labels = get_imagenet_labels();
-
-    for i in 0..10 {
-        println!(
-            "Infered result: {} of class: {}",
-            class_labels[probabilities[i].0], probabilities[i].0
-        );
-        println!("details: {:?}", probabilities[i]);
-    }
+    todo!("See comment below");
+    // let class_labels = get_imagenet_labels();
+    //
+    // for i in 0..10 {
+    //     println!(
+    //         "Infered result: {} of class: {}",
+    //         class_labels[probabilities[i].0], probabilities[i].0
+    //     );
+    //     println!("details: {:?}", probabilities[i]);
+    // }
 }
