@@ -15,7 +15,7 @@ onnx.checker.check_model(softmax)
 merged = onnx.compose.merge_models(
     model,
     softmax,
-    io_map=[("squeezenet0_flatten0_reshape0", "squeezenet0_flatten0_reshape0")],
+    io_map=[("972", "X")],
 )
 
 onnx.save(merged, output_path)
