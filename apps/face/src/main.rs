@@ -5,14 +5,12 @@ use std::{
     path::Path,
 };
 
-use face::open_default;
+use face::{model_path, open_default};
 use mless_core::{session::Session, tensor::Inputs};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let model_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("models")
-        .join("opt-squeeze.onnx");
+    let model_path = model_path();
 
     println!("opening frame");
     let frame = open_default();
@@ -40,8 +38,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     for i in 0..10 {
         println!(
-            "Infered result: {} of class: {}",
-            class_labels[probabilities[i].0], probabilities[i].0
+            "Infered result: '{}' of class: {} = {}%",
+            class_labels[probabilities[i].0], probabilities[i].0, probabilities[i].1
         );
         println!("details: {:?}", probabilities[i]);
     }

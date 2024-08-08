@@ -44,6 +44,9 @@ pub fn open(
 
 pub fn model_path() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("data")
         .join("models")
-        .join("opt-squeeze.onnx")
+        .join("resnet50_gn_Opset16.onnx")
 }
