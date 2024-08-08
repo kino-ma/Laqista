@@ -10,6 +10,7 @@ onnx.checker.check_model(model)
 print(f"Model Version:\t{model.model_version}")
 print(f"IR Version:\t{model.ir_version}")
 # print(f"Serialized:\n{model.SerializeToString()}")
+print(f"opset: {model.opset_import}")
 
 print("Graph:")
 print(onnx.helper.printable_graph(model.graph))
