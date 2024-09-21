@@ -14,8 +14,16 @@ use crate::{
     },
 };
 
-type ServerPointer = Arc<Mutex<AbtsractServer<InferRequest, InferReply>>>;
-pub struct FaceServer(ServerPointer, Module);
+// type ServerPointer = Arc<Mutex<AbtsractServer<InferRequest, InferReply>>>;
+pub struct FaceServer {
+    // inner: ServerPointer
+    wasm: Arc<Mutex<WasmInstance>>,
+}
+
+struct WasmInstance {
+    store: Store,
+    module: Module,
+}
 
 static WASM: &'static [u8] =
     include_bytes!("../../../target/wasm32-unknown-unknown/release/face_wasm.wasm");
@@ -23,60 +31,58 @@ static WASM: &'static [u8] =
 impl FaceServer {
     pub async fn create() -> Result<Self, Box<dyn Error>> {
         let compiler = Cranelift::default();
+
         let mut store = Store::new(compiler);
         let module = Module::new(&store, WASM)?;
 
-        let imports: Vec<_> = module.imports().collect();
-        println!("Imports: {imports:?}");
-        let exports: Vec<_> = module.exports().collect();
-        println!("Imports: {exports:?}");
+        let wasm = WasmInstance { store, module };
+        let wasm = Arc::new(Mutex::new(wasm));
 
-        struct MyEnv;
-        let env = FunctionEnv::new(&mut store, MyEnv);
-        fn f(_env: FunctionEnvMut<MyEnv>, fs: i32) -> i32 {
-            fs.into()
-        }
-        let f_typed = Function::new_typed_with_env(&mut store, &env, f);
-
-        let import_object = imports! {
-            "env" => {
-                "infer" => f_typed,
-            },
-        };
-        let instance = Instance::new(&mut store, &module, &import_object)?;
-        let main = instance.exports.get_function("main")?;
-        let params = &[Value::I32(1)];
-        main.call(&mut store, params)?;
-
-        let path = model_path();
-        let session = Session::from_path(path).await?;
-        let server = AbtsractServer::new(session);
-        let ptr = Arc::new(Mutex::new(server));
-
-        Ok(Self(ptr, module))
+        Ok(Self { wasm })
     }
 }
 
 #[tonic::async_trait]
 impl Detector for FaceServer {
     async fn infer(&self, request: Request<InferRequest>) -> Result<Response<InferReply>, Status> {
-        let inner_request = request.into_inner();
+        unimplemented!("Model isn't executed right now")
+        // let inner_request = request.into_inner();
 
-        let reply = self
-            .0
-            .lock()
-            .await
-            .infer(inner_request)
-            .await
-            .map_err(|e| Status::aborted(format!("could not run inference: {e}")))?;
+        // let reply = self
+        //     .0
+        //     .lock()
+        //     .await
+        //     .infer(inner_request)
+        //     .await
+        //     .map_err(|e| Status::aborted(format!("could not run inference: {e}")))?;
 
-        Ok(Response::new(reply))
+        // Ok(Response::new(reply))
     }
 
     async fn run_detection(
         &self,
         _request: Request<DetectionRequest>,
     ) -> Result<Response<DetectionReply>, Status> {
-        todo!("wasm を実行する service")
+        let mut wasm = self.wasm.lock().await;
+        let module = wasm.module.clone();
+
+        let import_object = imports! {};
+        let instance = Instance::new(&mut wasm.store, &module, &import_object)
+            .map_err(|e| Status::aborted(format!("Failed to create WebAssembly instance")))?;
+
+        let main = instance.exports.get_function("main").map_err(|e| {
+            Status::aborted(format!("Failed to get expported WebAssembly function: {e}"))
+        })?;
+
+        let params = &[Value::I32(1)];
+        main.call(&mut wasm.store, params)
+            .map_err(|e| Status::aborted(format!("Failed to call WebAssembly function: {e}")))?;
+
+        let reply = DetectionReply {
+            label: "EXECUTED!".to_owned(),
+            probability: 1.0,
+        };
+
+        Ok(Response::new(reply))
     }
 }
