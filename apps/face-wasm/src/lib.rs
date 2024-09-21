@@ -18,6 +18,7 @@ const _IMAGE_HEIGHT: usize = 224;
 #[no_mangle]
 pub extern "C" fn main(ptr: i32, len: i32) -> i32 {
     let buffer: &[u8] = unsafe { slice::from_raw_parts(ptr as _, len as _) };
+    (buffer.first().unwrap() + buffer.last().unwrap()) as _
 
     // let buffer = image::load_from_memory(&[1])
     //     .expect("failed to load PNG file")
@@ -51,7 +52,4 @@ pub extern "C" fn main(ptr: i32, len: i32) -> i32 {
     //     );
     //     println!("details: {:?}", probabilities[i]);
     // }
-
-    i32::from_le_bytes(buffer[0..=3].try_into().unwrap())
-    // 42
 }
