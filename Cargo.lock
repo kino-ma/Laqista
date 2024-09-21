@@ -1105,6 +1105,7 @@ dependencies = [
 name = "face"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "image",
  "mless-core",
  "ndarray",
