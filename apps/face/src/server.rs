@@ -12,7 +12,7 @@ use crate::proto::{
 // type ServerPointer = Arc<Mutex<AbtsractServer<InferRequest, InferReply>>>;
 pub struct FaceServer {
     // inner: ServerPointer
-    wasm: Arc<Mutex<WasmInstance>>,
+    // wasm: Arc<Mutex<WasmInstance>>,
 }
 
 struct WasmInstance {
@@ -25,15 +25,16 @@ static WASM: &'static [u8] =
 
 impl FaceServer {
     pub async fn create() -> Result<Self, Box<dyn Error>> {
-        let compiler = Cranelift::default();
+        // let compiler = Cranelift::default();
 
-        let store = Store::new(compiler);
-        let module = Module::new(&store, WASM)?;
+        // let store = Store::new(compiler);
+        // let module = Module::new(&store, WASM)?;
 
-        let wasm = WasmInstance { store, module };
-        let wasm = Arc::new(Mutex::new(wasm));
+        // let wasm = WasmInstance { store, module };
+        // let wasm = Arc::new(Mutex::new(wasm));
 
-        Ok(Self { wasm })
+        // Ok(Self { wasm })
+        Ok(Self {})
     }
 }
 
@@ -58,11 +59,18 @@ impl Detector for FaceServer {
         &self,
         request: Request<DetectionRequest>,
     ) -> Result<Response<DetectionReply>, Status> {
-        let mut wasm = self.wasm.lock().await;
-        let module = wasm.module.clone();
+        // FIXME: It would be better performant if we could instantiate the wasm module only once.
+        //        However, if we reuse the instance for every request, it errors out with message
+        //        saying "failed to allocate memory".
+        //        Instead, we instantiate the module from compiler, for each request.
+        let compiler = Cranelift::default();
+
+        let mut store = Store::new(compiler);
+        let module = Module::new(&store, WASM)
+            .map_err(|e| Status::aborted(format!("Failed to create WebAssembly module: {e}")))?;
 
         let import_object = imports! {};
-        let instance = Instance::new(&mut wasm.store, &module, &import_object)
+        let instance = Instance::new(&mut store, &module, &import_object)
             .map_err(|e| Status::aborted(format!("Failed to create WebAssembly instance: {e}")))?;
 
         let main = instance.exports.get_function("main").map_err(|e| {
@@ -72,7 +80,7 @@ impl Detector for FaceServer {
             Status::aborted(format!("Failed to get expported WebAssembly memory: {e}"))
         })?;
 
-        let view = memory.view(&mut wasm.store);
+        let view = memory.view(&mut store);
         let mut buffer = Vec::new();
         request
             .into_inner()
@@ -86,7 +94,7 @@ impl Detector for FaceServer {
         let params = &[Value::I32(0), Value::I32(buffer.len() as _)];
 
         let out = main
-            .call(&mut wasm.store, params)
+            .call(&mut store, params)
             .map_err(|e| Status::aborted(format!("Failed to call WebAssembly function: {e}")))?;
 
         match out[0] {
