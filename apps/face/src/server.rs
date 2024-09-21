@@ -83,9 +83,16 @@ impl Detector for FaceServer {
             Status::aborted(format!("Failed to write request data to wasm memory: {e}"))
         })?;
 
-        let params = &[Value::I32(1)];
-        main.call(&mut wasm.store, params)
+        let params = &[Value::I32(0), Value::I32(buffer.len() as _)];
+
+        let out = main
+            .call(&mut wasm.store, params)
             .map_err(|e| Status::aborted(format!("Failed to call WebAssembly function: {e}")))?;
+
+        match out[0] {
+            Value::I32(v) => println!("Returned: {v}"),
+            _ => println!("Unknown value type"),
+        }
 
         let reply = DetectionReply {
             label: "EXECUTED!".to_owned(),

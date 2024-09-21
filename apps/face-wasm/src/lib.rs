@@ -4,19 +4,21 @@
 //     fn infer(squeezenet0_flatten0_reshape0: &[f32]) -> Vec<f32>;
 // }
 
-use image::imageops::FilterType;
+use core::slice;
 
 pub struct DetectionResult {
-    label: String,
-    probability: f32,
+    _label: String,
+    _probability: f32,
 }
 
-const IMAGE_WIDTH: usize = 224;
-const IMAGE_HEIGHT: usize = 224;
+const _IMAGE_WIDTH: usize = 224;
+const _IMAGE_HEIGHT: usize = 224;
 
 // pub fn main(image_png: &[u8]) -> DetectionResult {
 #[no_mangle]
-pub extern "C" fn main(num: i32) -> i32 {
+pub extern "C" fn main(ptr: i32, len: i32) -> i32 {
+    let buffer: &[u8] = unsafe { slice::from_raw_parts(ptr as _, len as _) };
+
     // let buffer = image::load_from_memory(&[1])
     //     .expect("failed to load PNG file")
     //     .resize_to_fill(IMAGE_WIDTH as _, IMAGE_HEIGHT as _, FilterType::Nearest);
@@ -50,5 +52,5 @@ pub extern "C" fn main(num: i32) -> i32 {
     //     println!("details: {:?}", probabilities[i]);
     // }
 
-    num + 42
+    i32::from_le_bytes(buffer.try_into().unwrap())
 }
