@@ -90,14 +90,11 @@ impl Detector for FaceServer {
             .call(&mut store, params)
             .map_err(|e| Status::aborted(format!("Failed to call WebAssembly function: {e}")))?;
 
-        match out[0] {
-            Value::I32(v) => println!("Returned: {v}"),
-            _ => println!("Unknown value type"),
-        }
+        let value = out[0].unwrap_f32();
 
         let reply = DetectionReply {
             label: "EXECUTED!".to_owned(),
-            probability: 1.0,
+            probability: value,
         };
 
         Ok(Response::new(reply))

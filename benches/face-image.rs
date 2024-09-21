@@ -119,28 +119,28 @@ pub fn bench_wasm(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("Face wasm");
 
-    group.bench_with_input(
-        BenchmarkId::new("face wasm scheduled", "<client>"),
-        &(arc_client.clone(), arc_app_client.clone()),
-        |b, (client, app_client)| {
-            b.to_async(Runtime::new().unwrap()).iter(|| async {
-                let mut client = client.lock().await;
-                let mut app_client = app_client.lock().await;
-                run_wasm_scheduled(&mut client, &mut app_client, &deployment_id, &[2, 40]).await
-            })
-        },
-    );
+    // group.bench_with_input(
+    //     BenchmarkId::new("face wasm scheduled", "<client>"),
+    //     &(arc_client.clone(), arc_app_client.clone()),
+    //     |b, (client, app_client)| {
+    //         b.to_async(Runtime::new().unwrap()).iter(|| async {
+    //             let mut client = client.lock().await;
+    //             let mut app_client = app_client.lock().await;
+    //             run_wasm_scheduled(&mut client, &mut app_client, &deployment_id, &[2, 40]).await
+    //         })
+    //     },
+    // );
 
-    group.bench_with_input(
-        BenchmarkId::new("face wasm direct", "<client>"),
-        &arc_app_client,
-        |b, app_client| {
-            b.to_async(Runtime::new().unwrap()).iter(|| async {
-                let mut app_client = app_client.lock().await;
-                run_wasm_direct(&mut app_client, &[2, 40]).await
-            })
-        },
-    );
+    // group.bench_with_input(
+    //     BenchmarkId::new("face wasm direct", "<client>"),
+    //     &arc_app_client,
+    //     |b, app_client| {
+    //         b.to_async(Runtime::new().unwrap()).iter(|| async {
+    //             let mut app_client = app_client.lock().await;
+    //             run_wasm_direct(&mut app_client, &[2, 40]).await
+    //         })
+    //     },
+    // );
 
     group.bench_with_input(
         BenchmarkId::new("face wasm scheduled full image", "<client>"),
