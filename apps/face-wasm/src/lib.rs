@@ -17,9 +17,9 @@ const IMAGE_HEIGHT: usize = 224;
 // pub fn main(image_png: &[u8]) -> DetectionResult {
 #[no_mangle]
 pub extern "C" fn main(num: i32) -> i32 {
-    let buffer = image::load_from_memory(&[1])
-        .expect("failed to load PNG file")
-        .resize_to_fill(IMAGE_WIDTH as _, IMAGE_HEIGHT as _, FilterType::Nearest);
+    // let buffer = image::load_from_memory(&[1])
+    //     .expect("failed to load PNG file")
+    //     .resize_to_fill(IMAGE_WIDTH as _, IMAGE_HEIGHT as _, FilterType::Nearest);
 
     // let array = ndarray::Array::from_shape_fn((1, 3, IMAGE_WIDTH, IMAGE_HEIGHT), |(_, c, j, i)| {
     //     let pixel = buffer.get_pixel(i as u32, j as u32);
