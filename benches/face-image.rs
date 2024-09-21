@@ -12,6 +12,8 @@ use mless::proto::scheduler_client::SchedulerClient;
 use mless::proto::{DeployRequest, Deployment, LookupRequest};
 use mless::*;
 
+static JPEG: &'static [u8] = include_bytes!("../data/pelican.jpeg");
+
 pub fn bench_face_image(c: &mut Criterion) {
     let addr = "http://127.0.0.1:50051";
 
@@ -157,13 +159,15 @@ async fn run_wasm_scheduled(
     //     .await
     //     .unwrap();
     let request = DetectionRequest {
-        image_png: vec![0u8, 0, 0, 1],
+        image_png: JPEG.to_vec(),
     };
     detector_client.run_detection(request).await.unwrap();
 }
 
 async fn run_wasm_direct(detector_client: &mut DetectorClient<Channel>) {
-    let request = DetectionRequest { image_png: vec![] };
+    let request = DetectionRequest {
+        image_png: JPEG.to_vec(),
+    };
     detector_client.run_detection(request).await.unwrap();
 }
 criterion_group!(benches, bench_face_image, bench_wasm);
