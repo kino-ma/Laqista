@@ -1,7 +1,6 @@
-use std::{error::Error, sync::Arc};
+use std::error::Error;
 
 use prost::Message;
-use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
 use wasmer::{imports, Cranelift, Instance, Module, Store, Value};
 
@@ -12,12 +11,6 @@ use crate::proto::{
 // type ServerPointer = Arc<Mutex<AbtsractServer<InferRequest, InferReply>>>;
 pub struct FaceServer {
     // inner: ServerPointer
-    // wasm: Arc<Mutex<WasmInstance>>,
-}
-
-struct WasmInstance {
-    store: Store,
-    module: Module,
 }
 
 static WASM: &'static [u8] =

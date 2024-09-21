@@ -53,4 +53,5 @@ pub extern "C" fn main(ptr: i32, len: i32) -> i32 {
     // }
 
     i32::from_le_bytes(buffer[0..=3].try_into().unwrap())
+    // 42
 }
