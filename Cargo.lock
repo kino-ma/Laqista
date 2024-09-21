@@ -1122,11 +1122,6 @@ dependencies = [
 [[package]]
 name = "face-wasm"
 version = "0.1.0"
-dependencies = [
- "image",
- "ndarray",
- "wasm-bindgen",
-]
 
 [[package]]
 name = "fallible-iterator"
