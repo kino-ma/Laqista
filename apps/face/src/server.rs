@@ -1,17 +1,11 @@
 use std::{error::Error, sync::Arc};
 
-use mless_core::{server::AbtsractServer, session::Session};
 use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
-use wasmer::{
-    imports, Cranelift, Function, FunctionEnv, FunctionEnvMut, Instance, Module, Store, Value,
-};
+use wasmer::{imports, Cranelift, Instance, Module, Store, Value};
 
-use crate::{
-    model_path,
-    proto::{
-        detector_server::Detector, DetectionReply, DetectionRequest, InferReply, InferRequest,
-    },
+use crate::proto::{
+    detector_server::Detector, DetectionReply, DetectionRequest, InferReply, InferRequest,
 };
 
 // type ServerPointer = Arc<Mutex<AbtsractServer<InferRequest, InferReply>>>;
@@ -32,7 +26,7 @@ impl FaceServer {
     pub async fn create() -> Result<Self, Box<dyn Error>> {
         let compiler = Cranelift::default();
 
-        let mut store = Store::new(compiler);
+        let store = Store::new(compiler);
         let module = Module::new(&store, WASM)?;
 
         let wasm = WasmInstance { store, module };
@@ -44,7 +38,7 @@ impl FaceServer {
 
 #[tonic::async_trait]
 impl Detector for FaceServer {
-    async fn infer(&self, request: Request<InferRequest>) -> Result<Response<InferReply>, Status> {
+    async fn infer(&self, _request: Request<InferRequest>) -> Result<Response<InferReply>, Status> {
         unimplemented!("Model isn't executed right now")
         // let inner_request = request.into_inner();
 
@@ -68,7 +62,7 @@ impl Detector for FaceServer {
 
         let import_object = imports! {};
         let instance = Instance::new(&mut wasm.store, &module, &import_object)
-            .map_err(|e| Status::aborted(format!("Failed to create WebAssembly instance")))?;
+            .map_err(|e| Status::aborted(format!("Failed to create WebAssembly instance: {e}")))?;
 
         let main = instance.exports.get_function("main").map_err(|e| {
             Status::aborted(format!("Failed to get expported WebAssembly function: {e}"))
