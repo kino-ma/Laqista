@@ -1,5 +1,6 @@
 use std::{error::Error, sync::Arc};
 
+use prost::Message;
 use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
 use wasmer::{imports, Cranelift, Instance, Module, Store, Value};
@@ -55,7 +56,7 @@ impl Detector for FaceServer {
 
     async fn run_detection(
         &self,
-        _request: Request<DetectionRequest>,
+        request: Request<DetectionRequest>,
     ) -> Result<Response<DetectionReply>, Status> {
         let mut wasm = self.wasm.lock().await;
         let module = wasm.module.clone();
@@ -66,6 +67,20 @@ impl Detector for FaceServer {
 
         let main = instance.exports.get_function("main").map_err(|e| {
             Status::aborted(format!("Failed to get expported WebAssembly function: {e}"))
+        })?;
+        let memory = instance.exports.get_memory("memory").map_err(|e| {
+            Status::aborted(format!("Failed to get expported WebAssembly memory: {e}"))
+        })?;
+
+        let view = memory.view(&mut wasm.store);
+        let mut buffer = Vec::new();
+        request
+            .into_inner()
+            .encode(&mut buffer)
+            .map_err(|e| Status::aborted(format!("Failed to encode request data: {e}")))?;
+
+        view.write(0, &buffer).map_err(|e| {
+            Status::aborted(format!("Failed to write request data to wasm memory: {e}"))
         })?;
 
         let params = &[Value::I32(1)];
