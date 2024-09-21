@@ -23,6 +23,7 @@
           default.rustfmt-preview
           default.clippy-preview
           latest.rust-src
+          targets.wasm32-unknown-unknown.latest.rust-std
         ];
         rustPlatform = pkgs.makeRustPlatform {
           cargo = rust-components;
