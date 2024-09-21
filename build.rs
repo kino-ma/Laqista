@@ -3,6 +3,8 @@ use std::path::Path;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tonic_build::compile_protos("proto/mless.proto")?;
 
+    println!("cargo::rerun-if-changed=apps/face-wasm/src/lib.rs");
+
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("./apps/face-wasm");
     let path_str = path.display();
     let pkg = format!("file://{path_str}");
@@ -23,7 +25,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let err = String::from_utf8(output.stderr)?;
 
         let text = format!("Wasm build succeeded.\nStdout:\n{out}\n\nStderr:\n{err}");
-        println!("{text}");
+        eprintln!("{text}");
     }
 
     Ok(())
