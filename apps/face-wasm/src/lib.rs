@@ -154,7 +154,7 @@ fn run(memory: &mut Memory) -> Result<&[u8], String> {
     let input = array.as_slice().ok_or("ERR: Failed to get array slice")?;
 
     let cont = Continuation {
-        name: "get_probabilities".to_owned(),
+        name: "get_probability".to_owned(),
     };
 
     let req = InferRequest {
