@@ -2212,6 +2212,8 @@ dependencies = [
 name = "mless-core"
 version = "0.1.0"
 dependencies = [
+ "prost",
+ "tonic",
  "wasmer",
  "wonnx",
 ]

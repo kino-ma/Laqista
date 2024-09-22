@@ -65,29 +65,15 @@ impl Detector for FaceServer {
         println!("Imports: {:?}", &wasm.module.imports().collect::<Vec<_>>());
         println!("Exports: {:?}", &wasm.instance.exports);
 
-        let main = wasm.instance.exports.get_function("main").map_err(|e| {
-            Status::aborted(format!("Failed to get expported WebAssembly function: {e}"))
-        })?;
-
-        let mut buf: Vec<u8> = Vec::new();
-        request.into_inner().encode(&mut buf).map_err(|e| {
+        let msg = request.into_inner();
+        let (start, len) = wasm.write_message(msg).map_err(|e| {
             Status::aborted(format!("Failed to write request data to wasm memory: {e}"))
         })?;
 
-        // `view` value may live longer than notion of `.await` later.
-        // We must drop it by surrounding by a block.
-        {
-            let view = memory.view(&mut store);
-            view.write(0, &buf).map_err(|e| {
-                Status::aborted(format!("Failed to write request data to wasm memory: {e}"))
-            })?;
-        }
-        println!("Written {} bytes", buf.len());
+        let params = &[Value::I32(start), Value::I32(len)];
 
-        let params = &[Value::I32(0), Value::I32(buf.len() as _)];
-
-        let out = main
-            .call(&mut store, params)
+        let out = wasm
+            .call("main", params)
             .map_err(|e| Status::aborted(format!("Failed to call WebAssembly function: {e}")))?;
 
         let value = out[0].unwrap_i64();
