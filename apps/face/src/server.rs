@@ -186,12 +186,28 @@ impl Detector for FaceServer {
             Status::aborted(format!("Failed to call WebAssembly function (2): {e}"))
         })?;
 
-        println!("Returned from cont: {:?}", out);
+        let value = out[0].unwrap_i64();
+        println!("value: {value:x}");
 
-        let reply = DetectionReply {
-            label: "EXECUTED!".to_owned(),
-            probability: 42.,
-        };
+        let start = value >> 32;
+        let len = value & 0xffff_ffff;
+
+        let mut buffer = vec![0; len as usize];
+        {
+            let view = memory.view(&mut store);
+            view.read(start as _, &mut buffer).map_err(|e| {
+                Status::aborted(format!(
+                    "Failed to read the reply from WebAssembly memory: {e}"
+                ))
+            })?;
+        }
+
+        println!("Read HostCall buffer: {:?}", &buffer[..]);
+
+        let reply: DetectionReply = Message::decode(&buffer[..])
+            .map_err(|e| Status::aborted(format!("Failed to parse reply: {e}")))?;
+
+        println!("Parsed reply: {reply:?}");
 
         Ok(Response::new(reply))
     }
