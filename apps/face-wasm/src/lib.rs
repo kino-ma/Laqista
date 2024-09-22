@@ -6,8 +6,8 @@
 
 use core::slice;
 
-use face_proto::DetectionRequest;
-use host_proto::{Continuation, HostCall};
+use face_proto::{DetectionReply, DetectionRequest, InferRequest};
+use host_proto::{Continuation, HostCall, MemorySlice};
 use image::{imageops::FilterType, GenericImageView, Pixel};
 use prost::Message;
 
@@ -19,6 +19,11 @@ mod host_proto {
 }
 
 extern "C" {}
+
+static LABELS: &'static str = include_str!("../../../data/models/resnet-labels.txt");
+fn get_labels() -> Vec<String> {
+    LABELS.lines().map(|l| l.to_owned()).collect()
+}
 
 pub struct DetectionResult {
     _label: String,
@@ -54,12 +59,12 @@ impl Memory {
         offset as _
     }
 
-    pub unsafe fn get_slice<L: Into<usize>>(&self, start: *const u8, len: L) -> &[u8] {
+    pub unsafe fn get_slice<L: Into<usize>, T>(&self, start: *const T, len: L) -> &[T] {
         slice::from_raw_parts(start, len.into())
     }
 
-    pub fn get_whole(&self) -> &[u8] {
-        unsafe { self.get_slice(self.head, self.len()) }
+    pub fn get_whole<T>(&self) -> &[T] {
+        unsafe { self.get_slice(self.head as _, self.len()) }
     }
 
     pub fn write_str(&mut self, data: &str) -> &str {
@@ -146,44 +151,57 @@ fn run(memory: &mut Memory) -> Result<&[u8], String> {
         (channels[c] as f32) / 255.0
     });
 
-    let _input = array.as_slice().ok_or("ERR: Failed to get array slice")?;
+    let input = array.as_slice().ok_or("ERR: Failed to get array slice")?;
 
     let cont = Continuation {
-        name: "Next!".to_owned(),
+        name: "get_probabilities".to_owned(),
+    };
+
+    let req = InferRequest {
+        data: input.to_vec(),
+    };
+    let req_bytes = req.encode_to_vec();
+    let req_slice = memory.write_bytes(&req_bytes);
+
+    let params = MemorySlice {
+        start: req_slice.as_ptr() as _,
+        len: req_bytes.len() as _,
     };
     let call = HostCall {
-        name: "INVOKING!!".to_owned(),
+        name: "infer".to_owned(),
         cont: Some(cont),
+        parameters: Some(params),
     };
     let buffer = call.encode_to_vec();
 
     let ret = memory.write_bytes(&buffer);
 
     Ok(ret)
+}
 
-    // let outputs = unsafe { infer(input.as_ptr() as _, input.len() as _) };
-    // let (ptr, len) = split(outputs);
-    // let data: &[f32] = unsafe { slice::from_raw_parts(ptr as _, len as _) };
+#[cfg_attr(not(test), no_mangle)]
+pub extern "C" fn get_probability(ptr: i32, len: i32) -> i64 {
+    let mut memory = Memory::with_used_len(ptr as *const u8, len);
+    let data = memory.get_whole();
 
-    // let probabilities: Vec<f32> = outputs.try_into().unwrap();
-    // let mut probabilities = probabilities.iter().enumerate().collect::<Vec<_>>();
-    // probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());
+    let probabilities: Vec<f32> = data.try_into().unwrap();
+    let mut probabilities = probabilities.iter().enumerate().collect::<Vec<_>>();
+    probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());
 
-    // let class_labels = get_imagenet_labels();
+    let class_labels = get_labels();
 
-    // let mut msg = String::new();
+    let (i, prob) = probabilities[0];
+    let label = class_labels[i].clone();
 
-    // for i in 0..10 {
-    //     msg.push_str(&format!(
-    //         "Infered result: {} of class: {}",
-    //         class_labels[probabilities[i].0], probabilities[i].0
-    //     ));
-    //     msg.push_str(&format!("details: {:?}", probabilities[i]));
-    // }
+    let reply = DetectionReply {
+        label,
+        probability: *prob,
+    };
 
-    // write_str(len as isize + 1, &msg);
-    // let ret = join(msg_start, msg.len() as _);
-    // return ret;
+    let out = reply.encode_to_vec();
+    let slic = memory.write_bytes(&out);
+
+    slice_to_i64(slic)
 }
 
 #[cfg(test)]

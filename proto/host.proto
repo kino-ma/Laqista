@@ -5,6 +5,12 @@ package host;
 message HostCall {
   string name = 1;
   Continuation cont = 2;
+  MemorySlice parameters = 3;
 }
 
 message Continuation { string name = 1; }
+
+message MemorySlice {
+  uint64 start = 1;
+  uint64 len = 2;
+}

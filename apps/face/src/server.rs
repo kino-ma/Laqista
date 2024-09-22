@@ -99,10 +99,14 @@ impl Detector for FaceServer {
             Status::aborted(format!("Failed to write request data to wasm memory: {e}"))
         })?;
 
-        let view = memory.view(&mut store);
-        view.write(0, &buf).map_err(|e| {
-            Status::aborted(format!("Failed to write request data to wasm memory: {e}"))
-        })?;
+        // `view` value may live longer than notion of `.await` later.
+        // We must drop it by surrounding by a block.
+        {
+            let view = memory.view(&mut store);
+            view.write(0, &buf).map_err(|e| {
+                Status::aborted(format!("Failed to write request data to wasm memory: {e}"))
+            })?;
+        }
         println!("Written {} bytes", buf.len());
 
         let params = &[Value::I32(0), Value::I32(buf.len() as _)];
@@ -117,11 +121,13 @@ impl Detector for FaceServer {
         let start = value >> 32;
         let len = value & 0xffff_ffff;
 
-        let view = memory.view(&mut store);
         let mut buffer = vec![0; len as usize];
-        view.read(start as _, &mut buffer).map_err(|e| {
-            Status::aborted(format!("Failed to read WebAssembly memory after call: {e}"))
-        })?;
+        {
+            let view = memory.view(&mut store);
+            view.read(start as _, &mut buffer).map_err(|e| {
+                Status::aborted(format!("Failed to read WebAssembly memory after call: {e}"))
+            })?;
+        }
 
         println!("Read HostCall buffer: {:?}", &buffer[..]);
 
@@ -129,6 +135,54 @@ impl Detector for FaceServer {
             .map_err(|e| Status::aborted(format!("Failed to parse host call: {e}")))?;
 
         println!("HastCall invoked: {:?}", call);
+
+        let param_ptr = call
+            .parameters
+            .ok_or(Status::aborted("Failed to read HostCall: cont is null"))?;
+
+        let mut buffer = vec![0; param_ptr.len as usize];
+        {
+            let view = memory.view(&mut store);
+            view.read(param_ptr.start as _, &mut buffer).map_err(|e| {
+                Status::aborted(format!(
+                    "Failed to read invoke params from WebAssembly memory: {e}"
+                ))
+            })?;
+        }
+
+        let params: InferRequest = Message::decode(&buffer[..]).map_err(|e| {
+            Status::aborted(format!("Failed to parse infer request parameters: {e}"))
+        })?;
+        let req = Request::new(params);
+        let resp = self.infer(req).await?;
+        let resp_buf = resp.into_inner().encode_to_vec();
+        let resp_start = param_ptr.start + param_ptr.len + 1;
+
+        {
+            let view = memory.view(&mut store);
+            view.write(resp_start, &resp_buf[..]).map_err(|e| {
+                Status::aborted(format!(
+                    "Failed to write response to WebAssembly memory: {e}"
+                ))
+            })?;
+        }
+
+        let cont = call
+            .cont
+            .ok_or(Status::aborted("Failed to read HostCall: cont is null"))?;
+
+        let next = instance
+            .exports
+            .get_function(&cont.name)
+            .map_err(|e| Status::aborted(format!("Failed to get continuation: {e}")))?;
+
+        let params = &[Value::I32(resp_start as _), Value::I32(resp_buf.len() as _)];
+
+        let out = next.call(&mut store, params).map_err(|e| {
+            Status::aborted(format!("Failed to call WebAssembly function (2): {e}"))
+        })?;
+
+        println!("Returned from cont: {:?}", out);
 
         let reply = DetectionReply {
             label: "EXECUTED!".to_owned(),
