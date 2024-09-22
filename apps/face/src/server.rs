@@ -1,12 +1,8 @@
 use core::{slice, str};
 use std::error::Error;
 
-use prost::Message;
 use tonic::{Request, Response, Status};
-use wasmer::{
-    imports, AsStoreRef, Cranelift, Function, FunctionEnv, FunctionEnvMut, Instance, Module, Store,
-    Value,
-};
+use wasmer::{imports, Cranelift, FunctionEnv, Instance, Module, Store, Value};
 
 use crate::proto::{
     detector_server::Detector, DetectionReply, DetectionRequest, InferReply, InferRequest,
@@ -67,9 +63,9 @@ impl Detector for FaceServer {
             .map_err(|e| Status::aborted(format!("Failed to create WebAssembly module: {e}")))?;
 
         struct MyEnv;
-        let env = FunctionEnv::new(&mut store, MyEnv);
+        let _env = FunctionEnv::new(&mut store, MyEnv);
 
-        fn print_str(ptr: u32, len: u32) {
+        fn _print_str(ptr: u32, len: u32) {
             println!("print_str called!!");
             println!("ptr: {ptr}, len: {len}");
             let slic: &[u8] = unsafe { slice::from_raw_parts(ptr as _, len as _) };

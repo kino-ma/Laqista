@@ -141,7 +141,7 @@ mod test {
             },
         );
 
-        let input = array
+        let _input = array
             .as_slice()
             .expect("failed to convert array into a slice");
     }
