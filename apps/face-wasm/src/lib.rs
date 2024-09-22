@@ -31,29 +31,27 @@ const IMAGE_HEIGHT: usize = 224;
 // pub fn main(image_png: &[u8]) -> DetectionResult {
 #[cfg_attr(not(test), no_mangle)]
 pub extern "C" fn main(ptr: i32, len: i32) -> i64 {
+    let mem_start = ptr + len + 1;
+
+    match run(ptr, len) {
+        Ok(ret) => ret,
+        Err(e) => {
+            write_str(len as isize + 1, &e);
+            join(mem_start, e.len() as _)
+        }
+    }
+}
+
+fn run(ptr: i32, len: i32) -> Result<i64, String> {
+    let mem_start = ptr + len + 1;
+
     let buffer: &[u8] = unsafe { slice::from_raw_parts(ptr as _, len as _) };
 
-    let msg_start = len + 1;
+    let request: DetectionRequest =
+        Message::decode(buffer).map_err(|e| format!("ERR: Failed to decode request: {e}"))?;
 
-    let request: DetectionRequest = match Message::decode(buffer) {
-        Ok(req) => req,
-        Err(e) => {
-            let msg = format!("ERR: Failed to decode request: {e}");
-            write_str(len as isize + 1, &msg);
-            let ret = join(msg_start, msg.len() as _);
-            return ret;
-        }
-    };
-
-    let img = image::load_from_memory(&request.image_png);
-
-    if let Err(e) = &img {
-        let msg = format!("ERR: Failed to load image: {e}");
-        write_str(len as isize + 1, &msg);
-        let ret = join(msg_start, msg.len() as _);
-        return ret;
-    }
-    let img = img.unwrap();
+    let img = image::load_from_memory(&request.image_png)
+        .map_err(|e| format!("ERR: Failed to load image: {e}"))?;
 
     let img = img.resize_to_fill(IMAGE_WIDTH as _, IMAGE_HEIGHT as _, FilterType::Nearest);
 
@@ -65,15 +63,7 @@ pub extern "C" fn main(ptr: i32, len: i32) -> i64 {
         (channels[c] as f32) / 255.0
     });
 
-    let _input = match array.as_slice() {
-        Some(slic) => slic,
-        None => {
-            let msg = format!("ERR: Failed to get array slice");
-            write_str(len as isize + 1, &msg);
-            let ret = join(msg_start, msg.len() as _);
-            return ret;
-        }
-    };
+    let _input = array.as_slice().ok_or("ERR: Failed to get array slice")?;
 
     let cont = Continuation {
         name: "Next!".to_owned(),
@@ -84,7 +74,9 @@ pub extern "C" fn main(ptr: i32, len: i32) -> i64 {
     };
     let buffer = call.encode_to_vec();
 
-    write_bytes(msg_start as _, &buffer)
+    let ret = write_bytes(mem_start as _, &buffer);
+
+    Ok(ret)
 
     // let outputs = unsafe { infer(input.as_ptr() as _, input.len() as _) };
     // let (ptr, len) = split(outputs);
