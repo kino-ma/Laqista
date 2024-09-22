@@ -2,7 +2,7 @@ use core::{slice, str};
 use std::error::Error;
 
 use tonic::{Request, Response, Status};
-use wasmer::{imports, Cranelift, FunctionEnv, Instance, Module, Store, Value};
+use wasmer::{imports, Cranelift, FunctionEnv, Instance, Memory, MemoryType, Module, Store, Value};
 
 use crate::proto::{
     detector_server::Detector, DetectionReply, DetectionRequest, InferReply, InferRequest,
@@ -74,20 +74,22 @@ impl Detector for FaceServer {
         }
         // let print_typed = Function::new_typed_with_env(&mut store, &env, print_str);
 
+        let memory = Memory::new(&mut store, MemoryType::new(21, None, false))
+            .map_err(|e| Status::aborted(format!("Failed to create WebAssembly memory: {e}")))?;
         let import_object = imports! {
             "env" => {
-                // "print" => print_typed,
+                "memory" => memory.clone(),
             }
         };
 
         let instance = Instance::new(&mut store, &module, &import_object)
             .map_err(|e| Status::aborted(format!("Failed to create WebAssembly instance: {e}")))?;
 
+        println!("Imports: {:?}", module.imports().collect::<Vec<_>>());
+        println!("Exports: {:?}", instance.exports);
+
         let main = instance.exports.get_function("main").map_err(|e| {
             Status::aborted(format!("Failed to get expported WebAssembly function: {e}"))
-        })?;
-        let memory = instance.exports.get_memory("memory").map_err(|e| {
-            Status::aborted(format!("Failed to get expported WebAssembly memory: {e}"))
         })?;
 
         let view = memory.view(&mut store);
@@ -109,12 +111,6 @@ impl Detector for FaceServer {
 
         let start = value >> 32;
         let len = value & 0xffff_ffff;
-
-        let memory = instance.exports.get_memory("memory").map_err(|e| {
-            Status::aborted(format!(
-                "Failed to get expported WebAssembly memory after call: {e}"
-            ))
-        })?;
 
         let view = memory.view(&mut store);
         let mut buffer = vec![0; len as usize + 1];

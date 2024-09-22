@@ -14,9 +14,7 @@ mod face_proto {
     tonic::include_proto!("face");
 }
 
-extern "C" {
-    fn infer(offset: i32, len: i32) -> i64;
-}
+extern "C" {}
 
 pub struct DetectionResult {
     _label: String,
@@ -73,10 +71,11 @@ pub extern "C" fn main(ptr: i32, len: i32) -> i64 {
         }
     };
 
-    let outputs = unsafe { infer(input.as_ptr() as _, input.len() as _) };
-    let (ptr, len) = split(outputs);
-    let data: &[f32] = unsafe { slice::from_raw_parts(ptr as _, len as _) };
-    let msg = format!("Returned: {:?}", &data[0..10]);
+    // let outputs = unsafe { infer(input.as_ptr() as _, input.len() as _) };
+    // let (ptr, len) = split(outputs);
+    // let data: &[f32] = unsafe { slice::from_raw_parts(ptr as _, len as _) };
+
+    let msg = format!("Inputs: {:?}", &input[0..10]);
 
     write_str(len as isize + 1, &msg);
     let ret = join(msg_start, msg.len() as _);
