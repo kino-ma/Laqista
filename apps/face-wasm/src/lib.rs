@@ -6,10 +6,16 @@
 
 use core::slice;
 
+use face_proto::DetectionRequest;
 use image::{imageops::FilterType, GenericImageView, Pixel};
+use prost::Message;
+
+mod face_proto {
+    tonic::include_proto!("face");
+}
 
 extern "C" {
-    // fn print(ptr: u32, len: u32);
+    fn infer(offset: i32, len: i32) -> i64;
 }
 
 pub struct DetectionResult {
@@ -25,9 +31,19 @@ const IMAGE_HEIGHT: usize = 224;
 pub extern "C" fn main(ptr: i32, len: i32) -> i64 {
     let buffer: &[u8] = unsafe { slice::from_raw_parts(ptr as _, len as _) };
 
-    let img = image::load_from_memory(buffer);
-
     let msg_start = len + 1;
+
+    let request: DetectionRequest = match Message::decode(buffer) {
+        Ok(req) => req,
+        Err(e) => {
+            let msg = format!("ERR: Failed to decode request: {e}");
+            write_str(len as isize + 1, &msg);
+            let ret = join(msg_start, msg.len() as _);
+            return ret;
+        }
+    };
+
+    let img = image::load_from_memory(&request.image_png);
 
     if let Err(e) = &img {
         let msg = format!("ERR: Failed to load image: {e}");
@@ -57,27 +73,34 @@ pub extern "C" fn main(ptr: i32, len: i32) -> i64 {
         }
     };
 
-    let msg = format!("ok: {:?}", &input[0..10]);
+    let outputs = unsafe { infer(input.as_ptr() as _, input.len() as _) };
+    let (ptr, len) = split(outputs);
+    let data: &[f32] = unsafe { slice::from_raw_parts(ptr as _, len as _) };
+    let msg = format!("Returned: {:?}", &data[0..10]);
+
     write_str(len as isize + 1, &msg);
     let ret = join(msg_start, msg.len() as _);
     return ret;
-
-    // let outputs = unsafe { infer(input) };
 
     // let probabilities: Vec<f32> = outputs.try_into().unwrap();
     // let mut probabilities = probabilities.iter().enumerate().collect::<Vec<_>>();
     // probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());
 
-    // todo!("See comment below");
     // let class_labels = get_imagenet_labels();
-    //
+
+    // let mut msg = String::new();
+
     // for i in 0..10 {
-    //     println!(
+    //     msg.push_str(&format!(
     //         "Infered result: {} of class: {}",
     //         class_labels[probabilities[i].0], probabilities[i].0
-    //     );
-    //     println!("details: {:?}", probabilities[i]);
+    //     ));
+    //     msg.push_str(&format!("details: {:?}", probabilities[i]));
     // }
+
+    // write_str(len as isize + 1, &msg);
+    // let ret = join(msg_start, msg.len() as _);
+    // return ret;
 }
 
 fn write_str(offset: isize, data: &str) {
@@ -92,6 +115,12 @@ fn write_str(offset: isize, data: &str) {
 
 fn join(upper: i32, lower: i32) -> i64 {
     (upper as i64) << 32 | lower as i64
+}
+fn split(joined: i64) -> (i32, i32) {
+    let upper = (joined >> 32) as i32;
+    let lower = (joined & 0xffff_ffff) as i32;
+
+    (upper, lower)
 }
 
 #[cfg(target_family = "wasm")]

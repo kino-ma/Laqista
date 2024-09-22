@@ -1126,6 +1126,9 @@ version = "0.1.0"
 dependencies = [
  "image",
  "ndarray",
+ "prost",
+ "tonic",
+ "tonic-build",
 ]
 
 [[package]]
