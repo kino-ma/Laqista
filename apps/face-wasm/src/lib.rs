@@ -106,7 +106,7 @@ fn slice_to_i64(s: &[u8]) -> i64 {
     let ptr = (s.as_ptr() as i64) << 32;
     let len = s.len() as i64;
 
-    ptr & len
+    ptr | len
 }
 
 const IMAGE_WIDTH: usize = 224;
