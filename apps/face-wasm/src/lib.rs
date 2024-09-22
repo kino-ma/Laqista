@@ -6,8 +6,10 @@
 
 use core::slice;
 
-use face_proto::{DetectionReply, DetectionRequest, InferRequest};
-use host_proto::{Continuation, HostCall, MemorySlice};
+use face_proto::{DetectionReply, DetectionRequest, InferReply, InferRequest};
+use host_proto::{
+    invoke_result::Result as IRes, Continuation, HostCall, InvokeResult, MemorySlice,
+};
 use image::{imageops::FilterType, GenericImageView, Pixel};
 use prost::Message;
 
@@ -172,7 +174,12 @@ fn run(memory: &mut Memory) -> Result<&[u8], String> {
         cont: Some(cont),
         parameters: Some(params),
     };
-    let buffer = call.encode_to_vec();
+
+    let result = InvokeResult {
+        result: Some(IRes::HostCall(call)),
+    };
+
+    let buffer = result.encode_to_vec();
 
     let ret = memory.write_bytes(&buffer);
 
@@ -182,26 +189,69 @@ fn run(memory: &mut Memory) -> Result<&[u8], String> {
 #[cfg_attr(not(test), no_mangle)]
 pub extern "C" fn get_probability(ptr: i32, len: i32) -> i64 {
     let mut memory = Memory::with_used_len(ptr as *const u8, len);
-    let data = memory.get_whole();
 
-    let probabilities: Vec<f32> = data.try_into().unwrap();
+    let ires = match get_prob_run(&mut memory) {
+        Ok(res) => res,
+        Err(e) => IRes::Error(host_proto::Error {
+            message: e,
+            details: None,
+        }),
+    };
+
+    let result = InvokeResult { result: Some(ires) };
+
+    let out = result.encode_to_vec();
+    let slic = memory.write_bytes(&out);
+
+    slice_to_i64(slic)
+}
+
+fn get_prob_run(memory: &mut Memory) -> Result<IRes, String> {
+    let buffer = memory.get_whole();
+    let resp: InferReply =
+        Message::decode(&buffer[..]).map_err(|e| format!("Failed to parse InferReply: {e}"))?;
+
+    let probabilities = resp.squeezenet0_flatten0_reshape0;
+
+    // return Err("2".to_owned());
     let mut probabilities = probabilities.iter().enumerate().collect::<Vec<_>>();
-    probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());
+    // return Err("2.1".to_owned());
+    probabilities
+        .sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap_or(std::cmp::Ordering::Equal));
+    // unreachable
+    // return Err("2.2".to_owned());
 
     let class_labels = get_labels();
 
+    // return Err("3".to_owned());
     let (i, prob) = probabilities[0];
-    let label = class_labels[i].clone();
+    // return Err("3.0.1".to_owned());
+    let label = class_labels
+        .get(i)
+        .ok_or(format!(
+            "Insufficient length: want {i}, got {}",
+            class_labels.len()
+        ))?
+        .clone();
 
+    // unreachable
+    // return Err("3.1".to_owned());
     let reply = DetectionReply {
         label,
         probability: *prob,
     };
-
+    // return Err("3.2".to_owned());
     let out = reply.encode_to_vec();
+    // return Err("3.3".to_owned());
     let slic = memory.write_bytes(&out);
+    // return Err("4".to_owned());
 
-    slice_to_i64(slic)
+    Ok(IRes::Finished(host_proto::Finished {
+        ptr: Some(MemorySlice {
+            start: slic.as_ptr() as _,
+            len: slic.len() as _,
+        }),
+    }))
 }
 
 #[cfg(test)]

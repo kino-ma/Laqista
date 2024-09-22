@@ -99,6 +99,10 @@ impl Detector for FaceServer {
             Status::aborted(format!("Failed to write infer reply to wasm memory: {e}"))
         })?;
         let param: [Value; 2] = ptr.into();
+        println!(
+            "Written InferReply. ptr = {:?}-{:?}. param = {param:?}",
+            ptr.start, ptr.len
+        );
 
         let cont = call
             .cont

@@ -82,7 +82,14 @@ impl WasmRunner {
         view.write(start as _, bytes)?;
 
         self.ptr.consume(len as i32);
-        Ok(self.ptr.into())
+
+        println!("Written {} bytes", bytes.len());
+        println!("\t= {:?}", bytes.iter().take(100).collect::<Vec<_>>());
+
+        Ok(WasmPointer {
+            start,
+            len: len as _,
+        })
     }
 
     pub fn read_message<M: Message + Default>(
