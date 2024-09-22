@@ -14,7 +14,7 @@ sudo -E cargo build
 
 sudo -E cargo run server start &
 pid1="$!"
-sleep 1
+sleep 1.5
 sudo -E cargo run server start --server http://127.0.0.1:50051 --listen 127.0.0.1:50052 &
 pid2="$!"
 

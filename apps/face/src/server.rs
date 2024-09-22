@@ -118,10 +118,12 @@ impl Detector for FaceServer {
         let len = value & 0xffff_ffff;
 
         let view = memory.view(&mut store);
-        let mut buffer = vec![0; len as usize + 1];
+        let mut buffer = vec![0; len as usize];
         view.read(start as _, &mut buffer).map_err(|e| {
             Status::aborted(format!("Failed to read WebAssembly memory after call: {e}"))
         })?;
+
+        println!("Read HostCall buffer: {:?}", &buffer[..]);
 
         let call: HostCall = Message::decode(&buffer[..])
             .map_err(|e| Status::aborted(format!("Failed to parse host call: {e}")))?;

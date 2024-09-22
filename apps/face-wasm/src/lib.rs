@@ -82,8 +82,7 @@ pub extern "C" fn main(ptr: i32, len: i32) -> i64 {
         name: "INVOKING!!".to_owned(),
         cont: Some(cont),
     };
-    let mut buffer: Vec<u8> = Vec::new();
-    call.encode(&mut buffer).unwrap();
+    let buffer = call.encode_to_vec();
 
     write_bytes(msg_start as _, &buffer)
 
