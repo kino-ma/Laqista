@@ -27,33 +27,40 @@ pub extern "C" fn main(ptr: i32, len: i32) -> i64 {
 
     let img = image::load_from_memory(buffer);
 
-    let msg_start = len as isize + 1;
+    let msg_start = len + 1;
 
-    let msg = match img {
-        Ok(_img) => "ok".to_owned(),
-        Err(e) => {
-            format!("ERR: Failed to load image: {e}")
+    if let Err(e) = &img {
+        let msg = format!("ERR: Failed to load image: {e}");
+        write_str(len as isize + 1, &msg);
+        let ret = join(msg_start, msg.len() as _);
+        return ret;
+    }
+    let img = img.unwrap();
+
+    let img = img.resize_to_fill(IMAGE_WIDTH as _, IMAGE_HEIGHT as _, FilterType::Nearest);
+
+    let array = ndarray::Array::from_shape_fn((1, 3, IMAGE_WIDTH, IMAGE_HEIGHT), |(_, c, j, i)| {
+        let pixel = img.get_pixel(i as u32, j as u32);
+        let channels = pixel.channels();
+
+        // range [0, 255] -> range [0, 1]
+        (channels[c] as f32) / 255.0
+    });
+
+    let input = match array.as_slice() {
+        Some(slic) => slic,
+        None => {
+            let msg = format!("ERR: Failed to get array slice");
+            write_str(len as isize + 1, &msg);
+            let ret = join(msg_start, msg.len() as _);
+            return ret;
         }
     };
 
+    let msg = format!("ok: {:?}", &input[0..10]);
     write_str(len as isize + 1, &msg);
-    (msg_start as i64) << 32 | msg.len() as i64
-
-    // let img = img.resize_to_fill(IMAGE_WIDTH as _, IMAGE_HEIGHT as _, FilterType::Nearest);
-
-    // let array = ndarray::Array::from_shape_fn((1, 3, IMAGE_WIDTH, IMAGE_HEIGHT), |(_, c, j, i)| {
-    //     let pixel = img.get_pixel(i as u32, j as u32);
-    //     let channels = pixel.channels();
-
-    //     // range [0, 255] -> range [0, 1]
-    //     (channels[c] as f32) / 255.0
-    // });
-
-    // let input = array
-    //     .as_slice()
-    //     .expect("failed to convert array into a slice");
-
-    // (input.first().unwrap() + input.last().unwrap()) as _
+    let ret = join(msg_start, msg.len() as _);
+    return ret;
 
     // let outputs = unsafe { infer(input) };
 
@@ -81,6 +88,10 @@ fn write_str(offset: isize, data: &str) {
     unsafe {
         std::ptr::copy(data.as_ptr(), ptr, data.len());
     }
+}
+
+fn join(upper: i32, lower: i32) -> i64 {
+    (upper as i64) << 32 | lower as i64
 }
 
 #[cfg(target_family = "wasm")]
