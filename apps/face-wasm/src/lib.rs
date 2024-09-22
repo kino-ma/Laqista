@@ -25,27 +25,110 @@ pub struct DetectionResult {
     _probability: f32,
 }
 
-const IMAGE_WIDTH: usize = 224;
-const IMAGE_HEIGHT: usize = 224;
+#[cfg(target_family = "wasm")]
+const PAGE_SIZE: usize = 65536;
 
-// pub fn main(image_png: &[u8]) -> DetectionResult {
-#[cfg_attr(not(test), no_mangle)]
-pub extern "C" fn main(ptr: i32, len: i32) -> i64 {
-    let mem_start = ptr + len + 1;
+struct Memory {
+    head: *const u8,
+    last: *const u8,
+}
 
-    match run(ptr, len) {
-        Ok(ret) => ret,
-        Err(e) => {
-            write_str(len as isize + 1, &e);
-            join(mem_start, e.len() as _)
+impl Memory {
+    pub fn new<P: Into<*const u8>, L: Into<*const u8>>(ptr: P, last: L) -> Self {
+        let head = ptr.into();
+        let last = last.into();
+
+        Self { head, last }
+    }
+
+    pub fn with_used_len<P: Into<*const u8>, L: Into<i64>>(ptr: P, len: L) -> Self {
+        let ptr: *const u8 = ptr.into();
+        let len: i64 = len.into();
+        let last = unsafe { ptr.add(len as _) };
+
+        Self::new(ptr, last)
+    }
+
+    pub fn len(&self) -> usize {
+        let offset = unsafe { self.last.offset_from(self.head) };
+        offset as _
+    }
+
+    pub unsafe fn get_slice<L: Into<usize>>(&self, start: *const u8, len: L) -> &[u8] {
+        slice::from_raw_parts(start, len.into())
+    }
+
+    pub fn get_whole(&self) -> &[u8] {
+        unsafe { self.get_slice(self.head, self.len()) }
+    }
+
+    pub fn write_str(&mut self, data: &str) -> &str {
+        let bytes = self.write_bytes(data.as_bytes());
+        core::str::from_utf8(bytes).unwrap()
+    }
+
+    pub fn write_bytes<'a, 'b>(&'a mut self, data: &'b [u8]) -> &'a [u8] {
+        #[cfg(target_family = "wasm")]
+        self.grow_to(data.len());
+
+        let start: *mut u8 = unsafe { self.last.add(1).cast_mut() };
+        let len = data.len();
+        unsafe {
+            std::ptr::copy(data.as_ptr(), start, len);
+            self.last = self.last.add(len);
+            self.get_slice(start, len)
+        }
+    }
+
+    #[cfg(target_family = "wasm")]
+    fn grow_to(&self, data_len: usize) -> usize {
+        use core::arch;
+        let current_size = arch::wasm32::memory_size(0) as usize;
+        let cap = current_size * PAGE_SIZE;
+
+        let len = self.len();
+        assert!(len <= cap);
+
+        let start = len + 1;
+        let available = cap - start;
+        let missing = data_len - available;
+        if missing > 0 {
+            let to_grow = missing / PAGE_SIZE + 1;
+            arch::wasm32::memory_grow(0, to_grow as _);
+            to_grow
+        } else {
+            0
         }
     }
 }
 
-fn run(ptr: i32, len: i32) -> Result<i64, String> {
-    let mem_start = ptr + len + 1;
+fn slice_to_i64(s: &[u8]) -> i64 {
+    let ptr = (s.as_ptr() as i64) << 32;
+    let len = s.len() as i64;
 
-    let buffer: &[u8] = unsafe { slice::from_raw_parts(ptr as _, len as _) };
+    ptr & len
+}
+
+const IMAGE_WIDTH: usize = 224;
+const IMAGE_HEIGHT: usize = 224;
+
+#[cfg_attr(not(test), no_mangle)]
+pub extern "C" fn main(ptr: i32, len: i32) -> i64 {
+    let mut memory = Memory::with_used_len(ptr as *const u8, len);
+
+    let out_ptr = match run(&mut memory) {
+        Ok(ret) => ret,
+        Err(e) => {
+            let s = memory.write_str(&e);
+            s.as_bytes()
+        }
+    };
+
+    slice_to_i64(out_ptr)
+}
+
+fn run(memory: &mut Memory) -> Result<&[u8], String> {
+    let buffer: &[u8] = memory.get_whole();
 
     let request: DetectionRequest =
         Message::decode(buffer).map_err(|e| format!("ERR: Failed to decode request: {e}"))?;
@@ -74,7 +157,7 @@ fn run(ptr: i32, len: i32) -> Result<i64, String> {
     };
     let buffer = call.encode_to_vec();
 
-    let ret = write_bytes(mem_start as _, &buffer);
+    let ret = memory.write_bytes(&buffer);
 
     Ok(ret)
 
@@ -101,55 +184,6 @@ fn run(ptr: i32, len: i32) -> Result<i64, String> {
     // write_str(len as isize + 1, &msg);
     // let ret = join(msg_start, msg.len() as _);
     // return ret;
-}
-
-fn write_str(offset: isize, data: &str) -> i64 {
-    write_bytes(offset, data.as_bytes())
-}
-
-fn write_bytes(offset: isize, data: &[u8]) -> i64 {
-    #[cfg(target_family = "wasm")]
-    grow_to(offset - 1, data.len() as _);
-
-    let ptr: *mut u8 = offset as _;
-    let len = data.len();
-    unsafe {
-        std::ptr::copy(data.as_ptr(), ptr, len);
-    }
-
-    join(offset as _, len as _)
-}
-
-fn join(upper: i32, lower: i32) -> i64 {
-    (upper as i64) << 32 | lower as i64
-}
-fn split(joined: i64) -> (i32, i32) {
-    let upper = (joined >> 32) as i32;
-    let lower = (joined & 0xffff_ffff) as i32;
-
-    (upper, lower)
-}
-
-#[cfg(target_family = "wasm")]
-const PAGE_SIZE: isize = 65536;
-
-#[cfg(target_family = "wasm")]
-fn grow_to(tail_idx: isize, data_len: isize) -> isize {
-    use core::arch;
-    let current_size = arch::wasm32::memory_size(0) as isize;
-    let cap = current_size * PAGE_SIZE;
-    assert!(tail_idx <= cap);
-
-    let start = tail_idx + 1;
-    let available = cap - start;
-    let missing = data_len - available;
-    if missing > 0 {
-        let to_grow = missing / PAGE_SIZE + 1;
-        arch::wasm32::memory_grow(0, to_grow as _);
-        to_grow
-    } else {
-        0
-    }
 }
 
 #[cfg(test)]
