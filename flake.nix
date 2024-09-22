@@ -23,6 +23,7 @@
           default.rustfmt-preview
           default.clippy-preview
           latest.rust-src
+          targets.wasm32-unknown-unknown.latest.rust-std
         ];
         rustPlatform = pkgs.makeRustPlatform {
           cargo = rust-components;
@@ -51,6 +52,7 @@
               autoconf
               automake
               libtool
+              lld
 
               rust-components
               rust-analyzer-nightly
@@ -65,6 +67,8 @@
               jq
               gnuplot
 
+              cargo-generate
+              wasm-pack
               wonnx
             ]
             ++ pkgs.lib.optionals (system == "x86_64-linux") [ pkgs.radeontop ]

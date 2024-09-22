@@ -8,7 +8,7 @@ use image::{imageops::FilterType, ImageBuffer, Pixel, Rgb};
 pub fn open_default() -> ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<[usize; 4]>> {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../")
-        .join("data/still-people.png");
+        .join("data/pelican.jpeg");
 
     open(path)
 }
@@ -16,9 +16,13 @@ pub fn open_default() -> ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Di
 pub fn open(
     path: PathBuf,
 ) -> ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<[usize; 4]>> {
+    // let image_buffer: ImageBuffer<Rgb<u8>, Vec<u8>> = image::open(path)
+    //     .unwrap()
+    //     .resize_exact(28, 28, FilterType::Nearest)
+    //     .to_rgb8();
     let image_buffer: ImageBuffer<Rgb<u8>, Vec<u8>> = image::open(path)
         .unwrap()
-        .resize_exact(28, 28, FilterType::Nearest)
+        .resize_to_fill(224, 224, FilterType::Nearest)
         .to_rgb8();
 
     // Python:
@@ -29,7 +33,7 @@ pub fn open(
     // See https://github.com/onnx/models/blob/master/vision/classification/imagenet_inference.ipynb
     // for pre-processing image.
     // WARNING: Note order of declaration of arguments: (_,c,j,i)
-    ndarray::Array::from_shape_fn((1, 1, 28, 28), |(_, c, j, i)| {
+    ndarray::Array::from_shape_fn((1, 3, 224, 224), |(_, c, j, i)| {
         let pixel = image_buffer.get_pixel(i as u32, j as u32);
         let channels = pixel.channels();
 
@@ -40,6 +44,9 @@ pub fn open(
 
 pub fn model_path() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("data")
         .join("models")
-        .join("opt-squeeze.onnx")
+        .join("resnet50_gn_Opset16.onnx")
 }

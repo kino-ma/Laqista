@@ -3,7 +3,7 @@ use wonnx::utils::{InputTensor, OutputTensor};
 
 tonic::include_proto!("face");
 
-impl AsInputs for DetectRequest {
+impl AsInputs for InferRequest {
     fn as_inputs<'a>(&'a self) -> Inputs<'a> {
         let data = (&self.data).into();
         let input = InputTensor::F32(data);
@@ -13,7 +13,7 @@ impl AsInputs for DetectRequest {
 
 const SQUEEZENET_OUTPUT: &'static str = "squeezenet0_flatten0_reshape0";
 
-impl TryFrom<Outputs> for DetectReply {
+impl TryFrom<Outputs> for InferReply {
     type Error = OutputsParseError;
 
     fn try_from(mut outputs: Outputs) -> Result<Self, Self::Error> {
