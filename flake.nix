@@ -52,6 +52,7 @@
               autoconf
               automake
               libtool
+              lld
 
               rust-components
               rust-analyzer-nightly
