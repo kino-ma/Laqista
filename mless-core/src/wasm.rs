@@ -3,7 +3,7 @@ use std::error::Error;
 use prost::Message;
 use wasmer::{imports, Cranelift, Instance, Memory, MemoryType, Module, Store, Value};
 
-use crate::proto::host::MemorySlice;
+use crate::proto::host::{HostCall, InvokeResult, MemorySlice};
 
 pub struct WasmRunner {
     pub store: Store,
@@ -44,19 +44,30 @@ impl WasmRunner {
         &mut self,
         name: &str,
         params: &[Value],
-    ) -> Result<M, Box<dyn Error>> {
+    ) -> Result<ExecState<M>, Box<dyn Error>> {
         let func = self.instance.exports.get_function(name)?;
 
         let values = func.call(&mut self.store, params)?;
         let ptr = values[0].unwrap_i64().into();
-        let msg = self.read_message(ptr)?;
+        let result: InvokeResult = self.read_message(ptr)?;
+        let result = result.result.ok_or("Failed to read invoke result")?;
 
-        Ok(msg)
+        {
+            use crate::proto::host::invoke_result::Result as R;
+            match result {
+                R::Finished(m) => {
+                    let ptr = m.ptr.ok_or("Failed to read finished result")?;
+                    let out = self.read_message(ptr.into())?;
+                    Ok(ExecState::Finished(out))
+                }
+                R::HostCall(call) => Ok(ExecState::Continue(call)),
+                R::Error(e) => Err(format!("Error in WASM function: {}", e.message))?,
+            }
+        }
     }
 
     pub fn write_message<M: Message>(&mut self, msg: M) -> Result<WasmPointer, Box<dyn Error>> {
-        let mut buf: Vec<u8> = Vec::new();
-        msg.encode(&mut buf)?;
+        let buf = msg.encode_to_vec();
 
         let out = self.write_bytes(&buf)?;
 
@@ -95,6 +106,37 @@ impl WasmRunner {
     }
 }
 
+#[derive(Debug)]
+pub enum ExecState<M> {
+    Finished(M),
+    Continue(HostCall),
+}
+
+impl<M: Message + Default> ExecState<M> {
+    pub fn unwrap_finished(self) -> M {
+        if let Self::Finished(m) = self {
+            m
+        } else {
+            panic!(
+                "`ExecState::unwrap_finished()` on non-Finished value: {:?}",
+                self
+            )
+        }
+    }
+}
+impl ExecState<()> {
+    pub fn unwrap_continue(self) -> HostCall {
+        if let Self::Continue(c) = self {
+            c
+        } else {
+            panic!(
+                "`ExecState::unwrap_continue()` on non-Continue value: {:?}",
+                self
+            )
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct WasmPointer {
     pub start: i32,
@@ -116,7 +158,7 @@ impl WasmPointer {
     }
 
     pub fn last(&self) -> i32 {
-        self.start + self.len
+        self.start + self.len - 1
     }
 
     pub fn join(&mut self, other: Self) {

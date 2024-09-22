@@ -68,11 +68,12 @@ impl Detector for FaceServer {
             Status::aborted(format!("Failed to write request data to wasm memory: {e}"))
         })?;
 
-        let params = &[Value::I32(ptr.start), Value::I32(ptr.len)];
+        let params: &[Value; 2] = &ptr.into();
 
         let call: HostCall = wasm
             .call("main", params)
-            .map_err(|e| Status::aborted(format!("Failed to call WebAssembly function: {e}")))?;
+            .map_err(|e| Status::aborted(format!("Failed to call WebAssembly function: {e}")))?
+            .unwrap_continue();
 
         println!("HastCall invoked: {:?}", call);
 
@@ -103,9 +104,10 @@ impl Detector for FaceServer {
             .cont
             .ok_or(Status::aborted("Failed to read HostCall: cont is null"))?;
 
-        let reply: DetectionReply = wasm.call(&cont.name, &param).map_err(|e| {
-            Status::aborted(format!("Failed to call WebAssembly function (2): {e}"))
-        })?;
+        let reply: DetectionReply = wasm
+            .call(&cont.name, &param)
+            .map_err(|e| Status::aborted(format!("Failed to call WebAssembly function (2): {e}")))?
+            .unwrap_finished();
 
         println!("Parsed reply: {reply:?}");
 
