@@ -1,13 +1,11 @@
 use std::error::Error;
 
-use mless_core::wasm::WasmRunner;
-use prost::Message;
+use mless_core::{proto::host::HostCall, wasm::WasmRunner};
 use tonic::{Request, Response, Status};
 use wasmer::Value;
 
 use crate::proto::{
-    detector_server::Detector, host_proto::HostCall, DetectionReply, DetectionRequest, InferReply,
-    InferRequest,
+    detector_server::Detector, DetectionReply, DetectionRequest, InferReply, InferRequest,
 };
 
 // type ServerPointer = Arc<Mutex<AbtsractServer<InferRequest, InferReply>>>;
@@ -58,7 +56,7 @@ impl Detector for FaceServer {
         //        However, if we reuse the instance for every request, it errors out with message
         //        saying "failed to allocate memory".
         //        Instead, we instantiate the module from compiler, for each request.
-        let wasm = WasmRunner::compile(WASM).map_err(|e| {
+        let mut wasm = WasmRunner::compile(WASM).map_err(|e| {
             Status::aborted(format!("Failed to compile and setup wasm module: {e}"))
         })?;
 
@@ -66,34 +64,15 @@ impl Detector for FaceServer {
         println!("Exports: {:?}", &wasm.instance.exports);
 
         let msg = request.into_inner();
-        let (start, len) = wasm.write_message(msg).map_err(|e| {
+        let ptr = wasm.write_message(msg).map_err(|e| {
             Status::aborted(format!("Failed to write request data to wasm memory: {e}"))
         })?;
 
-        let params = &[Value::I32(start), Value::I32(len)];
+        let params = &[Value::I32(ptr.start), Value::I32(ptr.len)];
 
-        let out = wasm
+        let call: HostCall = wasm
             .call("main", params)
             .map_err(|e| Status::aborted(format!("Failed to call WebAssembly function: {e}")))?;
-
-        let value = out[0].unwrap_i64();
-        println!("value: {value:x}");
-
-        let start = value >> 32;
-        let len = value & 0xffff_ffff;
-
-        let mut buffer = vec![0; len as usize];
-        {
-            let view = memory.view(&mut store);
-            view.read(start as _, &mut buffer).map_err(|e| {
-                Status::aborted(format!("Failed to read WebAssembly memory after call: {e}"))
-            })?;
-        }
-
-        println!("Read HostCall buffer: {:?}", &buffer[..]);
-
-        let call: HostCall = Message::decode(&buffer[..])
-            .map_err(|e| Status::aborted(format!("Failed to parse host call: {e}")))?;
 
         println!("HastCall invoked: {:?}", call);
 
@@ -101,72 +80,32 @@ impl Detector for FaceServer {
             .parameters
             .ok_or(Status::aborted("Failed to read HostCall: cont is null"))?;
 
-        let mut buffer = vec![0; param_ptr.len as usize];
-        {
-            let view = memory.view(&mut store);
-            view.read(param_ptr.start as _, &mut buffer).map_err(|e| {
-                Status::aborted(format!(
-                    "Failed to read invoke params from WebAssembly memory: {e}"
-                ))
-            })?;
-        }
-
-        let params: InferRequest = Message::decode(&buffer[..]).map_err(|e| {
-            Status::aborted(format!("Failed to parse infer request parameters: {e}"))
+        let params: InferRequest = wasm.read_message(param_ptr.into()).map_err(|e| {
+            Status::aborted(format!(
+                "Failed to read infer parameters from wasm memory: {e}"
+            ))
         })?;
+
         let _req = Request::new(params);
         // let resp = self.infer(req).await?;
         // let resp_buf = resp.into_inner().encode_to_vec();
-        let resp_buf = InferReply {
-            squeezenet0_flatten0_reshape0: vec![0.5, 0.6, 0.9],
-        }
-        .encode_to_vec();
-        let resp_start = param_ptr.start + param_ptr.len + 1;
 
-        {
-            let view = memory.view(&mut store);
-            view.write(resp_start, &resp_buf[..]).map_err(|e| {
-                Status::aborted(format!(
-                    "Failed to write response to WebAssembly memory: {e}"
-                ))
-            })?;
-        }
+        let resp = InferReply {
+            squeezenet0_flatten0_reshape0: vec![0.5, 0.6, 0.9],
+        };
+
+        let ptr = wasm.write_message(resp).map_err(|e| {
+            Status::aborted(format!("Failed to write infer reply to wasm memory: {e}"))
+        })?;
+        let param: [Value; 2] = ptr.into();
 
         let cont = call
             .cont
             .ok_or(Status::aborted("Failed to read HostCall: cont is null"))?;
 
-        let next = instance
-            .exports
-            .get_function(&cont.name)
-            .map_err(|e| Status::aborted(format!("Failed to get continuation: {e}")))?;
-
-        let params = &[Value::I32(resp_start as _), Value::I32(resp_buf.len() as _)];
-
-        let out = next.call(&mut store, params).map_err(|e| {
+        let reply: DetectionReply = wasm.call(&cont.name, &param).map_err(|e| {
             Status::aborted(format!("Failed to call WebAssembly function (2): {e}"))
         })?;
-
-        let value = out[0].unwrap_i64();
-        println!("value: {value:x}");
-
-        let start = value >> 32;
-        let len = value & 0xffff_ffff;
-
-        let mut buffer = vec![0; len as usize];
-        {
-            let view = memory.view(&mut store);
-            view.read(start as _, &mut buffer).map_err(|e| {
-                Status::aborted(format!(
-                    "Failed to read the reply from WebAssembly memory: {e}"
-                ))
-            })?;
-        }
-
-        println!("Read HostCall buffer: {:?}", &buffer[..]);
-
-        let reply: DetectionReply = Message::decode(&buffer[..])
-            .map_err(|e| Status::aborted(format!("Failed to parse reply: {e}")))?;
 
         println!("Parsed reply: {reply:?}");
 

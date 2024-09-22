@@ -8,3 +8,7 @@ prost = "0.12"
 tonic = "0.11.0"
 wasmer = "4.3.5"
 wonnx = "0.5.1"
+
+[build-dependencies]
+tonic-build = { version = "0.11", features = ["prost"] }
+tonic = "0.11.0"
