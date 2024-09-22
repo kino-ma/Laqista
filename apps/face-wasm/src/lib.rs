@@ -7,11 +7,15 @@
 use core::slice;
 
 use face_proto::DetectionRequest;
+use host_proto::{Continuation, HostCall};
 use image::{imageops::FilterType, GenericImageView, Pixel};
 use prost::Message;
 
 mod face_proto {
     tonic::include_proto!("face");
+}
+mod host_proto {
+    tonic::include_proto!("host");
 }
 
 extern "C" {}
@@ -61,7 +65,7 @@ pub extern "C" fn main(ptr: i32, len: i32) -> i64 {
         (channels[c] as f32) / 255.0
     });
 
-    let input = match array.as_slice() {
+    let _input = match array.as_slice() {
         Some(slic) => slic,
         None => {
             let msg = format!("ERR: Failed to get array slice");
@@ -71,15 +75,21 @@ pub extern "C" fn main(ptr: i32, len: i32) -> i64 {
         }
     };
 
+    let cont = Continuation {
+        name: "Next!".to_owned(),
+    };
+    let call = HostCall {
+        name: "INVOKING!!".to_owned(),
+        cont: Some(cont),
+    };
+    let mut buffer: Vec<u8> = Vec::new();
+    call.encode(&mut buffer).unwrap();
+
+    write_bytes(msg_start as _, &buffer)
+
     // let outputs = unsafe { infer(input.as_ptr() as _, input.len() as _) };
     // let (ptr, len) = split(outputs);
     // let data: &[f32] = unsafe { slice::from_raw_parts(ptr as _, len as _) };
-
-    let msg = format!("Inputs: {:?}", &input[0..10]);
-
-    write_str(len as isize + 1, &msg);
-    let ret = join(msg_start, msg.len() as _);
-    return ret;
 
     // let probabilities: Vec<f32> = outputs.try_into().unwrap();
     // let mut probabilities = probabilities.iter().enumerate().collect::<Vec<_>>();
@@ -102,14 +112,21 @@ pub extern "C" fn main(ptr: i32, len: i32) -> i64 {
     // return ret;
 }
 
-fn write_str(offset: isize, data: &str) {
+fn write_str(offset: isize, data: &str) -> i64 {
+    write_bytes(offset, data.as_bytes())
+}
+
+fn write_bytes(offset: isize, data: &[u8]) -> i64 {
     #[cfg(target_family = "wasm")]
     grow_to(offset - 1, data.len() as _);
 
     let ptr: *mut u8 = offset as _;
+    let len = data.len();
     unsafe {
-        std::ptr::copy(data.as_ptr(), ptr, data.len());
+        std::ptr::copy(data.as_ptr(), ptr, len);
     }
+
+    join(offset as _, len as _)
 }
 
 fn join(upper: i32, lower: i32) -> i64 {

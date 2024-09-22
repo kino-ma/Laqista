@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package host;
+
+message HostCall {
+  string name = 1;
+  Continuation cont = 2;
+}
+
+message Continuation { string name = 1; }

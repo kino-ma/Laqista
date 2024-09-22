@@ -6,7 +6,8 @@ use tonic::{Request, Response, Status};
 use wasmer::{imports, Cranelift, FunctionEnv, Instance, Memory, MemoryType, Module, Store, Value};
 
 use crate::proto::{
-    detector_server::Detector, DetectionReply, DetectionRequest, InferReply, InferRequest,
+    detector_server::Detector, host_proto::HostCall, DetectionReply, DetectionRequest, InferReply,
+    InferRequest,
 };
 
 // type ServerPointer = Arc<Mutex<AbtsractServer<InferRequest, InferReply>>>;
@@ -121,11 +122,11 @@ impl Detector for FaceServer {
         view.read(start as _, &mut buffer).map_err(|e| {
             Status::aborted(format!("Failed to read WebAssembly memory after call: {e}"))
         })?;
-        let msg = core::str::from_utf8(&buffer).map_err(|e| {
-            Status::aborted(format!("Failed to read WebAssembly memory after call: {e}"))
-        })?;
-        println!("Message returned: {msg}");
-        println!("Raw: {buffer:?}");
+
+        let call: HostCall = Message::decode(&buffer[..])
+            .map_err(|e| Status::aborted(format!("Failed to parse host call: {e}")))?;
+
+        println!("HastCall invoked: {:?}", call);
 
         let reply = DetectionReply {
             label: "EXECUTED!".to_owned(),

@@ -2,6 +2,9 @@ use mless_core::tensor::{AsInputs, Inputs, Outputs, OutputsParseError};
 use wonnx::utils::{InputTensor, OutputTensor};
 
 tonic::include_proto!("face");
+pub mod host_proto {
+    tonic::include_proto!("host");
+}
 
 impl AsInputs for InferRequest {
     fn as_inputs<'a>(&'a self) -> Inputs<'a> {
