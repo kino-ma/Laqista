@@ -95,18 +95,14 @@ impl Detector for FaceServer {
         })?;
 
         let view = memory.view(&mut store);
-        let mut buffer = Vec::new();
-        request
-            .into_inner()
-            .encode(&mut buffer)
-            .map_err(|e| Status::aborted(format!("Failed to encode request data: {e}")))?;
+        let image = request.into_inner().image_png;
 
-        view.write(0, &buffer).map_err(|e| {
+        view.write(0, &image).map_err(|e| {
             Status::aborted(format!("Failed to write request data to wasm memory: {e}"))
         })?;
-        println!("Written {} bytes", buffer.len());
+        println!("Written {} bytes", image.len());
 
-        let params = &[Value::I32(0), Value::I32(buffer.len() as _)];
+        let params = &[Value::I32(0), Value::I32(image.len() as _)];
 
         let out = main
             .call(&mut store, params)
