@@ -104,6 +104,7 @@ impl Detector for FaceServer {
         view.write(0, &buffer).map_err(|e| {
             Status::aborted(format!("Failed to write request data to wasm memory: {e}"))
         })?;
+        println!("Written {} bytes", buffer.len());
 
         let params = &[Value::I32(0), Value::I32(buffer.len() as _)];
 
@@ -124,7 +125,7 @@ impl Detector for FaceServer {
         })?;
 
         let view = memory.view(&mut store);
-        let mut buffer = Vec::new();
+        let mut buffer = vec![0; len as usize + 1];
         view.read(start as _, &mut buffer).map_err(|e| {
             Status::aborted(format!("Failed to read WebAssembly memory after call: {e}"))
         })?;

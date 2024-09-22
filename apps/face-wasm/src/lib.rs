@@ -27,7 +27,7 @@ pub extern "C" fn main(ptr: i32, len: i32) -> i64 {
 
     let img = image::load_from_memory(buffer);
 
-    let msg_start = len as usize + 1;
+    let msg_start = len as isize + 1;
 
     let msg = match img {
         Ok(_img) => "ok".to_owned(),
@@ -36,7 +36,7 @@ pub extern "C" fn main(ptr: i32, len: i32) -> i64 {
         }
     };
 
-    write_str(len as usize + 1, &msg);
+    write_str(len as isize + 1, &msg);
     (msg_start as i64) << 32 | msg.len() as i64
 
     // let img = img.resize_to_fill(IMAGE_WIDTH as _, IMAGE_HEIGHT as _, FilterType::Nearest);
@@ -73,9 +73,9 @@ pub extern "C" fn main(ptr: i32, len: i32) -> i64 {
     // }
 }
 
-fn write_str(offset: usize, data: &str) {
+fn write_str(offset: isize, data: &str) {
     #[cfg(target_family = "wasm")]
-    grow_to(data.len(), data.len());
+    grow_to(offset - 1, data.len() as _);
 
     let ptr: *mut u8 = offset as _;
     unsafe {
@@ -84,12 +84,12 @@ fn write_str(offset: usize, data: &str) {
 }
 
 #[cfg(target_family = "wasm")]
-const PAGE_SIZE: usize = 65536;
+const PAGE_SIZE: isize = 65536;
 
 #[cfg(target_family = "wasm")]
-fn grow_to(tail_idx: usize, data_len: usize) -> usize {
+fn grow_to(tail_idx: isize, data_len: isize) -> isize {
     use core::arch;
-    let current_size = arch::wasm32::memory_size(0);
+    let current_size = arch::wasm32::memory_size(0) as isize;
     let cap = current_size * PAGE_SIZE;
     assert!(tail_idx <= cap);
 
@@ -98,7 +98,7 @@ fn grow_to(tail_idx: usize, data_len: usize) -> usize {
     let missing = data_len - available;
     if missing > 0 {
         let to_grow = missing / PAGE_SIZE + 1;
-        arch::wasm32::memory_grow(0, to_grow);
+        arch::wasm32::memory_grow(0, to_grow as _);
         to_grow
     } else {
         0
