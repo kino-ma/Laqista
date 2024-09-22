@@ -153,9 +153,13 @@ impl Detector for FaceServer {
         let params: InferRequest = Message::decode(&buffer[..]).map_err(|e| {
             Status::aborted(format!("Failed to parse infer request parameters: {e}"))
         })?;
-        let req = Request::new(params);
-        let resp = self.infer(req).await?;
-        let resp_buf = resp.into_inner().encode_to_vec();
+        let _req = Request::new(params);
+        // let resp = self.infer(req).await?;
+        // let resp_buf = resp.into_inner().encode_to_vec();
+        let resp_buf = InferReply {
+            squeezenet0_flatten0_reshape0: vec![0.5, 0.6, 0.9],
+        }
+        .encode_to_vec();
         let resp_start = param_ptr.start + param_ptr.len + 1;
 
         {
