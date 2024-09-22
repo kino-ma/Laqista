@@ -1,6 +1,7 @@
 use core::{slice, str};
 use std::error::Error;
 
+use prost::Message;
 use tonic::{Request, Response, Status};
 use wasmer::{imports, Cranelift, FunctionEnv, Instance, Memory, MemoryType, Module, Store, Value};
 
@@ -92,15 +93,18 @@ impl Detector for FaceServer {
             Status::aborted(format!("Failed to get expported WebAssembly function: {e}"))
         })?;
 
-        let view = memory.view(&mut store);
-        let image = request.into_inner().image_png;
-
-        view.write(0, &image).map_err(|e| {
+        let mut buf: Vec<u8> = Vec::new();
+        request.into_inner().encode(&mut buf).map_err(|e| {
             Status::aborted(format!("Failed to write request data to wasm memory: {e}"))
         })?;
-        println!("Written {} bytes", image.len());
 
-        let params = &[Value::I32(0), Value::I32(image.len() as _)];
+        let view = memory.view(&mut store);
+        view.write(0, &buf).map_err(|e| {
+            Status::aborted(format!("Failed to write request data to wasm memory: {e}"))
+        })?;
+        println!("Written {} bytes", buf.len());
+
+        let params = &[Value::I32(0), Value::I32(buf.len() as _)];
 
         let out = main
             .call(&mut store, params)
