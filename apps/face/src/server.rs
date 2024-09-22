@@ -1,9 +1,9 @@
-use core::{slice, str};
 use std::error::Error;
 
+use mless_core::wasm::WasmRunner;
 use prost::Message;
 use tonic::{Request, Response, Status};
-use wasmer::{imports, Cranelift, FunctionEnv, Instance, Memory, MemoryType, Module, Store, Value};
+use wasmer::Value;
 
 use crate::proto::{
     detector_server::Detector, host_proto::HostCall, DetectionReply, DetectionRequest, InferReply,
@@ -58,39 +58,14 @@ impl Detector for FaceServer {
         //        However, if we reuse the instance for every request, it errors out with message
         //        saying "failed to allocate memory".
         //        Instead, we instantiate the module from compiler, for each request.
-        let compiler = Cranelift::default();
+        let wasm = WasmRunner::compile(WASM).map_err(|e| {
+            Status::aborted(format!("Failed to compile and setup wasm module: {e}"))
+        })?;
 
-        let mut store = Store::new(compiler);
-        let module = Module::new(&store, WASM)
-            .map_err(|e| Status::aborted(format!("Failed to create WebAssembly module: {e}")))?;
+        println!("Imports: {:?}", &wasm.module.imports().collect::<Vec<_>>());
+        println!("Exports: {:?}", &wasm.instance.exports);
 
-        struct MyEnv;
-        let _env = FunctionEnv::new(&mut store, MyEnv);
-
-        fn _print_str(ptr: u32, len: u32) {
-            println!("print_str called!!");
-            println!("ptr: {ptr}, len: {len}");
-            let slic: &[u8] = unsafe { slice::from_raw_parts(ptr as _, len as _) };
-            let text = str::from_utf8(slic).unwrap();
-            println!("{text}");
-        }
-        // let print_typed = Function::new_typed_with_env(&mut store, &env, print_str);
-
-        let memory = Memory::new(&mut store, MemoryType::new(21, None, false))
-            .map_err(|e| Status::aborted(format!("Failed to create WebAssembly memory: {e}")))?;
-        let import_object = imports! {
-            "env" => {
-                "memory" => memory.clone(),
-            }
-        };
-
-        let instance = Instance::new(&mut store, &module, &import_object)
-            .map_err(|e| Status::aborted(format!("Failed to create WebAssembly instance: {e}")))?;
-
-        println!("Imports: {:?}", module.imports().collect::<Vec<_>>());
-        println!("Exports: {:?}", instance.exports);
-
-        let main = instance.exports.get_function("main").map_err(|e| {
+        let main = wasm.instance.exports.get_function("main").map_err(|e| {
             Status::aborted(format!("Failed to get expported WebAssembly function: {e}"))
         })?;
 

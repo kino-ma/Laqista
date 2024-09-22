@@ -3,10 +3,10 @@ use std::error::Error;
 use wasmer::{imports, Cranelift, Instance, Memory, MemoryType, Module, Store};
 
 pub struct WasmRunner {
-    store: Store,
-    module: Module,
-    memory: Memory,
-    instance: Instance,
+    pub store: Store,
+    pub module: Module,
+    pub memory: Memory,
+    pub instance: Instance,
 }
 
 impl WasmRunner {
