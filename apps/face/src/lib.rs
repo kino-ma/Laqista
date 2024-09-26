@@ -48,5 +48,5 @@ pub fn model_path() -> PathBuf {
         .join("..")
         .join("data")
         .join("models")
-        .join("resnet50_gn_Opset16.onnx")
+        .join("opt-squeeze.onnx")
 }

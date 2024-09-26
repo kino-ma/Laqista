@@ -41,5 +41,14 @@ async fn schedule_wasm() {
         image_png: JPEG.to_vec(),
     };
 
-    detector_client.run_detection(request).await.unwrap();
+    let resp = detector_client
+        .run_detection(request)
+        .await
+        .unwrap()
+        .into_inner();
+
+    let correct_labels = ["pelican", "spoonbill", "mollymawk", "oyster catcher"];
+    let is_correct = correct_labels.iter().any(|l| resp.label.contains(l));
+
+    assert!(is_correct, "{:?}", resp);
 }

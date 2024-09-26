@@ -1,16 +1,22 @@
-use std::error::Error;
+use std::{error::Error, sync::Arc};
 
-use mless_core::{proto::host::HostCall, wasm::WasmRunner};
+use mless_core::{
+    proto::host::HostCall, server::AbtsractServer, session::Session, wasm::WasmRunner,
+};
+use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
 use wasmer::Value;
 
-use crate::proto::{
-    detector_server::Detector, DetectionReply, DetectionRequest, InferReply, InferRequest,
+use crate::{
+    model_path,
+    proto::{
+        detector_server::Detector, DetectionReply, DetectionRequest, InferReply, InferRequest,
+    },
 };
 
-// type ServerPointer = Arc<Mutex<AbtsractServer<InferRequest, InferReply>>>;
+type ServerPointer = Arc<Mutex<AbtsractServer<InferRequest, InferReply>>>;
 pub struct FaceServer {
-    // inner: ServerPointer
+    inner: ServerPointer,
 }
 
 static WASM: &'static [u8] =
@@ -18,34 +24,29 @@ static WASM: &'static [u8] =
 
 impl FaceServer {
     pub async fn create() -> Result<Self, Box<dyn Error>> {
-        // let compiler = Cranelift::default();
+        let path = model_path();
+        let session = Session::from_path(path).await?;
+        let server = AbtsractServer::new(session);
+        let ptr = Arc::new(Mutex::new(server));
 
-        // let store = Store::new(compiler);
-        // let module = Module::new(&store, WASM)?;
-
-        // let wasm = WasmInstance { store, module };
-        // let wasm = Arc::new(Mutex::new(wasm));
-
-        // Ok(Self { wasm })
-        Ok(Self {})
+        Ok(Self { inner: ptr })
     }
 }
 
 #[tonic::async_trait]
 impl Detector for FaceServer {
-    async fn infer(&self, _request: Request<InferRequest>) -> Result<Response<InferReply>, Status> {
-        unimplemented!("Model isn't executed right now")
-        // let inner_request = request.into_inner();
+    async fn infer(&self, request: Request<InferRequest>) -> Result<Response<InferReply>, Status> {
+        let inner_request = request.into_inner();
 
-        // let reply = self
-        //     .0
-        //     .lock()
-        //     .await
-        //     .infer(inner_request)
-        //     .await
-        //     .map_err(|e| Status::aborted(format!("could not run inference: {e}")))?;
+        let reply = self
+            .inner
+            .lock()
+            .await
+            .infer(inner_request)
+            .await
+            .map_err(|e| Status::aborted(format!("could not run inference: {e}")))?;
 
-        // Ok(Response::new(reply))
+        Ok(Response::new(reply))
     }
 
     async fn run_detection(
@@ -87,13 +88,8 @@ impl Detector for FaceServer {
             ))
         })?;
 
-        let _req = Request::new(params);
-        // let resp = self.infer(req).await?;
-        // let resp_buf = resp.into_inner().encode_to_vec();
-
-        let resp = InferReply {
-            squeezenet0_flatten0_reshape0: vec![0.5, 0.6, 0.9],
-        };
+        let req = Request::new(params);
+        let resp = self.infer(req).await?.into_inner();
 
         let ptr = wasm.write_message(resp).map_err(|e| {
             Status::aborted(format!("Failed to write infer reply to wasm memory: {e}"))
