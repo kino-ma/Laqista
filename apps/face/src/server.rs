@@ -88,13 +88,8 @@ impl Detector for FaceServer {
             ))
         })?;
 
-        let _req = Request::new(params);
-        // let resp = self.infer(req).await?;
-        // let resp_buf = resp.into_inner().encode_to_vec();
-
-        let resp = InferReply {
-            squeezenet0_flatten0_reshape0: vec![0.5, 0.6, 0.9],
-        };
+        let req = Request::new(params);
+        let resp = self.infer(req).await?.into_inner();
 
         let ptr = wasm.write_message(resp).map_err(|e| {
             Status::aborted(format!("Failed to write infer reply to wasm memory: {e}"))
