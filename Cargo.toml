@@ -47,6 +47,8 @@ tonic-build = "0.11"
 
 [dev-dependencies]
 criterion = { version = "0.5.1", features = ["html_reports", "async_tokio"] }
+image = "0.25.2"
+ndarray = "0.15.6"
 
 [[bench]]
 name = "greeter"
