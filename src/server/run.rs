@@ -13,7 +13,7 @@ use crate::scheduler::uninit::UninitScheduler;
 use crate::scheduler::AuthoritativeScheduler;
 use crate::{
     proto::{scheduler_server::SchedulerServer, server_daemon_server::ServerDaemonServer},
-    scheduler::{mean::MeanGpuScheduler, Cluster},
+    scheduler::{mean::MeanScheduler, Cluster},
 };
 use crate::{Error, GroupInfo, Result, ServerInfo};
 
@@ -170,7 +170,7 @@ impl ServerRunner {
             let scheduler = AuthoritativeScheduler::new(
                 cluster,
                 other_cluster,
-                Box::new(MeanGpuScheduler {}),
+                Box::new(MeanScheduler {}),
                 self.tx.clone(),
             );
             Ok(DaemonState::Authoritative(scheduler))

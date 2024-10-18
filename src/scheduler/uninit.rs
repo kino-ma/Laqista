@@ -14,7 +14,7 @@ use crate::{
     Error, ServerInfo,
 };
 
-use super::{mean::MeanGpuScheduler, AuthoritativeScheduler, Cluster};
+use super::{mean::MeanScheduler, AuthoritativeScheduler, Cluster};
 
 pub struct UninitScheduler {
     server: ServerInfo,
@@ -36,7 +36,7 @@ impl UninitScheduler {
     }
 
     pub fn create_scheduler(&self, this: Cluster, other: Cluster) -> AuthoritativeScheduler {
-        let scheduler = Box::new(MeanGpuScheduler {});
+        let scheduler = Box::new(MeanScheduler {});
         AuthoritativeScheduler::new(this, other, scheduler, self.tx.clone())
     }
 }
