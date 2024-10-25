@@ -194,9 +194,6 @@ impl Scheduler for AuthoritativeScheduler {
         Ok(Response::new(JoinResponse {
             success: true,
             group,
-            is_scheduler: false,
-            our_group: None,
-            nomination: None,
         }))
     }
 
