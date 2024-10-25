@@ -39,7 +39,6 @@ message QoS {}
 service Scheduler {
   // For cluster management.
   rpc Join(JoinRequest) returns (JoinResponse);
-  rpc Notify(NotifyRequest) returns (NotifyResponse);
   rpc Report(ReportRequest) returns (ReportResponse);
 
   // For managing and calling applictions.

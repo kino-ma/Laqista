@@ -9,11 +9,10 @@ use tonic::transport::{server::Router, Channel, Server as TransportServer};
 
 use crate::proto::{scheduler_client::SchedulerClient, JoinRequest};
 use crate::report::MetricsReporter;
-use crate::scheduler::uninit::UninitScheduler;
 use crate::scheduler::AuthoritativeScheduler;
 use crate::{
     proto::{scheduler_server::SchedulerServer, server_daemon_server::ServerDaemonServer},
-    scheduler::{mean::MeanScheduler, Cluster},
+    scheduler::mean::MeanScheduler,
 };
 use crate::{Error, GroupInfo, Result, ServerInfo};
 
@@ -37,9 +36,7 @@ pub struct ServerRunner {
 
 #[derive(Clone, Debug)]
 pub enum DaemonState {
-    Starting,
     Running(GroupInfo),
-    Uninitialized,
     Joining(String),
     Authoritative(AuthoritativeScheduler),
     Failed,
@@ -73,7 +70,7 @@ impl ServerRunner {
         let info = self.create_info(start_command)?;
         self.socket = info.as_socket()?;
 
-        let mut state = self.determine_state(start_command);
+        let mut state = self.determine_state(start_command, &info);
 
         loop {
             let daemon = self.create_daemon(info.clone(), state.clone());
@@ -100,11 +97,6 @@ impl ServerRunner {
         let server = daemon.runtime.info.clone();
 
         match state {
-            #[allow(unused_must_use)]
-            DaemonState::Uninitialized => {
-                println!("Uninitialized. Waiting for others to join...");
-                self.start_uninitialized(server).await
-            }
             DaemonState::Joining(bootstrap_addr) => {
                 println!("Joining to a cluster...");
                 let server = ServerInfo::new(&self.socket.to_string());
@@ -120,26 +112,10 @@ impl ServerRunner {
                 println!("Running an Authoritative server...");
                 self.start_authoritative(daemon, scheduler).await
             }
-            DaemonState::Starting => Ok(DaemonState::Uninitialized),
             DaemonState::Failed => {
                 panic!("invalid state: {:?}", state)
             }
         }
-    }
-
-    async fn start_uninitialized(&self, server: ServerInfo) -> Result<DaemonState> {
-        let cancel_token = CancellationToken::new();
-
-        let scheduler = UninitScheduler::new(server, self.tx.clone(), cancel_token.child_token());
-
-        let service = SchedulerServer::new(scheduler);
-        let initializing_server = TransportServer::builder().add_service(service);
-
-        initializing_server.serve(self.socket).await?;
-
-        println!("Uninit scheduler successfully cancelled");
-
-        unreachable!("state should be sent from UninitScheduler first");
     }
 
     async fn join_cluster(&self, server: ServerInfo, addr: &str) -> Result<DaemonState> {
@@ -159,24 +135,7 @@ impl ServerRunner {
             .expect("Group in response cannot be empty")
             .try_into()?;
 
-        if resp.is_scheduler {
-            let other = resp
-                .our_group
-                .expect("Other group cannot be empty when becoming a scheduler");
-
-            let cluster = Cluster::with_group(&group);
-            let other_cluster = Cluster::with_group(&other.try_into()?);
-
-            let scheduler = AuthoritativeScheduler::new(
-                cluster,
-                other_cluster,
-                Box::new(MeanScheduler {}),
-                self.tx.clone(),
-            );
-            Ok(DaemonState::Authoritative(scheduler))
-        } else {
-            Ok(DaemonState::Running(group))
-        }
+        Ok(DaemonState::Running(group))
     }
 
     async fn start_authoritative(
@@ -270,12 +229,21 @@ impl ServerRunner {
         }
     }
 
-    pub fn determine_state(&self, start_command: &StartCommand) -> DaemonState {
+    pub fn determine_state(
+        &self,
+        start_command: &StartCommand,
+        server: &ServerInfo,
+    ) -> DaemonState {
         let maybe_bootstrap_addr = start_command.bootstrap_addr.as_deref();
 
         match maybe_bootstrap_addr {
             Some(bootstrap_addr) => DaemonState::Joining(bootstrap_addr.to_owned()),
-            None => DaemonState::Starting,
+            None => {
+                let mean_scheduler = Box::new(MeanScheduler {});
+                let tx = self.tx.clone();
+                let scheduler = AuthoritativeScheduler::from_server(server, mean_scheduler, tx);
+                DaemonState::Authoritative(scheduler)
+            }
         }
     }
 
