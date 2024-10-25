@@ -190,7 +190,7 @@ impl ServerRunner {
         let token = CancellationToken::new();
         let cloned = token.clone();
 
-        let mut reporter = MetricsReporter::new(server, scheduler);
+        let mut reporter = MetricsReporter::new(self.tx.clone(), server, scheduler);
         tokio::spawn(async move { reporter.start(cloned).await });
 
         token

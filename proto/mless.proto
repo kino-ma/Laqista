@@ -53,7 +53,10 @@ message ReportRequest {
   Server server = 1;
   repeated MonitorWindow windows = 2;
 }
-message ReportResponse { bool success = 1; }
+message ReportResponse {
+  bool success = 1;
+  ClusterState cluster = 2;
+}
 
 message ClusterState {
   Group group = 1;

@@ -1,9 +1,4 @@
-use std::{
-    convert::Infallible,
-    error::Error as GenericError,
-    fmt::{Display, Pointer},
-    io,
-};
+use std::{convert::Infallible, error::Error as GenericError, fmt::Display, io};
 
 use mac_address::MacAddressError;
 use tokio::sync::mpsc;

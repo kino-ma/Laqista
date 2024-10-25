@@ -213,7 +213,12 @@ impl Scheduler for AuthoritativeScheduler {
 
         runtime.cluster.insert_stats(stats);
 
-        Ok(Response::new(ReportResponse { success: true }))
+        let cluster = runtime.cluster.clone().into();
+
+        Ok(Response::new(ReportResponse {
+            success: true,
+            cluster: Some(cluster),
+        }))
     }
 
     async fn deploy(&self, request: Request<DeployRequest>) -> RpcResult<Response<DeployResponse>> {
@@ -247,7 +252,7 @@ impl Scheduler for AuthoritativeScheduler {
         let server_ids = runtime
             .cluster
             .get_instance_server_ids(&id)
-            .map_err(Status::aborted)?;
+            .map_err(|e| Status::aborted(e.to_string()))?;
 
         let stats_map = runtime.cluster.server_stats.clone_by_ids(&server_ids);
 
