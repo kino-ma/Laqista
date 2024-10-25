@@ -332,6 +332,25 @@ impl Cluster {
         }
     }
 
+    /// choose_scheduler chooses a scheduler based on their ids.
+    /// A server with the lowest id is chosen.
+    ///
+    /// NOTE:
+    /// This function assumes there is at least one server in the `.servers`
+    /// becouse the calling server instance must be included.
+    pub fn choose_scheduler(&mut self) -> &ServerInfo {
+        let mut lowest_id_server = &self.servers[0];
+
+        for server in &self.servers {
+            if server.id < lowest_id_server.id {
+                lowest_id_server = server;
+            }
+        }
+
+        self.group.scheduler_info = lowest_id_server.clone();
+        return &lowest_id_server;
+    }
+
     pub fn next_cluster(&self, scheduler_info: &ServerInfo) -> Self {
         let number = self.group.number + 1;
         let other_group = GroupInfo::with_number(scheduler_info, number);

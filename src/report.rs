@@ -7,7 +7,7 @@ use crate::{
     error::Error as MlessError,
     monitor::{MetricsMonitor, SendMetrics},
     proto::{scheduler_client::SchedulerClient, ClusterState, MonitorWindow, ReportRequest},
-    scheduler::{mean::MeanScheduler, AuthoritativeScheduler},
+    scheduler::{mean::MeanScheduler, AuthoritativeScheduler, Cluster},
     server::DaemonState,
     ServerInfo,
 };
@@ -95,17 +95,26 @@ impl MetricsReporter {
                             .ok_or("No latest cluster state is saved")?
                             .try_into();
 
-                        let cluster = match cluster_result {
+                        let mut cluster: Cluster = match cluster_result {
                             Ok(cluster) => cluster,
                             Err(e) => return Err(Box::new(e)),
                         };
 
-                        let scheduler = AuthoritativeScheduler::new(
-                            cluster,
-                            mean_scheduler,
-                            self.state_tx.clone(),
-                        );
-                        let state = DaemonState::Authoritative(scheduler);
+                        let id = cluster.group.scheduler_info.id.clone();
+                        cluster.remove_server(&id);
+
+                        let next_scheduler = cluster.choose_scheduler();
+
+                        let state = if next_scheduler.id == self.server.id {
+                            let scheduler = AuthoritativeScheduler::new(
+                                cluster,
+                                mean_scheduler,
+                                self.state_tx.clone(),
+                            );
+                            DaemonState::Authoritative(scheduler)
+                        } else {
+                            DaemonState::Joining(next_scheduler.addr.clone())
+                        };
 
                         self.state_tx.send(state).await?;
 
