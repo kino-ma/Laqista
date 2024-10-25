@@ -1,4 +1,9 @@
-use std::{convert::Infallible, error::Error as GenericError, io};
+use std::{
+    convert::Infallible,
+    error::Error as GenericError,
+    fmt::{Display, Pointer},
+    io,
+};
 
 use mac_address::MacAddressError;
 use tokio::sync::mpsc;
@@ -21,6 +26,26 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+impl GenericError for Error {}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AppInstantiation(err) => write!(f, "error instantiating an application: {err}"),
+            Io(err) => write!(f, "io error: {err}"),
+            Mac(err) => write!(f, "error parsing a mac address: {err}"),
+            NoneError => write!(f, "an empty value occured somewhere"),
+            RequestError(err) => write!(f, "request to another node failed: {err}"),
+            SendStateError(err) => write!(f, "failed to send state via tx: {err}"),
+            TransportError(err) => write!(f, "tonic transport error: {err}"),
+            Text(err) => write!(f, "{}", err),
+            Url(err) => write!(f, "error parsing an url: {err}"),
+            Uuid(err) => write!(f, "error parsing uuid: {err}"),
+            Other(err) => write!(f, "{}", err),
+        }
+    }
+}
+
 use url::ParseError;
 use Error::*;
 
@@ -28,25 +53,7 @@ use crate::server::DaemonState;
 
 impl Into<Status> for Error {
     fn into(self) -> Status {
-        Status::aborted(self)
-    }
-}
-
-impl Into<String> for Error {
-    fn into(self) -> String {
-        match self {
-            AppInstantiation(err) => format!("error instantiating an application: {err}"),
-            Io(err) => format!("io error: {err}"),
-            Mac(err) => format!("error parsing a mac address: {err}"),
-            NoneError => "an empty value occured somewhere".to_owned(),
-            RequestError(err) => format!("request to another node failed: {err}"),
-            SendStateError(err) => format!("failed to send state via tx: {err}"),
-            TransportError(err) => format!("tonic transport error: {err}"),
-            Text(err) => err,
-            Url(err) => format!("error parsing an url: {err}"),
-            Uuid(err) => format!("error parsing uuid: {err}"),
-            Other(err) => err.to_string(),
-        }
+        Status::aborted(self.to_string())
     }
 }
 
