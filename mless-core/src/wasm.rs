@@ -128,7 +128,8 @@ impl<M: Message + Default> ExecState<M> {
         }
     }
 }
-impl ExecState<()> {
+
+impl<T: std::fmt::Debug> ExecState<T> {
     pub fn unwrap_continue(self) -> HostCall {
         if let Self::Continue(c) = self {
             c

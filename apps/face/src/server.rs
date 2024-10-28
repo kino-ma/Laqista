@@ -72,7 +72,7 @@ impl Detector for FaceServer {
         let params: &[Value; 2] = &ptr.into();
 
         let call: HostCall = wasm
-            .call("main", params)
+            .call::<()>("main", params)
             .map_err(|e| Status::aborted(format!("Failed to call WebAssembly function: {e}")))?
             .unwrap_continue();
 
