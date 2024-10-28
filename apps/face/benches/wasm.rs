@@ -3,6 +3,8 @@ use face::proto::DetectionRequest;
 use mless_core::wasm::WasmRunner;
 use wasmer::{imports, wat2wasm, Cranelift, Instance, Module, Store, Value};
 
+static JPEG: &'static [u8] = include_bytes!("../../../data/pelican.jpeg");
+
 pub fn bench_wasm_module(c: &mut Criterion) {
     let wasm_bytes = wat2wasm(
         r#"
@@ -66,11 +68,11 @@ pub fn bench_wasm_memory(c: &mut Criterion) {
     };
     let input = WriteInput(&wasm_bytes, request);
 
-    let mut group = c.benchmark_group("Wasm instantiate");
+    let mut group = c.benchmark_group("Wasm memory");
     group.bench_with_input("wasm write memory", &input, |b, i| b.iter(|| write(i)));
 
     let request_heavy = DetectionRequest {
-        image_png: b"Hello world".to_vec(),
+        image_png: JPEG.to_vec(),
     };
     let input_heavy = WriteInput(&wasm_bytes, request_heavy);
 
@@ -86,5 +88,5 @@ fn write(input: &WriteInput) {
     runner.write_message(detection_request.clone()).unwrap();
 }
 
-criterion_group!(benches, bench_wasm_module);
+criterion_group!(benches, bench_wasm_module, bench_wasm_memory);
 criterion_main!(benches);

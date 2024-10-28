@@ -83,9 +83,6 @@ impl WasmRunner {
 
         self.ptr.consume(len as i32);
 
-        println!("Written {} bytes", bytes.len());
-        println!("\t= {:?}", bytes.iter().take(100).collect::<Vec<_>>());
-
         Ok(WasmPointer {
             start,
             len: len as _,
