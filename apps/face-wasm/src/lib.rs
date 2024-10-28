@@ -150,14 +150,45 @@ mod test {
 
 /// For benchmarking purpose
 #[cfg(feature = "bench")]
-#[cfg_attr(not(test), no_mangle)]
-pub extern "C" fn read_detection_request(ptr: i32, len: i32) -> i64 {
-    let memory = setup(ptr, len);
+mod bench {
+    use image::imageops::FilterType;
 
-    let buffer = memory.get_whole();
-    let request: DetectionRequest = read_message(buffer).unwrap();
+    use super::*;
 
-    let message = format!("{}", request.image_png.len());
+    #[cfg_attr(not(test), no_mangle)]
+    pub extern "C" fn read_detection_request(ptr: i32, len: i32) -> i64 {
+        let memory = setup(ptr, len);
 
-    exit_finish(memory, message)
+        let buffer = memory.get_whole();
+        let request: DetectionRequest = read_message(buffer).unwrap();
+
+        let message = format!("{}", request.image_png.len());
+
+        exit_finish(memory, message)
+    }
+
+    #[cfg_attr(not(test), no_mangle)]
+    pub extern "C" fn read_image(ptr: i32, len: i32) -> i64 {
+        let memory = setup(ptr, len);
+
+        let buffer = memory.get_whole();
+        let request: DetectionRequest = read_message(buffer).unwrap();
+
+        let img = image::load_from_memory(&request.image_png).expect("ERR: Failed to load image");
+
+        let img = img.resize_to_fill(IMAGE_WIDTH as _, IMAGE_HEIGHT as _, FilterType::Nearest);
+
+        let array =
+            ndarray::Array::from_shape_fn((1, 3, IMAGE_WIDTH, IMAGE_HEIGHT), |(_, c, j, i)| {
+                let pixel = img.get_pixel(i as u32, j as u32);
+                let channels = pixel.channels();
+
+                // range [0, 255] -> range [0, 1]
+                (channels[c] as f32) / 255.0
+            });
+
+        let message = format!("{}", array.len());
+
+        exit_finish(memory, message)
+    }
 }

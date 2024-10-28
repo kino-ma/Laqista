@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use face::proto::DetectionRequest;
+use face::proto::{DetectionRequest, InferReply};
 use mless_core::wasm::WasmRunner;
 use wasmer::{imports, wat2wasm, Cranelift, Instance, Module, Store, Value};
 
@@ -47,6 +47,7 @@ fn instantiate(wasm_bytes: &[u8]) {
 
 struct WriteInput<'a>(&'a [u8], DetectionRequest);
 struct ReadInput(DetectionRequest);
+struct ContinuationInput(InferReply);
 
 pub fn bench_wasm_memory(c: &mut Criterion) {
     let wasm_bytes = wat2wasm(
@@ -89,10 +90,28 @@ pub fn bench_wasm_memory(c: &mut Criterion) {
         b.iter(|| read_in_wasm(i))
     });
 
-    let input_read_heavy = ReadInput(request_heavy);
+    let input_read_heavy = ReadInput(request_heavy.clone());
 
     group.bench_with_input("wasm read memory heavy", &input_read_heavy, |b, i| {
         b.iter(|| read_in_wasm(i))
+    });
+
+    let input_read_image = ReadInput(request_heavy.clone());
+
+    group.bench_with_input("wasm read memory image", &input_read_image, |b, i| {
+        b.iter(|| read_image_in_wasm(i))
+    });
+
+    let input_main = ReadInput(request_heavy.clone());
+
+    group.bench_with_input("wasm main", &input_main, |b, i| b.iter(|| main_wasm(i)));
+
+    let input_get_prob = ContinuationInput(InferReply {
+        squeezenet0_flatten0_reshape0: vec![0.0; 1000],
+    });
+
+    group.bench_with_input("wasm get probability", &input_get_prob, |b, i| {
+        b.iter(|| get_prob_wasm(i))
     });
 }
 
@@ -117,6 +136,45 @@ fn read_in_wasm(input: &ReadInput) {
 
     let output = exec_state.unwrap_finished();
     assert_eq!(output, format!("{}", detection_request.image_png.len()));
+}
+
+fn read_image_in_wasm(input: &ReadInput) {
+    let ReadInput(detection_request) = input;
+    let mut runner = WasmRunner::compile(&WASM).unwrap();
+
+    let ptr = runner.write_message(detection_request.clone()).unwrap();
+
+    let params: &[Value; 2] = &ptr.into();
+
+    let exec_state = runner.call::<String>("read_image", params).unwrap();
+
+    exec_state.unwrap_continue();
+}
+
+fn main_wasm(input: &ReadInput) {
+    let ReadInput(detection_request) = input;
+    let mut runner = WasmRunner::compile(&WASM).unwrap();
+
+    let ptr = runner.write_message(detection_request.clone()).unwrap();
+
+    let params: &[Value; 2] = &ptr.into();
+
+    let exec_state = runner.call::<String>("main", params).unwrap();
+
+    exec_state.unwrap_continue();
+}
+
+fn get_prob_wasm(input: &ContinuationInput) {
+    let ContinuationInput(infer_reply) = input;
+    let mut runner = WasmRunner::compile(&WASM).unwrap();
+
+    let ptr = runner.write_message(infer_reply.clone()).unwrap();
+
+    let params: &[Value; 2] = &ptr.into();
+
+    let exec_state = runner.call::<String>("get_probability", params).unwrap();
+
+    exec_state.unwrap_finished();
 }
 
 criterion_group!(benches, bench_wasm_module, bench_wasm_memory);
