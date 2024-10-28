@@ -1,4 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
+use face::proto::DetectionRequest;
+use mless_core::wasm::WasmRunner;
 use wasmer::{imports, wat2wasm, Cranelift, Instance, Module, Store, Value};
 
 pub fn bench_wasm_module(c: &mut Criterion) {
@@ -37,6 +39,51 @@ fn instantiate(wasm_bytes: &[u8]) {
 
     let out = main.call(&mut store, params).unwrap();
     assert_eq!(out[0].i32().unwrap(), 42);
+}
+
+struct WriteInput<'a>(&'a [u8], DetectionRequest);
+
+pub fn bench_wasm_memory(c: &mut Criterion) {
+    let wasm_bytes = wat2wasm(
+        r#"
+(module
+  (memory $mem 1)
+  (type $sum_t (func (param i32 i32) (result i32)))
+  (func $sum_f (type $sum_t) (param $x i32) (param $y i32) (result i32)
+    local.get $x
+    local.get $y
+    i32.add)
+  (export "sum" (func $sum_f))
+  (export "memory" (memory $mem))
+  )
+"#
+        .as_bytes(),
+    )
+    .unwrap();
+
+    let request = DetectionRequest {
+        image_png: b"Hello world".to_vec(),
+    };
+    let input = WriteInput(&wasm_bytes, request);
+
+    let mut group = c.benchmark_group("Wasm instantiate");
+    group.bench_with_input("wasm write memory", &input, |b, i| b.iter(|| write(i)));
+
+    let request_heavy = DetectionRequest {
+        image_png: b"Hello world".to_vec(),
+    };
+    let input_heavy = WriteInput(&wasm_bytes, request_heavy);
+
+    group.bench_with_input("wasm write memory heavy", &input_heavy, |b, i| {
+        b.iter(|| write(i))
+    });
+}
+
+fn write(input: &WriteInput) {
+    let WriteInput(wasm_bytes, detection_request) = input;
+    let mut runner = WasmRunner::compile(wasm_bytes).unwrap();
+
+    runner.write_message(detection_request.clone()).unwrap();
 }
 
 criterion_group!(benches, bench_wasm_module);
