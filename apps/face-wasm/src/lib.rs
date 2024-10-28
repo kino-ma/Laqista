@@ -20,9 +20,6 @@ mod host_proto {
     tonic::include_proto!("host");
 }
 
-#[cfg(feature = "bench")]
-pub use memory::read_detection_request;
-
 extern "C" {}
 
 static LABELS: &'static str = include_str!("../../../data/models/resnet-labels.txt");
@@ -149,4 +146,18 @@ mod test {
             .as_slice()
             .expect("failed to convert array into a slice");
     }
+}
+
+/// For benchmarking purpose
+#[cfg(feature = "bench")]
+#[cfg_attr(not(test), no_mangle)]
+pub extern "C" fn read_detection_request(ptr: i32, len: i32) -> i64 {
+    let memory = setup(ptr, len);
+
+    let buffer = memory.get_whole();
+    let request: DetectionRequest = read_message(buffer).unwrap();
+
+    let message = format!("{}", request.image_png.len());
+
+    exit_finish(memory, message)
 }

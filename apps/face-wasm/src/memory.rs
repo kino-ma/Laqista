@@ -79,40 +79,6 @@ impl Memory {
     }
 }
 
-/// For benchmarking purpose
-#[cfg(feature = "bench")]
-#[cfg_attr(not(test), no_mangle)]
-pub extern "C" fn read_detection_request(start: i32, len: i32) -> i64 {
-    use crate::{
-        face_proto::DetectionRequest,
-        host_proto::{invoke_result::Result as IResult, Finished, InvokeResult, MemorySlice},
-        interface::slice_to_i64,
-    };
-
-    let mut mem = Memory::with_used_len(start as *const u8, len);
-    let buffer = mem.get_whole();
-
-    let msg: DetectionRequest = Message::decode(buffer)
-        .map_err(|e| format!("ERR: Failed to decode request: {e}"))
-        .unwrap();
-
-    let data = format!("{}", msg.image_png.len());
-    mem.write_str(&data);
-
-    let res = InvokeResult {
-        result: Some(IResult::Finished(Finished {
-            ptr: Some(MemorySlice {
-                start: data.as_ptr() as _,
-                len: data.len() as _,
-            }),
-        })),
-    };
-
-    let res_data = res.encode_to_vec();
-    let slic = mem.write_bytes(&res_data);
-    slice_to_i64(slic)
-}
-
 pub fn read_message<M: Message + Default>(buffer: &[u8]) -> Result<M, String> {
     Message::decode(buffer).map_err(|e| format!("ERR: Failed to decode request: {e}"))
 }
