@@ -79,13 +79,6 @@ impl Memory {
     }
 }
 
-pub fn slice_to_i64(s: &[u8]) -> i64 {
-    let ptr = (s.as_ptr() as i64) << 32;
-    let len = s.len() as i64;
-
-    ptr | len
-}
-
 /// For benchmarking purpose
 #[cfg(feature = "bench")]
 #[cfg_attr(not(test), no_mangle)]
@@ -93,6 +86,7 @@ pub extern "C" fn read_detection_request(start: i32, len: i32) -> i64 {
     use crate::{
         face_proto::DetectionRequest,
         host_proto::{invoke_result::Result as IResult, Finished, InvokeResult, MemorySlice},
+        interface::slice_to_i64,
     };
 
     let mut mem = Memory::with_used_len(start as *const u8, len);

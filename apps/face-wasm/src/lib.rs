@@ -1,3 +1,4 @@
+mod interface;
 mod memory;
 
 // use image::{imageops::FilterType, GenericImageView, Pixel};
@@ -7,11 +8,9 @@ mod memory;
 // }
 
 use face_proto::{DetectionReply, DetectionRequest, InferReply, InferRequest};
-use host_proto::{
-    invoke_result::Result as IRes, Continuation, HostCall, InvokeResult, MemorySlice,
-};
 use image::{imageops::FilterType, GenericImageView, Pixel};
-use memory::{read_message, slice_to_i64, Memory};
+use interface::{exit_error, exit_finish, exit_hostcall, setup};
+use memory::{read_message, Memory};
 use prost::Message;
 
 mod face_proto {
@@ -41,20 +40,15 @@ const IMAGE_HEIGHT: usize = 224;
 
 #[cfg_attr(not(test), no_mangle)]
 pub extern "C" fn main(ptr: i32, len: i32) -> i64 {
-    let mut memory = Memory::with_used_len(ptr as *const u8, len);
+    let mut memory = setup(ptr, len);
 
-    let out_ptr = match run(&mut memory) {
-        Ok(ret) => ret,
-        Err(e) => {
-            let s = memory.write_str(&e);
-            s.as_bytes()
-        }
-    };
-
-    slice_to_i64(out_ptr)
+    match run(&mut memory) {
+        Ok(req) => exit_hostcall(memory, "infer", "get_probability", req),
+        Err(e) => exit_error(memory, &e, ()),
+    }
 }
 
-fn run(memory: &mut Memory) -> Result<&[u8], String> {
+fn run(memory: &mut Memory) -> Result<InferRequest, String> {
     let buffer = memory.get_whole();
     let request: DetectionRequest = read_message(buffer)?;
 
@@ -73,58 +67,24 @@ fn run(memory: &mut Memory) -> Result<&[u8], String> {
 
     let input = array.as_slice().ok_or("ERR: Failed to get array slice")?;
 
-    let cont = Continuation {
-        name: "get_probability".to_owned(),
-    };
-
     let req = InferRequest {
         data: input.to_vec(),
     };
-    let req_bytes = req.encode_to_vec();
-    let req_slice = memory.write_bytes(&req_bytes);
 
-    let params = MemorySlice {
-        start: req_slice.as_ptr() as _,
-        len: req_bytes.len() as _,
-    };
-    let call = HostCall {
-        name: "infer".to_owned(),
-        cont: Some(cont),
-        parameters: Some(params),
-    };
-
-    let result = InvokeResult {
-        result: Some(IRes::HostCall(call)),
-    };
-
-    let buffer = result.encode_to_vec();
-
-    let ret = memory.write_bytes(&buffer);
-
-    Ok(ret)
+    Ok(req)
 }
 
 #[cfg_attr(not(test), no_mangle)]
 pub extern "C" fn get_probability(ptr: i32, len: i32) -> i64 {
-    let mut memory = Memory::with_used_len(ptr as *const u8, len);
+    let mut memory = setup(ptr, len);
 
-    let ires = match get_prob_run(&mut memory) {
-        Ok(res) => res,
-        Err(e) => IRes::Error(host_proto::Error {
-            message: e,
-            details: None,
-        }),
-    };
-
-    let result = InvokeResult { result: Some(ires) };
-
-    let out = result.encode_to_vec();
-    let slic = memory.write_bytes(&out);
-
-    slice_to_i64(slic)
+    match get_prob_run(&mut memory) {
+        Ok(resp) => exit_finish(memory, resp),
+        Err(e) => exit_error(memory, &e, ()),
+    }
 }
 
-fn get_prob_run(memory: &mut Memory) -> Result<IRes, String> {
+fn get_prob_run(memory: &mut Memory) -> Result<DetectionReply, String> {
     let buffer = memory.get_whole();
     let resp: InferReply =
         Message::decode(&buffer[..]).map_err(|e| format!("Failed to parse InferReply: {e}"))?;
@@ -154,22 +114,10 @@ fn get_prob_run(memory: &mut Memory) -> Result<IRes, String> {
 
     // unreachable
     // return Err("3.1".to_owned());
-    let reply = DetectionReply {
+    Ok(DetectionReply {
         label,
         probability: *prob,
-    };
-    // return Err("3.2".to_owned());
-    let out = reply.encode_to_vec();
-    // return Err("3.3".to_owned());
-    let slic = memory.write_bytes(&out);
-    // return Err("4".to_owned());
-
-    Ok(IRes::Finished(host_proto::Finished {
-        ptr: Some(MemorySlice {
-            start: slic.as_ptr() as _,
-            len: slic.len() as _,
-        }),
-    }))
+    })
 }
 
 #[cfg(test)]
