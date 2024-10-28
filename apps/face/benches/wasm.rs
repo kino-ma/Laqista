@@ -91,7 +91,7 @@ pub fn bench_wasm_memory(c: &mut Criterion) {
 
     let input_read_heavy = ReadInput(request_heavy);
 
-    group.bench_with_input("wasm write memory heavy", &input_read_heavy, |b, i| {
+    group.bench_with_input("wasm read memory heavy", &input_read_heavy, |b, i| {
         b.iter(|| read_in_wasm(i))
     });
 }
@@ -116,7 +116,7 @@ fn read_in_wasm(input: &ReadInput) {
         .unwrap();
 
     let output = exec_state.unwrap_finished();
-    assert_eq!(output, format!("{}", ptr.len));
+    assert_eq!(output, format!("{}", detection_request.image_png.len()));
 }
 
 criterion_group!(benches, bench_wasm_module, bench_wasm_memory);
