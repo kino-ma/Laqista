@@ -11,7 +11,7 @@ use host_proto::{
     invoke_result::Result as IRes, Continuation, HostCall, InvokeResult, MemorySlice,
 };
 use image::{imageops::FilterType, GenericImageView, Pixel};
-use memory::{slice_to_i64, Memory};
+use memory::{read_message, slice_to_i64, Memory};
 use prost::Message;
 
 mod face_proto {
@@ -20,6 +20,9 @@ mod face_proto {
 mod host_proto {
     tonic::include_proto!("host");
 }
+
+#[cfg(feature = "bench")]
+pub use memory::read_detection_request;
 
 extern "C" {}
 
@@ -52,10 +55,8 @@ pub extern "C" fn main(ptr: i32, len: i32) -> i64 {
 }
 
 fn run(memory: &mut Memory) -> Result<&[u8], String> {
-    let buffer: &[u8] = memory.get_whole();
-
-    let request: DetectionRequest =
-        Message::decode(buffer).map_err(|e| format!("ERR: Failed to decode request: {e}"))?;
+    let buffer = memory.get_whole();
+    let request: DetectionRequest = read_message(buffer)?;
 
     let img = image::load_from_memory(&request.image_png)
         .map_err(|e| format!("ERR: Failed to load image: {e}"))?;
