@@ -83,7 +83,7 @@ async fn setup_clients(
 
 async fn run_scheduled(
     client: &mut SchedulerClient<Channel>,
-    detector_client: &mut DetectorClient<Channel>,
+    _detector_client: &mut DetectorClient<Channel>,
     deployment_id: &str,
 ) {
     let request = LookupRequest {
@@ -91,7 +91,12 @@ async fn run_scheduled(
         qos: None,
     };
 
-    let _resp = client.clone().lookup(request).await.unwrap().into_inner();
+    let resp = client.clone().lookup(request).await.unwrap().into_inner();
+    let addr = resp.server.unwrap().addr;
+
+    let mut detector_client = face::proto::detector_client::DetectorClient::connect(addr)
+        .await
+        .unwrap();
 
     // let mut app_client = app::proto::greeter_client::GreeterClient::connect(addr)
     //     .await
@@ -168,7 +173,7 @@ pub fn bench_wasm(c: &mut Criterion) {
 
 async fn run_wasm_scheduled(
     client: &mut SchedulerClient<Channel>,
-    detector_client: &mut DetectorClient<Channel>,
+    _detector_client: &mut DetectorClient<Channel>,
     deployment_id: &str,
     image: &[u8],
 ) {
@@ -177,7 +182,12 @@ async fn run_wasm_scheduled(
         qos: None,
     };
 
-    let _resp = client.clone().lookup(request).await.unwrap().into_inner();
+    let resp = client.clone().lookup(request).await.unwrap().into_inner();
+    let addr = resp.server.unwrap().addr;
+
+    let mut detector_client = face::proto::detector_client::DetectorClient::connect(addr)
+        .await
+        .unwrap();
 
     // let mut app_client = app::proto::greeter_client::GreeterClient::connect(addr)
     //     .await
