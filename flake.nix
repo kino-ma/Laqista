@@ -13,7 +13,10 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         overlays = [ fenix.overlays.default ];
-        pkgs = import nixpkgs { inherit system overlays; };
+        pkgs = import nixpkgs {
+          inherit system overlays;
+          config.permittedInsecurePackages = [ "openssl-1.1.1w" ];
+        };
 
         rust-components = with pkgs.fenix; combine [
           default.rustc
@@ -71,7 +74,7 @@
               wasm-pack
               wonnx
             ]
-            ++ pkgs.lib.optionals (system == "x86_64-linux") [ pkgs.radeontop ]
+            ++ pkgs.lib.optionals (system == "x86_64-linux") [ pkgs.radeontop pkgs.openssl pkgs.vulkan-loader ]
             ++ pkgs.lib.optionals (pkgs.stdenv.isDarwin) (with pkgs; with darwin.apple_sdk.frameworks; [
               llvmPackages.libcxxStdenv
               llvmPackages.libcxxClang
@@ -89,7 +92,7 @@
 
           RUST_SRC_PATH = "${pkgs.fenix.complete.rust-src}/lib/rustlib/src/rust/";
           LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
-          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc pkgs.libclang ];
+          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc pkgs.libclang pkgs.pkgs.vulkan-loader ];
         };
 
         packages = rec {
