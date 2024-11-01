@@ -1,9 +1,12 @@
 use std::{error::Error, sync::Arc};
 
 use mless_core::{
-    proto::host::HostCall, server::AbtsractServer, session::Session, wasm::WasmRunner,
+    proto::host::{self, Continuation, Finished, HostCall},
+    server::AbtsractServer,
+    session::Session,
+    wasm::WasmRunner,
 };
-use tokio::sync::Mutex;
+use tokio::{sync::Mutex, time::Instant};
 use tonic::{Request, Response, Status};
 use wasmer::Value;
 
@@ -61,9 +64,6 @@ impl Detector for FaceServer {
             Status::aborted(format!("Failed to compile and setup wasm module: {e}"))
         })?;
 
-        println!("Imports: {:?}", &wasm.module.imports().collect::<Vec<_>>());
-        println!("Exports: {:?}", &wasm.instance.exports);
-
         let msg = request.into_inner();
         let ptr = wasm.write_message(msg).map_err(|e| {
             Status::aborted(format!("Failed to write request data to wasm memory: {e}"))
@@ -75,8 +75,6 @@ impl Detector for FaceServer {
             .call::<()>("main", params)
             .map_err(|e| Status::aborted(format!("Failed to call WebAssembly function: {e}")))?
             .unwrap_continue();
-
-        println!("HastCall invoked: {:?}", call);
 
         let param_ptr = call
             .parameters
@@ -95,10 +93,6 @@ impl Detector for FaceServer {
             Status::aborted(format!("Failed to write infer reply to wasm memory: {e}"))
         })?;
         let param: [Value; 2] = ptr.into();
-        println!(
-            "Written InferReply. ptr = {:?}-{:?}. param = {param:?}",
-            ptr.start, ptr.len
-        );
 
         let cont = call
             .cont
@@ -108,8 +102,6 @@ impl Detector for FaceServer {
             .call(&cont.name, &param)
             .map_err(|e| Status::aborted(format!("Failed to call WebAssembly function (2): {e}")))?
             .unwrap_finished();
-
-        println!("Parsed reply: {reply:?}");
 
         Ok(Response::new(reply))
     }
