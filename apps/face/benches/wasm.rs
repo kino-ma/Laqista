@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use face::proto::{DetectionRequest, InferReply};
 use mless_core::wasm::WasmRunner;
-use wasmer::{imports, wat2wasm, Cranelift, Instance, Module, Store, Value};
+use wasmer::{imports, wat2wasm, Cranelift, Instance, Memory, MemoryType, Module, Store, Value};
 
 static JPEG: &'static [u8] = include_bytes!("../../../data/pelican.jpeg");
 static WASM: &'static [u8] =
@@ -16,7 +16,8 @@ pub fn bench_wasm_module(c: &mut Criterion) {
     local.get $x
     local.get $y
     i32.add)
-  (export "sum" (func $sum_f)))
+  (export "sum" (func $sum_f))
+  (export "main" (func $sum_f)))
 "#
         .as_bytes(),
     )
@@ -24,25 +25,49 @@ pub fn bench_wasm_module(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("Wasm instantiate");
     group.bench_with_input("wasm instantiate", &wasm_bytes, |b, i| {
-        b.iter(|| instantiate(i))
+        b.iter(|| instantiate(i, false))
+    });
+    group.bench_with_input("wasm instantiate heavy", &WASM, |b, i| {
+        b.iter(|| instantiate(i, true))
+    });
+    group.bench_with_input("wasm instantiate runner", &wasm_bytes, |b, i| {
+        b.iter(|| WasmRunner::compile(i).unwrap())
+    });
+    group.bench_with_input("wasm instantiate runner heavy", &WASM, |b, i| {
+        b.iter(|| WasmRunner::compile(i).unwrap())
+    });
+
+    let t_runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    group.bench_with_input("wasm instantiate runner heavy async", &WASM, |b, i| {
+        b.iter(|| t_runtime.block_on(async { tokio_instantiate(i).await }))
     });
 }
 
-fn instantiate(wasm_bytes: &[u8]) {
+fn instantiate(wasm_bytes: &[u8], import_memory: bool) {
     let compiler = Cranelift::default();
 
     let mut store = Store::new(compiler);
     let module = Module::new(&store, wasm_bytes).unwrap();
 
-    let import_object = imports! {};
+    let import_object = if import_memory {
+        imports! {
+            "env" => {
+                "memory" => Memory::new(&mut store, MemoryType::new(21, None, false)).unwrap()
+            }
+        }
+    } else {
+        imports! {}
+    };
     let instance = Instance::new(&mut store, &module, &import_object).unwrap();
 
-    let main = instance.exports.get_function("sum").unwrap();
+    let _main = instance.exports.get_function("main").unwrap();
+}
 
-    let params = &[Value::I32(1), Value::I32(41)];
-
-    let out = main.call(&mut store, params).unwrap();
-    assert_eq!(out[0].i32().unwrap(), 42);
+async fn tokio_instantiate(wasm_bytes: &[u8]) {
+    WasmRunner::compile(wasm_bytes).unwrap();
 }
 
 struct WriteInput<'a>(&'a [u8], DetectionRequest);
