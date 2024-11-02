@@ -70,7 +70,7 @@ fn open_dir(path: &PathBuf) -> Result<ReadDir, std::io::Error> {
 
     std::fs::read_dir(path).or_else(|e| match e.kind() {
         NotFound => {
-            std::fs::create_dir(path)?;
+            std::fs::create_dir_all(path)?;
             std::fs::read_dir(path)
         }
         _ => Err(e),
