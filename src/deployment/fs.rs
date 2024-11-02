@@ -1,9 +1,9 @@
-use std::{error::Error, path::PathBuf};
+use std::{error::Error, fs::ReadDir, path::PathBuf};
 
 use uuid::Uuid;
 
 pub fn read_apps(root: &PathBuf) -> Result<Vec<Uuid>, Box<dyn Error>> {
-    let entries = std::fs::read_dir(root)?;
+    let entries = open_dir(root)?;
 
     let mut app_ids = vec![];
 
@@ -21,4 +21,16 @@ pub fn read_apps(root: &PathBuf) -> Result<Vec<Uuid>, Box<dyn Error>> {
     }
 
     Ok(app_ids)
+}
+
+fn open_dir(path: &PathBuf) -> Result<ReadDir, std::io::Error> {
+    use std::io::ErrorKind::*;
+
+    std::fs::read_dir(path).or_else(|e| match e.kind() {
+        NotFound => {
+            std::fs::create_dir(path)?;
+            std::fs::read_dir(path)
+        }
+        _ => Err(e),
+    })
 }
