@@ -9,6 +9,7 @@ use utils::{get_mac, IdMap};
 use uuid::Uuid;
 
 pub mod cmd;
+pub mod deployment;
 pub mod error;
 pub mod monitor;
 pub mod proxy;
