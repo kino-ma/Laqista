@@ -15,14 +15,14 @@ pub struct DeploymentDatabase {
 
 impl DeploymentDatabase {
     pub fn read_dir(root: PathBuf) -> Result<Self, Box<dyn Error>> {
-        let app_ids = read_apps(&root)?;
+        let app_ids = read_apps(&app_dir(&root))?;
         Ok(Self { root, app_ids })
     }
 
     pub async fn insert(&mut self, app_id: Uuid, source: String) -> Result<(), Box<dyn Error>> {
         let bin = download(source).await?;
 
-        let app_path = self.app_root().join(app_id.to_string());
+        let app_path = app_dir(&self.root).join(app_id.to_string());
 
         write_tgz(&app_path, bin)?;
 
@@ -30,10 +30,10 @@ impl DeploymentDatabase {
 
         Ok(())
     }
+}
 
-    fn app_root(&self) -> PathBuf {
-        self.root.join("apps")
-    }
+fn app_dir(root: &PathBuf) -> PathBuf {
+    root.join("apps")
 }
 
 impl Default for DeploymentDatabase {
