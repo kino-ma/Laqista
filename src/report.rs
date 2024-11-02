@@ -9,6 +9,7 @@ use crate::{
     proto::{scheduler_client::SchedulerClient, ClusterState, MonitorWindow, ReportRequest},
     scheduler::{mean::MeanScheduler, AuthoritativeScheduler, Cluster},
     server::DaemonState,
+    utils::cluster_differs,
     ServerInfo,
 };
 
@@ -80,8 +81,7 @@ impl MetricsReporter {
         match report_result {
             Ok(resp) => {
                 let inner = resp.into_inner();
-                println!("{:?}", inner);
-                self.last_cluster_state = inner.cluster;
+                self.put_cluster(inner.cluster);
                 Ok(())
             }
             Err(s) => {
@@ -127,5 +127,20 @@ impl MetricsReporter {
                 }
             }
         }
+    }
+
+    fn put_cluster(&mut self, current: Option<ClusterState>) -> bool {
+        let changed = match (&self.last_cluster_state, &current) {
+            (Some(last), Some(current)) => cluster_differs(last, current),
+            (None, None) => false,
+            _ => true,
+        };
+
+        if changed {
+            println!("Cluster state updated.\n{:?}", &current);
+            self.last_cluster_state = current;
+        }
+
+        changed
     }
 }
