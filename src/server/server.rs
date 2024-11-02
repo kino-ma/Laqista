@@ -2,6 +2,7 @@ use tokio::sync::mpsc;
 use tonic::Status;
 use tonic::{Request, Response};
 
+use crate::deployment::database::DeploymentDatabase;
 use crate::proto::server_daemon_server::ServerDaemon as ServerDaemonTrait;
 use crate::proto::{
     DestroyRequest, DestroyResponse, GetInfoRequest, GetInfoResponse, MonitorRequest,
@@ -22,11 +23,13 @@ pub struct ServerDaemon {
 #[derive(Clone, Debug)]
 pub struct ServerDaemonRuntime {
     pub info: ServerInfo,
+    pub database: DeploymentDatabase,
 }
 
 impl ServerDaemon {
     pub fn with_state(state: DaemonState, info: ServerInfo, tx: mpsc::Sender<DaemonState>) -> Self {
-        let runtime = ServerDaemonRuntime { info };
+        let database = DeploymentDatabase::default();
+        let runtime = ServerDaemonRuntime { info, database };
 
         Self { runtime, tx, state }
     }
@@ -104,7 +107,8 @@ impl ServerDaemonTrait for ServerDaemon {
 impl Default for ServerDaemonRuntime {
     fn default() -> Self {
         let info = ServerInfo::new(DEFAULT_HOST);
+        let database = DeploymentDatabase::default();
 
-        Self { info }
+        Self { info, database }
     }
 }
