@@ -22,7 +22,8 @@ async fn schedule_wasm() {
             .unwrap();
 
     let request = DeployRequest {
-        source: "https://github.com/kino-ma/MLess/apps/face".to_owned(),
+        source: "https://github.com/kino-ma/MLess/releases/download/v0.1.0/face_v0.1.0.tgz"
+            .to_owned(),
         authoritative: true,
     };
 
