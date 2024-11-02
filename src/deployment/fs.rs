@@ -1,7 +1,7 @@
 use std::{
     error::Error,
     fs::ReadDir,
-    io::{self, prelude::*, BufReader, Result as IOResult},
+    io::{self, prelude::*, Result as IOResult},
     path::PathBuf,
 };
 
@@ -40,9 +40,9 @@ pub fn write_tgz(path: &PathBuf, tgz: Bytes) -> IOResult<()> {
 
     let written_files = archive
         .entries()?
-        .collect::<IOResult<Vec<_>>>()?
-        .into_iter()
-        .map(|entry| {
+        .map(|entry_result| {
+            let mut entry = entry_result?;
+
             let entry_path = entry.path()?;
             let file_name = entry_path
                 .file_name()
@@ -50,9 +50,8 @@ pub fn write_tgz(path: &PathBuf, tgz: Bytes) -> IOResult<()> {
 
             let file_path = path.join(file_name);
 
-            let mut reader = BufReader::new(entry);
             let mut contents = vec![];
-            reader.read_to_end(&mut contents)?;
+            entry.read_to_end(&mut contents)?;
 
             std::fs::write(&file_path, &contents)?;
 
