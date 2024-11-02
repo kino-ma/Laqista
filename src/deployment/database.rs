@@ -7,6 +7,7 @@ use super::{
     http::download,
 };
 
+#[derive(Debug, Clone)]
 pub struct DeploymentDatabase {
     root: PathBuf,
     app_ids: Vec<Uuid>,

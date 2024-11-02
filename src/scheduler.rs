@@ -11,6 +11,7 @@ use tonic::transport::Channel;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
+use crate::deployment::database::DeploymentDatabase;
 use crate::proto::scheduler_server::Scheduler;
 use crate::proto::server_daemon_client::ServerDaemonClient;
 use crate::proto::{
@@ -37,6 +38,7 @@ pub struct SchedulerRuntime {
     pub cluster: Cluster,
     pub scheduler: Box<dyn DeploymentScheduler>,
     pub deployments: IdMap<DeploymentInfo>,
+    pub database: DeploymentDatabase,
 }
 
 #[derive(Clone, Debug)]
@@ -53,10 +55,13 @@ impl AuthoritativeScheduler {
         scheduler: Box<dyn DeploymentScheduler>,
         tx: mpsc::Sender<DaemonState>,
     ) -> Self {
+        let database = DeploymentDatabase::default();
+
         let runtime = Arc::new(Mutex::new(SchedulerRuntime {
             cluster,
             scheduler,
             deployments: IdMap::new(),
+            database,
         }));
 
         let tx = Arc::new(Mutex::new(tx));
@@ -228,6 +233,12 @@ impl Scheduler for AuthoritativeScheduler {
         let deployment: Deployment = deployment_info.clone().into();
         println!("created info");
 
+        self.clone_inner()
+            .await
+            .save_deployment(&deployment_info)
+            .await
+            .map_err(<Error as Into<Status>>::into)?;
+
         let mut success = true;
 
         let resp = self.deploy_in_us(deployment_info).await;
@@ -283,12 +294,23 @@ impl Clone for AuthoritativeScheduler {
 impl SchedulerRuntime {
     pub fn new(this_server: &ServerInfo, scheduler: Box<dyn DeploymentScheduler>) -> Self {
         let cluster = Cluster::new(this_server);
+        let database = DeploymentDatabase::default();
 
         Self {
             cluster,
             scheduler,
             deployments: IdMap::new(),
+            database,
         }
+    }
+
+    pub async fn save_deployment(&mut self, deployment: &DeploymentInfo) -> Result<()> {
+        self.database
+            .insert(deployment.id, deployment.source.clone())
+            .await
+            .map_err(|e| format!("Failed to save deployment: {e}"))?;
+
+        Ok(())
     }
 
     pub fn wrap(self) -> Arc<Mutex<Self>> {
