@@ -7,14 +7,18 @@ use crate::{
 
 pub struct AbtsractServer<I: AsInputs, O: TryFromOutputs> {
     session: Session,
+    pub onnx: Vec<u8>,
+    pub wasm: Vec<u8>,
     /// Phantom field for combine I/O types for this struct
     phantom: PhantomData<(I, O)>,
 }
 
 impl<I: AsInputs, O: TryFromOutputs> AbtsractServer<I, O> {
-    pub fn new(session: Session) -> Self {
+    pub fn new(session: Session, onnx: Vec<u8>, wasm: Vec<u8>) -> Self {
         Self {
             session,
+            onnx,
+            wasm,
             phantom: PhantomData,
         }
     }

@@ -46,6 +46,8 @@ reqwest = "0.12.9"
 tar = "0.4.43"
 flate2 = "1.0.34"
 
+mless-core = { version = "0.1.0", path = "./mless-core" }
+
 [build-dependencies]
 tonic-build = "0.11"
 

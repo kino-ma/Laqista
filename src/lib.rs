@@ -2,6 +2,7 @@
 
 use std::result::Result as StdResult;
 
+use mless_core::DeploymentInfo;
 use proto::{AppInstanceLocations, Deployment, Group, Server, ServerState};
 use server::DaemonState;
 use tonic::Status;
@@ -35,12 +36,6 @@ pub struct ServerInfo {
 pub struct GroupInfo {
     number: u32,
     scheduler_info: ServerInfo,
-}
-
-#[derive(Clone, Debug)]
-pub struct DeploymentInfo {
-    id: Uuid,
-    source: String,
 }
 
 #[derive(Clone, Debug)]
@@ -149,13 +144,6 @@ impl Into<ServerState> for DaemonState {
             Self::Authoritative(_) => Authoritative,
             Self::Failed => Failed,
         }
-    }
-}
-
-impl DeploymentInfo {
-    pub fn new(source: String) -> Self {
-        let id = Uuid::new_v4();
-        Self { source, id }
     }
 }
 

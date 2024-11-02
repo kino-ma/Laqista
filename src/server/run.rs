@@ -9,6 +9,7 @@ use tokio::sync::{mpsc, Mutex};
 use tokio_util::sync::CancellationToken;
 use tonic::transport::{server::Router, Channel, Server as TransportServer};
 
+use crate::deployment::database::DeploymentDatabase;
 use crate::proto::{scheduler_client::SchedulerClient, JoinRequest};
 use crate::report::MetricsReporter;
 use crate::scheduler::AuthoritativeScheduler;
@@ -32,6 +33,7 @@ pub struct ServerRunner {
     // FIXME: socket is not known at instantiation of this struct.
     // Instead, it will be known when it is the "start" command.
     socket: SocketAddr,
+    database: DeploymentDatabase,
     rx: Mutex<mpsc::Receiver<DaemonState>>,
     tx: mpsc::Sender<DaemonState>,
 }
@@ -49,10 +51,12 @@ impl ServerRunner {
         let (tx, rx) = mpsc::channel(1);
         let rx = Mutex::new(rx);
         let socket = DEFAULT_HOST.parse().expect("failed to parse default host");
+        let database = DeploymentDatabase::default();
 
         Self {
             command,
             socket,
+            database,
             rx,
             tx,
         }
@@ -207,8 +211,9 @@ impl ServerRunner {
 
         #[cfg(feature = "face")]
         let router = {
+            let deployment = todo!("find face app from database");
             use face_proto::detector_server::DetectorServer;
-            let inner_server = FaceServer::create()
+            let inner_server = FaceServer::create(&deployment)
                 .await
                 .map_err(|e| Error::AppInstantiation(e.to_string()))?;
             let server = DetectorServer::new(inner_server);

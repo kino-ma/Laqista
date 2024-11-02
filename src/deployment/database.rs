@@ -1,9 +1,10 @@
 use std::{error::Error, path::PathBuf};
 
+use bytes::Bytes;
 use uuid::Uuid;
 
 use super::{
-    fs::{read_apps, write_tgz},
+    fs::{read_apps, read_binary, write_tgz},
     http::download,
 };
 
@@ -11,6 +12,11 @@ use super::{
 pub struct DeploymentDatabase {
     root: PathBuf,
     app_ids: Vec<Uuid>,
+}
+
+pub enum Target {
+    Onnx,
+    Wasm,
 }
 
 impl DeploymentDatabase {
@@ -30,6 +36,12 @@ impl DeploymentDatabase {
 
         Ok(())
     }
+
+    pub async fn get(&mut self, app_id: Uuid, target: Target) -> Result<Bytes, Box<dyn Error>> {
+        let dir = app_dir(&self.root).join(app_id.to_string());
+        let bytes = read_binary(&dir, target)?;
+        Ok(bytes)
+    }
 }
 
 fn app_dir(root: &PathBuf) -> PathBuf {
@@ -40,5 +52,14 @@ impl Default for DeploymentDatabase {
     fn default() -> Self {
         let root = PathBuf::from("./.mless");
         Self::read_dir(root).unwrap()
+    }
+}
+
+impl ToString for Target {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Wasm => "wasm".to_owned(),
+            Self::Onnx => "onnx".to_owned(),
+        }
     }
 }

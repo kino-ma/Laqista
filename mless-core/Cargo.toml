@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 prost = "0.12"
 tonic = "0.11.0"
+uuid = { version = "1.8.0", features = ["v4", "v6", "std", "rng"] }
 wasmer = "4.3.5"
 wonnx = "0.5.1"
 

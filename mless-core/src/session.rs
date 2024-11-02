@@ -18,6 +18,11 @@ impl Session {
         Ok(Self::new(inner))
     }
 
+    pub async fn from_bytes<B: AsRef<[u8]>>(bytes: B) -> Result<Self, SessionError> {
+        let inner = GpuSession::from_bytes(bytes.as_ref()).await?;
+        Ok(Self::new(inner))
+    }
+
     pub async fn detect<'a>(&mut self, input: &Inputs<'a>) -> Result<Outputs, Box<dyn Error>> {
         let output = self.inner.run(input).await?;
         Ok(output)
