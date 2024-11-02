@@ -1,12 +1,10 @@
 #![feature(test)]
 
-use std::net::SocketAddr;
 use std::result::Result as StdResult;
 
 use proto::{AppInstanceLocations, Deployment, Group, Server, ServerState};
 use server::DaemonState;
 use tonic::Status;
-use url::Url;
 use utils::{get_mac, IdMap};
 use uuid::Uuid;
 

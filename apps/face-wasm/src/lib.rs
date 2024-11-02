@@ -155,6 +155,7 @@ mod bench {
 
     use super::*;
 
+    #[allow(unused)]
     #[cfg_attr(not(test), no_mangle)]
     pub extern "C" fn read_detection_request(ptr: i32, len: i32) -> i64 {
         let memory = setup(ptr, len);
@@ -167,6 +168,7 @@ mod bench {
         exit_finish(memory, message)
     }
 
+    #[allow(unused)]
     #[cfg_attr(not(test), no_mangle)]
     pub extern "C" fn read_image(ptr: i32, len: i32) -> i64 {
         let memory = setup(ptr, len);

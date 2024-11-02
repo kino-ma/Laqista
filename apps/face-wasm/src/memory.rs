@@ -39,6 +39,7 @@ impl Memory {
         unsafe { self.get_slice(self.head as _, self.len()) }
     }
 
+    #[allow(unused)]
     pub fn write_str(&mut self, data: &str) -> &str {
         let bytes = self.write_bytes(data.as_bytes());
         core::str::from_utf8(bytes).unwrap()

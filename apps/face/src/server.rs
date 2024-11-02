@@ -1,12 +1,9 @@
 use std::{error::Error, sync::Arc};
 
 use mless_core::{
-    proto::host::{self, Continuation, Finished, HostCall},
-    server::AbtsractServer,
-    session::Session,
-    wasm::WasmRunner,
+    proto::host::HostCall, server::AbtsractServer, session::Session, wasm::WasmRunner,
 };
-use tokio::{sync::Mutex, time::Instant};
+use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
 use wasmer::Value;
 
