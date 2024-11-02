@@ -79,7 +79,9 @@ impl MetricsReporter {
 
         match report_result {
             Ok(resp) => {
-                self.last_cluster_state = resp.into_inner().cluster;
+                let inner = resp.into_inner();
+                println!("{:?}", inner);
+                self.last_cluster_state = inner.cluster;
                 Ok(())
             }
             Err(s) => {

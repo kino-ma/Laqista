@@ -198,8 +198,6 @@ impl Scheduler for AuthoritativeScheduler {
     }
 
     async fn report(&self, request: Request<ReportRequest>) -> RpcResult<Response<ReportResponse>> {
-        // println!("report() called!!");
-
         let ReportRequest { server, windows } = request.into_inner();
 
         let server: Server = server.ok_or(Status::aborted("server cannot be empty"))?;
