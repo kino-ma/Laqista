@@ -101,7 +101,6 @@ impl ServerRunner {
         match state {
             DaemonState::Joining(bootstrap_addr) => {
                 println!("Joining to a cluster...");
-                let server = ServerInfo::new(&self.socket.to_string());
                 self.join_cluster(server, &bootstrap_addr).await
             }
             DaemonState::Running(group) => {
