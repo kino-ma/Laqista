@@ -39,7 +39,6 @@ message QoS {}
 service Scheduler {
   // For cluster management.
   rpc Join(JoinRequest) returns (JoinResponse);
-  rpc Notify(NotifyRequest) returns (NotifyResponse);
   rpc Report(ReportRequest) returns (ReportResponse);
 
   // For managing and calling applictions.
@@ -54,7 +53,10 @@ message ReportRequest {
   Server server = 1;
   repeated MonitorWindow windows = 2;
 }
-message ReportResponse { bool success = 1; }
+message ReportResponse {
+  bool success = 1;
+  ClusterState cluster = 2;
+}
 
 message ClusterState {
   Group group = 1;
@@ -70,9 +72,6 @@ message JoinRequest { Server server = 1; }
 message JoinResponse {
   bool success = 1;
   Group group = 2;
-  bool is_scheduler = 3;
-  optional Group our_group = 4;
-  optional Nomination nomination = 5;
 }
 message Nomination { ClusterState cluster = 1; }
 

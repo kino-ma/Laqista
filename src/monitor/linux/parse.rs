@@ -194,6 +194,7 @@ fn fractional_part(input: &str) -> Result<&str, u64> {
     let out = match frac_part.len() {
         1 => num * 10,
         2 => num,
+        3 => num / 10,
         _ => unreachable!("fractional part must be 1 or 2 characters. got {frac_part}"),
     };
 
@@ -276,7 +277,7 @@ fn radeon_from_map(
 mod test {
     use super::*;
 
-    const RADEON_TOP_SAMPLE: &'static str = "1715302360.857296: bus 06, gpu 5.00%, ee 0.00%, vgt 0.83%, ta 5.00%, sx 5.00%, sh 0.00%, spi 5.00%, sc 5.00%, pa 0.83%, db 5.00%, cb 5.00%, vram 19.57% 400.73mb, gtt 2.08% 42.61mb, mclk inf% 0.355ghz, sclk 38.53% 0.328ghz";
+    const RADEON_TOP_SAMPLE: &'static str = "1730461004.264057: bus 02, gpu 5.00%, ee 0.00%, vgt 0.00%, ta 0.00%, sx 0.00%, sh 0.00%, spi 0.00%, sc 0.00%, pa 0.00%, db 0.00%, cb 0.00%, vram 0.52% 10.61mb, gtt 0.04% 5.93mb, mclk 11.81% 0.150ghz, sclk 35.29% 0.300ghz";
 
     #[test]
     fn parse_radeon() {
@@ -294,6 +295,26 @@ mod test {
         match util.util {
             Utilization::Id { .. } => panic!("shoud not be Id"),
             Utilization::Percent { ratio, .. } => assert_eq!(ratio, expected),
+        }
+    }
+
+    #[test]
+    fn parse_ghz_three_digits() {
+        let (_, util) = resource_utilzation("sclk 35.29% 0.300ghz").unwrap();
+        let (_, expected_percent) = fraction("35.29").unwrap();
+        let (_, expected_ghz) = fraction("0.30").unwrap();
+
+        assert_eq!(util.name, "sclk");
+
+        match util.util {
+            Utilization::Id { .. } => panic!("shoud not be Id"),
+            Utilization::Percent { ratio, abs, .. } => {
+                assert_eq!(ratio, expected_percent);
+                match abs {
+                    AbsoluteUtilization::Ghz(ghz) => assert_eq!(ghz, expected_ghz),
+                    otherwise => panic!("shoud not be {otherwise:?}"),
+                }
+            }
         }
     }
 

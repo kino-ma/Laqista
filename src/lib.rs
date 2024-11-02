@@ -1,12 +1,10 @@
 #![feature(test)]
 
-use std::net::SocketAddr;
 use std::result::Result as StdResult;
 
 use proto::{AppInstanceLocations, Deployment, Group, Server, ServerState};
 use server::DaemonState;
 use tonic::Status;
-use url::Url;
 use utils::{get_mac, IdMap};
 use uuid::Uuid;
 
@@ -71,12 +69,6 @@ impl ServerInfo {
     fn gen_id() -> Result<Uuid> {
         let mac = get_mac()?;
         Ok(Uuid::now_v6(&mac.bytes()))
-    }
-
-    pub fn as_socket(&self) -> Result<SocketAddr> {
-        let parsed = Url::parse(&self.addr)?;
-        let mut hosts = parsed.socket_addrs(|| None)?;
-        return Ok(hosts.pop().ok_or("could not find any hosts".to_string())?);
     }
 }
 
@@ -151,9 +143,7 @@ impl Into<ServerState> for DaemonState {
         use ServerState::*;
 
         match self {
-            Self::Starting => Starting,
             Self::Running(_) => Running,
-            Self::Uninitialized => Uninitialized,
             Self::Joining(_) => Starting,
             Self::Authoritative(_) => Authoritative,
             Self::Failed => Failed,

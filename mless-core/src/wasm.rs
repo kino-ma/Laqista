@@ -83,9 +83,6 @@ impl WasmRunner {
 
         self.ptr.consume(len as i32);
 
-        println!("Written {} bytes", bytes.len());
-        println!("\t= {:?}", bytes.iter().take(100).collect::<Vec<_>>());
-
         Ok(WasmPointer {
             start,
             len: len as _,
@@ -131,7 +128,8 @@ impl<M: Message + Default> ExecState<M> {
         }
     }
 }
-impl ExecState<()> {
+
+impl<T: std::fmt::Debug> ExecState<T> {
     pub fn unwrap_continue(self) -> HostCall {
         if let Self::Continue(c) = self {
             c

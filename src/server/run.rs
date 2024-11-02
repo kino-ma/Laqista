@@ -1,19 +1,20 @@
 use std::net::SocketAddr;
 use std::pin::pin;
+use std::str::FromStr;
 
 use face::server::FaceServer;
 use futures::future;
+use local_ip_address::local_ip;
 use tokio::sync::{mpsc, Mutex};
 use tokio_util::sync::CancellationToken;
 use tonic::transport::{server::Router, Channel, Server as TransportServer};
 
 use crate::proto::{scheduler_client::SchedulerClient, JoinRequest};
 use crate::report::MetricsReporter;
-use crate::scheduler::uninit::UninitScheduler;
 use crate::scheduler::AuthoritativeScheduler;
 use crate::{
     proto::{scheduler_server::SchedulerServer, server_daemon_server::ServerDaemonServer},
-    scheduler::{mean::MeanGpuScheduler, Cluster},
+    scheduler::mean::MeanScheduler,
 };
 use crate::{Error, GroupInfo, Result, ServerInfo};
 
@@ -37,9 +38,7 @@ pub struct ServerRunner {
 
 #[derive(Clone, Debug)]
 pub enum DaemonState {
-    Starting,
     Running(GroupInfo),
-    Uninitialized,
     Joining(String),
     Authoritative(AuthoritativeScheduler),
     Failed,
@@ -70,10 +69,10 @@ impl ServerRunner {
     }
 
     pub async fn run_start(&mut self, start_command: &StartCommand) -> Result<()> {
+        self.socket = Self::get_socket(start_command)?;
         let info = self.create_info(start_command)?;
-        self.socket = info.as_socket()?;
 
-        let mut state = self.determine_state(start_command);
+        let mut state = self.determine_state(start_command, &info);
 
         loop {
             let daemon = self.create_daemon(info.clone(), state.clone());
@@ -100,14 +99,8 @@ impl ServerRunner {
         let server = daemon.runtime.info.clone();
 
         match state {
-            #[allow(unused_must_use)]
-            DaemonState::Uninitialized => {
-                println!("Uninitialized. Waiting for others to join...");
-                self.start_uninitialized(server).await
-            }
             DaemonState::Joining(bootstrap_addr) => {
                 println!("Joining to a cluster...");
-                let server = ServerInfo::new(&self.socket.to_string());
                 self.join_cluster(server, &bootstrap_addr).await
             }
             DaemonState::Running(group) => {
@@ -120,26 +113,10 @@ impl ServerRunner {
                 println!("Running an Authoritative server...");
                 self.start_authoritative(daemon, scheduler).await
             }
-            DaemonState::Starting => Ok(DaemonState::Uninitialized),
             DaemonState::Failed => {
                 panic!("invalid state: {:?}", state)
             }
         }
-    }
-
-    async fn start_uninitialized(&self, server: ServerInfo) -> Result<DaemonState> {
-        let cancel_token = CancellationToken::new();
-
-        let scheduler = UninitScheduler::new(server, self.tx.clone(), cancel_token.child_token());
-
-        let service = SchedulerServer::new(scheduler);
-        let initializing_server = TransportServer::builder().add_service(service);
-
-        initializing_server.serve(self.socket).await?;
-
-        println!("Uninit scheduler successfully cancelled");
-
-        unreachable!("state should be sent from UninitScheduler first");
     }
 
     async fn join_cluster(&self, server: ServerInfo, addr: &str) -> Result<DaemonState> {
@@ -159,24 +136,7 @@ impl ServerRunner {
             .expect("Group in response cannot be empty")
             .try_into()?;
 
-        if resp.is_scheduler {
-            let other = resp
-                .our_group
-                .expect("Other group cannot be empty when becoming a scheduler");
-
-            let cluster = Cluster::with_group(&group);
-            let other_cluster = Cluster::with_group(&other.try_into()?);
-
-            let scheduler = AuthoritativeScheduler::new(
-                cluster,
-                other_cluster,
-                Box::new(MeanGpuScheduler {}),
-                self.tx.clone(),
-            );
-            Ok(DaemonState::Authoritative(scheduler))
-        } else {
-            Ok(DaemonState::Running(group))
-        }
+        Ok(DaemonState::Running(group))
     }
 
     async fn start_authoritative(
@@ -201,6 +161,7 @@ impl ServerRunner {
             .await?
             .add_service(SchedulerServer::new(scheduler.clone()));
 
+        println!("Listening on {}...", self.socket);
         grpc_server.serve(self.socket).await?;
 
         println!("cancel reporter (authoritative)");
@@ -231,7 +192,7 @@ impl ServerRunner {
         let token = CancellationToken::new();
         let cloned = token.clone();
 
-        let mut reporter = MetricsReporter::new(server, scheduler);
+        let mut reporter = MetricsReporter::new(self.tx.clone(), server, scheduler);
         tokio::spawn(async move { reporter.start(cloned).await });
 
         token
@@ -262,20 +223,41 @@ impl ServerRunner {
     }
 
     fn create_info(&self, start_command: &StartCommand) -> Result<ServerInfo> {
-        let host = &start_command.listen_host;
+        let ip = if self.socket.ip().is_unspecified() {
+            local_ip()?
+        } else {
+            self.socket.ip()
+        };
+
+        let host = format!("{ip}:{}", self.socket.port());
 
         match &start_command.id {
-            Some(id) => ServerInfo::with_id_str(&id, host),
-            None => Ok(ServerInfo::new(host)),
+            Some(id) => ServerInfo::with_id_str(&id, &host),
+            None => Ok(ServerInfo::new(&host)),
         }
     }
 
-    pub fn determine_state(&self, start_command: &StartCommand) -> DaemonState {
+    fn get_socket(start_command: &StartCommand) -> Result<SocketAddr> {
+        println!("{}", &start_command.listen_host);
+        Ok(SocketAddr::from_str(&start_command.listen_host)
+            .map_err(|e| format!("failed to parse listen address: {e}"))?)
+    }
+
+    pub fn determine_state(
+        &self,
+        start_command: &StartCommand,
+        server: &ServerInfo,
+    ) -> DaemonState {
         let maybe_bootstrap_addr = start_command.bootstrap_addr.as_deref();
 
         match maybe_bootstrap_addr {
             Some(bootstrap_addr) => DaemonState::Joining(bootstrap_addr.to_owned()),
-            None => DaemonState::Starting,
+            None => {
+                let mean_scheduler = Box::new(MeanScheduler {});
+                let tx = self.tx.clone();
+                let scheduler = AuthoritativeScheduler::from_server(server, mean_scheduler, tx);
+                DaemonState::Authoritative(scheduler)
+            }
         }
     }
 

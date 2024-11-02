@@ -25,13 +25,6 @@ pub struct ServerDaemonRuntime {
 }
 
 impl ServerDaemon {
-    pub fn new(tx: mpsc::Sender<DaemonState>) -> Self {
-        let runtime = ServerDaemonRuntime::default();
-        let state = DaemonState::Starting;
-
-        Self { runtime, tx, state }
-    }
-
     pub fn with_state(state: DaemonState, info: ServerInfo, tx: mpsc::Sender<DaemonState>) -> Self {
         let runtime = ServerDaemonRuntime { info };
 
@@ -52,7 +45,7 @@ impl ServerDaemonTrait for ServerDaemon {
 
         use DaemonState::*;
         let group = match &state {
-            Starting | Uninitialized | Failed | Joining(_) => None,
+            Failed | Joining(_) => None,
             Running(group) => Some(group.clone().into()),
             Authoritative(scheduler) => {
                 Some(scheduler.runtime.lock().await.cluster.group.clone().into())

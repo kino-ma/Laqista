@@ -4,20 +4,30 @@ use tokio::{select, sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
+    error::Error as MlessError,
     monitor::{MetricsMonitor, SendMetrics},
-    proto::{scheduler_client::SchedulerClient, MonitorWindow, ReportRequest},
+    proto::{scheduler_client::SchedulerClient, ClusterState, MonitorWindow, ReportRequest},
+    scheduler::{mean::MeanScheduler, AuthoritativeScheduler, Cluster},
+    server::DaemonState,
+    utils::cluster_differs,
     ServerInfo,
 };
 
 pub struct MetricsReporter {
     scheduler: ServerInfo,
     server: ServerInfo,
+    last_cluster_state: Option<ClusterState>,
+    state_tx: mpsc::Sender<DaemonState>,
     rx: mpsc::Receiver<MonitorWindow>,
     sender_handle: JoinHandle<()>,
 }
 
 impl MetricsReporter {
-    pub fn new(server: ServerInfo, scheduler: ServerInfo) -> Self {
+    pub fn new(
+        state_tx: mpsc::Sender<DaemonState>,
+        server: ServerInfo,
+        scheduler: ServerInfo,
+    ) -> Self {
         let (tx, rx) = mpsc::channel(1);
 
         let sender: Box<dyn SendMetrics> = Box::new(MetricsMonitor::new());
@@ -26,6 +36,8 @@ impl MetricsReporter {
         Self {
             scheduler,
             server,
+            last_cluster_state: None,
+            state_tx,
             rx,
             sender_handle: monitor_handle,
         }
@@ -55,7 +67,7 @@ impl MetricsReporter {
         self.sender_handle.abort()
     }
 
-    pub async fn report(&self, metrics: &MonitorWindow) -> Result<(), Box<dyn Error>> {
+    pub async fn report(&mut self, metrics: &MonitorWindow) -> Result<(), Box<dyn Error>> {
         let mut client = SchedulerClient::connect(self.scheduler.addr.clone()).await?;
 
         let server = Some(self.server.clone().into());
@@ -64,8 +76,71 @@ impl MetricsReporter {
 
         let req = ReportRequest { windows, server };
 
-        client.report(req).await?;
+        let report_result = client.report(req).await;
 
-        Ok(())
+        match report_result {
+            Ok(resp) => {
+                let inner = resp.into_inner();
+                self.put_cluster(inner.cluster);
+                Ok(())
+            }
+            Err(s) => {
+                let err: MlessError = s.into();
+                match err {
+                    MlessError::TransportError(te) => {
+                        println!("MetricsReporter::report: Failed to report to the server: {te}");
+
+                        let mean_scheduler = Box::new(MeanScheduler {});
+                        let cluster_result = self
+                            .last_cluster_state
+                            .clone()
+                            .ok_or("No latest cluster state is saved")?
+                            .try_into();
+
+                        let mut cluster: Cluster = match cluster_result {
+                            Ok(cluster) => cluster,
+                            Err(e) => return Err(Box::new(e)),
+                        };
+
+                        let id = cluster.group.scheduler_info.id.clone();
+                        cluster.remove_server(&id);
+
+                        let next_scheduler = cluster.choose_scheduler();
+
+                        let state = if next_scheduler.id == self.server.id {
+                            let scheduler = AuthoritativeScheduler::new(
+                                cluster,
+                                mean_scheduler,
+                                self.state_tx.clone(),
+                            );
+                            DaemonState::Authoritative(scheduler)
+                        } else {
+                            DaemonState::Joining(next_scheduler.addr.clone())
+                        };
+
+                        self.state_tx.send(state).await?;
+
+                        Ok(())
+                    }
+
+                    err => Err(err)?,
+                }
+            }
+        }
+    }
+
+    fn put_cluster(&mut self, current: Option<ClusterState>) -> bool {
+        let changed = match (&self.last_cluster_state, &current) {
+            (Some(last), Some(current)) => cluster_differs(last, current),
+            (None, None) => false,
+            _ => true,
+        };
+
+        if changed {
+            println!("Cluster state updated.\n{:?}", &current);
+            self.last_cluster_state = current;
+        }
+
+        changed
     }
 }

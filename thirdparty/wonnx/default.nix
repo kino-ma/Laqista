@@ -4,20 +4,29 @@ rec {
   pname = "wonnx";
   version = "v0.5.1";
 
-  nativeBuildInputs = with pkgs; [ pkg-config ];
+  doCheck = false;
+
+  nativeBuildInputs = with pkgs; [ pkg-config openssl_1_1 ];
   buildInputs = [ ] ++ pkgs.lib.optionals (pkgs.stdenv.isDarwin) (with pkgs; with darwin.apple_sdk.frameworks; [
     llvmPackages.libcxxStdenv
     llvmPackages.libcxxClang
     llvmPackages.libcxx
+    libiconv
+    vulkan-loader
+  ])
+  ++ pkgs.lib.optionals (pkgs.stdenv.isDarwin) (with pkgs; with darwin.apple_sdk.frameworks; [
     darwin.libobjc
     darwin.libiconv
-    libiconv
     Security
     SystemConfiguration
     AppKit
     WebKit
     CoreFoundation
   ]);
+
+  # OPENSSL_NO_VENDOR = "1";
+  OPENSSL_LIB_DIR = "${pkgs.openssl_1_1.out}/lib";
+  OPENSSL_INCLUDE_DIR = "${pkgs.openssl_1_1.dev}/include";
 
   src = pkgs.fetchFromGitHub {
     owner = "webonnx";

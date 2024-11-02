@@ -6,6 +6,10 @@ edition = "2021"
 [lib]
 crate-type = ["cdylib"]
 
+[features]
+default = ["bench"]
+bench = []
+
 [dependencies]
 image = "0.25.2"
 ndarray = "0.15.6"
