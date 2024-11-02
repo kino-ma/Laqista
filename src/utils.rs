@@ -99,3 +99,28 @@ pub fn instances_differ(a: &Vec<AppInstanceLocations>, b: &Vec<AppInstanceLocati
     // TODO: compare actual contents
     a.len() != b.len()
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_clone_by_ids() {
+        let mut map = IdMap::<usize>::new();
+
+        let id_a = Uuid::new_v4();
+        let id_b = Uuid::new_v4();
+        let id_c = Uuid::new_v4();
+
+        map.0.insert(id_a, 0xa);
+        map.0.insert(id_b, 0xb);
+        map.0.insert(id_c, 0xc);
+
+        let ids = vec![id_a, id_b];
+
+        let cloned = map.clone_by_ids(&ids);
+
+        println!("{:?}", cloned);
+        assert_eq!(cloned.0.len(), ids.len());
+    }
+}
