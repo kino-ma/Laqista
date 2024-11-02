@@ -41,6 +41,7 @@ plist = { version = "1.6.1", features = ["serde"] }
 hello = { path = "./apps/hello" }
 chrono = "0.4.38"
 face = { path = "./apps/face", optional = true }
+local-ip-address = "0.6.3"
 
 [build-dependencies]
 tonic-build = "0.11"

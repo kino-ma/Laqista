@@ -8,6 +8,7 @@ use tonic::{transport::Error as TransportError, Status};
 pub enum Error {
     AppInstantiation(String), // FIXME: This error should contain actual error type returned from the application
     Io(io::Error),
+    Ip(local_ip_address::Error),
     Mac(MacAddressError),
     NoneError,
     RequestError(Status),
@@ -28,6 +29,7 @@ impl Display for Error {
         match self {
             AppInstantiation(err) => write!(f, "error instantiating an application: {err}"),
             Io(err) => write!(f, "io error: {err}"),
+            Ip(err) => write!(f, "local ip address error: {err}"),
             Mac(err) => write!(f, "error parsing a mac address: {err}"),
             NoneError => write!(f, "an empty value occured somewhere"),
             RequestError(err) => write!(f, "request to another node failed: {err}"),
@@ -55,6 +57,12 @@ impl Into<Status> for Error {
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Self {
         Io(err)
+    }
+}
+
+impl From<local_ip_address::Error> for Error {
+    fn from(err: local_ip_address::Error) -> Self {
+        Ip(err)
     }
 }
 

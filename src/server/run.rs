@@ -3,6 +3,7 @@ use std::pin::pin;
 
 use face::server::FaceServer;
 use futures::future;
+use local_ip_address::local_ip;
 use tokio::sync::{mpsc, Mutex};
 use tokio_util::sync::CancellationToken;
 use tonic::transport::{server::Router, Channel, Server as TransportServer};
@@ -221,11 +222,17 @@ impl ServerRunner {
     }
 
     fn create_info(&self, start_command: &StartCommand) -> Result<ServerInfo> {
-        let host = &start_command.listen_host;
+        let host = if start_command.listen_host.starts_with("0.0.0.0") {
+            let ip = local_ip()?;
+            let port = start_command.listen_host.split(":").nth(1).unwrap();
+            format!("{ip}:{port}")
+        } else {
+            start_command.listen_host.clone()
+        };
 
         match &start_command.id {
-            Some(id) => ServerInfo::with_id_str(&id, host),
-            None => Ok(ServerInfo::new(host)),
+            Some(id) => ServerInfo::with_id_str(&id, &host),
+            None => Ok(ServerInfo::new(&host)),
         }
     }
 
