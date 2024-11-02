@@ -96,7 +96,7 @@ impl ServerRunner {
         daemon: ServerDaemon,
         state: DaemonState,
     ) -> Result<DaemonState> {
-        let server = daemon.runtime.info.clone();
+        let server = daemon.runtime.lock().await.info.clone();
 
         match state {
             DaemonState::Joining(bootstrap_addr) => {
@@ -144,7 +144,7 @@ impl ServerRunner {
         daemon: ServerDaemon,
         scheduler: AuthoritativeScheduler,
     ) -> Result<DaemonState> {
-        let server = daemon.runtime.info.clone();
+        let server = daemon.runtime.lock().await.info.clone();
 
         let scheduler_info = scheduler
             .runtime

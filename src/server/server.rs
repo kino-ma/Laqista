@@ -1,6 +1,9 @@
-use tokio::sync::mpsc;
+use std::sync::Arc;
+
+use tokio::sync::{mpsc, Mutex};
 use tonic::Status;
 use tonic::{Request, Response};
+use uuid::Uuid;
 
 use crate::deployment::database::DeploymentDatabase;
 use crate::proto::server_daemon_server::ServerDaemon as ServerDaemonTrait;
@@ -15,7 +18,7 @@ use super::{DaemonState, DEFAULT_HOST};
 
 #[derive(Clone, Debug)]
 pub struct ServerDaemon {
-    pub runtime: ServerDaemonRuntime,
+    pub runtime: Arc<Mutex<ServerDaemonRuntime>>,
     pub tx: mpsc::Sender<DaemonState>,
     pub state: DaemonState,
 }
@@ -29,7 +32,7 @@ pub struct ServerDaemonRuntime {
 impl ServerDaemon {
     pub fn with_state(state: DaemonState, info: ServerInfo, tx: mpsc::Sender<DaemonState>) -> Self {
         let database = DeploymentDatabase::default();
-        let runtime = ServerDaemonRuntime { info, database };
+        let runtime = Arc::new(Mutex::new(ServerDaemonRuntime { info, database }));
 
         Self { runtime, tx, state }
     }
@@ -43,7 +46,7 @@ impl ServerDaemonTrait for ServerDaemon {
     ) -> RpcResult<Response<GetInfoResponse>> {
         println!("GetInfo called!");
 
-        let server = Some(self.runtime.info.clone().into());
+        let server = Some(self.runtime.lock().await.info.clone().into());
         let state = &self.state;
 
         use DaemonState::*;
@@ -89,7 +92,25 @@ impl ServerDaemonTrait for ServerDaemon {
     ) -> RpcResult<Response<MonitorResponse>> {
         Ok(Response::new(MonitorResponse { windows: vec![] }))
     }
-    async fn spawn(&self, _request: Request<SpawnRequest>) -> RpcResult<Response<SpawnResponse>> {
+    async fn spawn(&self, request: Request<SpawnRequest>) -> RpcResult<Response<SpawnResponse>> {
+        let deployment = request
+            .into_inner()
+            .deployment
+            .ok_or(Status::aborted("`deployment` is required`"))?;
+
+        let id = Uuid::try_parse(&deployment.id)
+            .map_err(|e| Status::aborted(format!("failed to parse uuid: {e}")))?;
+
+        self.runtime
+            .lock()
+            .await
+            .database
+            .insert(id, deployment.source)
+            .await
+            .map_err(|e| {
+                Status::aborted(format!("failed to insert deployment into database: {e}"))
+            })?;
+
         Ok(Response::new(SpawnResponse {
             success: true,
             deployment: None,
