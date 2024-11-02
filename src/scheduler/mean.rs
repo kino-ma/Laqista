@@ -13,7 +13,7 @@ impl DeploymentScheduler for MeanScheduler {
         let mut least_utilized = stats_map
             .iter()
             .next()
-            .or({
+            .or_else(|| {
                 println!("WARN: stats are empty");
                 None
             })?
