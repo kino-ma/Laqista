@@ -1,5 +1,6 @@
 use std::net::SocketAddr;
 use std::pin::pin;
+use std::str::FromStr;
 
 use face::server::FaceServer;
 use futures::future;
@@ -68,8 +69,8 @@ impl ServerRunner {
     }
 
     pub async fn run_start(&mut self, start_command: &StartCommand) -> Result<()> {
+        self.socket = Self::get_socket(start_command)?;
         let info = self.create_info(start_command)?;
-        self.socket = info.as_socket()?;
 
         let mut state = self.determine_state(start_command, &info);
 
@@ -161,6 +162,7 @@ impl ServerRunner {
             .await?
             .add_service(SchedulerServer::new(scheduler.clone()));
 
+        println!("Listening on {}...", self.socket);
         grpc_server.serve(self.socket).await?;
 
         println!("cancel reporter (authoritative)");
@@ -222,18 +224,24 @@ impl ServerRunner {
     }
 
     fn create_info(&self, start_command: &StartCommand) -> Result<ServerInfo> {
-        let host = if start_command.listen_host.starts_with("0.0.0.0") {
-            let ip = local_ip()?;
-            let port = start_command.listen_host.split(":").nth(1).unwrap();
-            format!("{ip}:{port}")
+        let ip = if self.socket.ip().is_unspecified() {
+            local_ip()?
         } else {
-            start_command.listen_host.clone()
+            self.socket.ip()
         };
+
+        let host = format!("{ip}:{}", self.socket.port());
 
         match &start_command.id {
             Some(id) => ServerInfo::with_id_str(&id, &host),
             None => Ok(ServerInfo::new(&host)),
         }
+    }
+
+    fn get_socket(start_command: &StartCommand) -> Result<SocketAddr> {
+        println!("{}", &start_command.listen_host);
+        Ok(SocketAddr::from_str(&start_command.listen_host)
+            .map_err(|e| format!("failed to parse listen address: {e}"))?)
     }
 
     pub fn determine_state(

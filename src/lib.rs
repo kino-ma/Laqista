@@ -72,12 +72,6 @@ impl ServerInfo {
         let mac = get_mac()?;
         Ok(Uuid::now_v6(&mac.bytes()))
     }
-
-    pub fn as_socket(&self) -> Result<SocketAddr> {
-        let parsed = Url::parse(&self.addr)?;
-        let mut hosts = parsed.socket_addrs(|| None)?;
-        return Ok(hosts.pop().ok_or("could not find any hosts".to_string())?);
-    }
 }
 
 impl GroupInfo {
