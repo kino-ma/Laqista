@@ -5,7 +5,6 @@ use std::str::FromStr;
 use face::server::FaceServer;
 use futures::future;
 use local_ip_address::local_ip;
-use mless_core::DeploymentInfo;
 use tokio::sync::{mpsc, Mutex};
 use tokio_util::sync::CancellationToken;
 use tonic::transport::{server::Router, Channel, Server as TransportServer};
@@ -239,15 +238,8 @@ impl ServerRunner {
             ));
 
         #[cfg(feature = "face")]
-        let router = {
+        let router = if let Some(deployment) = self.database.lookup("face").await {
             use face_proto::detector_server::DetectorServer;
-
-            let deployment: DeploymentInfo = self
-                .database
-                .lookup("face")
-                .await
-                .ok_or("face application not found")?;
-
             let onnx = self
                 .database
                 .get(&deployment, Target::Onnx)
@@ -265,6 +257,8 @@ impl ServerRunner {
                 .map_err(|e| Error::AppInstantiation(e.to_string()))?;
             let server = DetectorServer::new(inner_server);
             router.add_service(server)
+        } else {
+            router
         };
 
         Ok(router)
