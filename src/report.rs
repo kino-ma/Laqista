@@ -7,7 +7,7 @@ use crate::{
     error::Error as MlessError,
     monitor::{MetricsMonitor, SendMetrics},
     proto::{scheduler_client::SchedulerClient, ClusterState, MonitorWindow, ReportRequest},
-    scheduler::{mean::MeanScheduler, AuthoritativeScheduler, Cluster},
+    scheduler::Cluster,
     server::{DaemonState, StateCommand, StateSender},
     utils::cluster_differs,
     ServerInfo,
@@ -86,7 +86,6 @@ impl MetricsReporter {
                     MlessError::TransportError(te) => {
                         println!("MetricsReporter::report: Failed to report to the server: {te}");
 
-                        let mean_scheduler = Box::new(MeanScheduler {});
                         let cluster_result = self
                             .last_cluster_state
                             .clone()

@@ -82,13 +82,6 @@ impl DeploymentDatabase {
 }
 
 impl Inner {
-    pub fn new() -> Self {
-        Self {
-            app_ids: vec![],
-            instances: vec![],
-        }
-    }
-
     pub fn read(root: &PathBuf) -> Result<Self, Box<dyn Error>> {
         let app_ids = read_apps(root)?;
 
