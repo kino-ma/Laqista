@@ -1,8 +1,8 @@
 use std::{error::Error, sync::Arc};
 
+use bytes::Bytes;
 use mless_core::{
     proto::host::HostCall, server::AbtsractServer, session::Session, wasm::WasmRunner,
-    DeploymentInfo,
 };
 use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
@@ -18,8 +18,7 @@ pub struct FaceServer {
 }
 
 impl FaceServer {
-    pub async fn create(deployment: &DeploymentInfo) -> Result<Self, Box<dyn Error>> {
-        let (onnx, wasm) = todo!("read from database based on id");
+    pub async fn create(onnx: Bytes, wasm: Bytes) -> Result<Self, Box<dyn Error>> {
         let session = Session::from_bytes(&onnx).await?;
         let server = AbtsractServer::new(session, onnx, wasm);
         let ptr = Arc::new(Mutex::new(server));

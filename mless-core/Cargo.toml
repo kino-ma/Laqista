@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+bytes = "1.1.0"
 prost = "0.12"
 tonic = "0.11.0"
 uuid = { version = "1.8.0", features = ["v4", "v6", "std", "rng"] }

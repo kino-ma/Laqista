@@ -5,11 +5,12 @@ use std::str::FromStr;
 use face::server::FaceServer;
 use futures::future;
 use local_ip_address::local_ip;
+use mless_core::DeploymentInfo;
 use tokio::sync::{mpsc, Mutex};
 use tokio_util::sync::CancellationToken;
 use tonic::transport::{server::Router, Channel, Server as TransportServer};
 
-use crate::deployment::database::DeploymentDatabase;
+use crate::deployment::database::{DeploymentDatabase, Target};
 use crate::proto::{scheduler_client::SchedulerClient, JoinRequest};
 use crate::report::MetricsReporter;
 use crate::scheduler::{AuthoritativeScheduler, Cluster};
@@ -239,9 +240,22 @@ impl ServerRunner {
 
         #[cfg(feature = "face")]
         let router = {
-            let deployment = todo!("find face app from database");
             use face_proto::detector_server::DetectorServer;
-            let inner_server = FaceServer::create(&deployment)
+
+            let deployment: DeploymentInfo = todo!("find face app from database");
+
+            let onnx = self
+                .database
+                .get(deployment.id, Target::Onnx)
+                .await
+                .map_err(|e| format!("failed to read application binary from database: {e}"))?;
+            let wasm = self
+                .database
+                .get(deployment.id, Target::Wasm)
+                .await
+                .map_err(|e| format!("failed to read application binary from database: {e}"))?;
+
+            let inner_server = FaceServer::create(onnx, wasm)
                 .await
                 .map_err(|e| Error::AppInstantiation(e.to_string()))?;
             let server = DetectorServer::new(inner_server);

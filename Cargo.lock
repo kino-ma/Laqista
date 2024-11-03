@@ -1120,6 +1120,7 @@ dependencies = [
 name = "face"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "criterion",
  "image",
  "mless-core",
@@ -2294,6 +2295,7 @@ dependencies = [
 name = "mless-core"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "prost",
  "tonic",
  "tonic-build",
