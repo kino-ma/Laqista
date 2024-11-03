@@ -3,6 +3,8 @@ use std::{error::Error, path::PathBuf};
 use bytes::Bytes;
 use uuid::Uuid;
 
+use crate::server::StateSender;
+
 use super::{
     fs::{read_apps, read_binary, write_tgz},
     http::download,
@@ -12,6 +14,7 @@ use super::{
 pub struct DeploymentDatabase {
     root: PathBuf,
     app_ids: Vec<Uuid>,
+    state_tx: StateSender,
 }
 
 pub enum Target {
@@ -20,9 +23,18 @@ pub enum Target {
 }
 
 impl DeploymentDatabase {
-    pub fn read_dir(root: PathBuf) -> Result<Self, Box<dyn Error>> {
+    pub fn read_dir(root: PathBuf, tx: StateSender) -> Result<Self, Box<dyn Error>> {
         let app_ids = read_apps(&app_dir(&root))?;
-        Ok(Self { root, app_ids })
+        Ok(Self {
+            root,
+            app_ids,
+            state_tx: tx,
+        })
+    }
+
+    pub fn default(tx: StateSender) -> Self {
+        let root = PathBuf::from("./.mless");
+        Self::read_dir(root, tx).unwrap()
     }
 
     pub async fn insert(&mut self, app_id: Uuid, source: String) -> Result<(), Box<dyn Error>> {
@@ -46,13 +58,6 @@ impl DeploymentDatabase {
 
 fn app_dir(root: &PathBuf) -> PathBuf {
     root.join("apps")
-}
-
-impl Default for DeploymentDatabase {
-    fn default() -> Self {
-        let root = PathBuf::from("./.mless");
-        Self::read_dir(root).unwrap()
-    }
 }
 
 impl ToString for Target {

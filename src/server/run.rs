@@ -60,7 +60,7 @@ impl ServerRunner {
         let (tx, rx) = mpsc::channel(1);
         let rx = Mutex::new(rx);
         let socket = DEFAULT_HOST.parse().expect("failed to parse default host");
-        let database = DeploymentDatabase::default();
+        let database = DeploymentDatabase::default(tx.clone());
 
         Self {
             command,

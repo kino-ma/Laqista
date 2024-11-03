@@ -14,7 +14,7 @@ use crate::proto::{
 };
 use crate::{RpcResult, ServerInfo};
 
-use super::{DaemonState, StateSender, DEFAULT_HOST};
+use super::{DaemonState, StateSender};
 
 #[derive(Clone, Debug)]
 pub struct ServerDaemon {
@@ -31,7 +31,7 @@ pub struct ServerDaemonRuntime {
 
 impl ServerDaemon {
     pub fn with_state(state: DaemonState, info: ServerInfo, tx: StateSender) -> Self {
-        let database = DeploymentDatabase::default();
+        let database = DeploymentDatabase::default(tx.clone());
         let runtime = Arc::new(Mutex::new(ServerDaemonRuntime { info, database }));
 
         Self { runtime, tx, state }
@@ -122,14 +122,5 @@ impl ServerDaemonTrait for ServerDaemon {
         _request: Request<DestroyRequest>,
     ) -> RpcResult<Response<DestroyResponse>> {
         Ok(Response::new(DestroyResponse { success: true }))
-    }
-}
-
-impl Default for ServerDaemonRuntime {
-    fn default() -> Self {
-        let info = ServerInfo::new(DEFAULT_HOST);
-        let database = DeploymentDatabase::default();
-
-        Self { info, database }
     }
 }

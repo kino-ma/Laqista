@@ -51,7 +51,7 @@ pub struct Cluster {
 
 impl AuthoritativeScheduler {
     pub fn new(cluster: Cluster, scheduler: Box<dyn DeploymentScheduler>, tx: StateSender) -> Self {
-        let database = DeploymentDatabase::default();
+        let database = DeploymentDatabase::default(tx.clone());
 
         let runtime = Arc::new(Mutex::new(SchedulerRuntime {
             cluster,
@@ -288,9 +288,12 @@ impl Clone for AuthoritativeScheduler {
 }
 
 impl SchedulerRuntime {
-    pub fn new(this_server: &ServerInfo, scheduler: Box<dyn DeploymentScheduler>) -> Self {
+    pub fn new(
+        this_server: &ServerInfo,
+        scheduler: Box<dyn DeploymentScheduler>,
+        database: DeploymentDatabase,
+    ) -> Self {
         let cluster = Cluster::new(this_server);
-        let database = DeploymentDatabase::default();
 
         Self {
             cluster,
