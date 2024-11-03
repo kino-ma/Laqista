@@ -1,10 +1,17 @@
 use std::{error::Error, path::PathBuf, sync::Arc};
 
 use bytes::Bytes;
+use chrono::{Local, TimeZone, Timelike};
+use hex::FromHex;
+use mless_core::DeploymentInfo;
+use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use crate::server::{StateCommand, StateSender};
+use crate::{
+    server::{StateCommand, StateSender},
+    utils::IdMap,
+};
 
 use super::{
     fs::{read_apps, read_binary, write_tgz},
@@ -20,9 +27,22 @@ pub struct DeploymentDatabase {
 
 #[derive(Debug)]
 struct Inner {
-    app_ids: Vec<Uuid>,
+    apps: IdMap<SavedApplication>,
     instances: Vec<Uuid>,
 }
+
+#[derive(Clone, Debug)]
+pub struct SavedApplication {
+    pub info: DeploymentInfo,
+    pub deployments: Vec<SavedDeployment>,
+}
+
+#[derive(Clone, Debug)]
+pub struct SavedDeployment {
+    timestamp: chrono::DateTime<Local>,
+    hash: Hash,
+}
+type Hash = [u8; 32];
 
 pub enum Target {
     Onnx,
@@ -46,54 +66,130 @@ impl DeploymentDatabase {
 
     pub async fn add_instance(
         &mut self,
-        app_id: Uuid,
-        source: String,
+        deployment: &DeploymentInfo,
     ) -> Result<(), Box<dyn Error>> {
-        let mut inner = self.inner.lock().await;
-
-        if !inner.app_ids.contains(&app_id) {
-            self.insert(app_id, source).await?;
+        if self.inner.lock().await.apps.0.get(&deployment.id).is_none() {
+            self.add_app(deployment).await?;
         }
 
-        inner.instances.push(app_id);
+        self.inner.lock().await.instances.push(deployment.id);
 
         self.state_tx.send(StateCommand::Keep).await?;
 
         Ok(())
     }
 
-    pub async fn insert(&self, app_id: Uuid, source: String) -> Result<(), Box<dyn Error>> {
-        let bin = download(source).await?;
+    pub async fn add_app(&self, info: &DeploymentInfo) -> Result<(), Box<dyn Error>> {
+        let bin = download(info.source.clone()).await?;
 
-        let app_path = app_dir(&self.root).join(app_id.to_string());
+        let saved = self.save(info, bin).await?;
 
-        write_tgz(&app_path, bin)?;
-
-        self.inner.lock().await.app_ids.push(app_id);
+        self.inner.lock().await.insert(info, saved);
 
         Ok(())
     }
 
-    pub async fn get(&mut self, app_id: Uuid, target: Target) -> Result<Bytes, Box<dyn Error>> {
-        let dir = app_dir(&self.root).join(app_id.to_string());
+    pub async fn get(
+        &self,
+        info: &DeploymentInfo,
+        target: Target,
+    ) -> Result<Bytes, Box<dyn Error>> {
+        let dir = app_dir(&self.root, info);
         let bytes = read_binary(&dir, target)?;
         Ok(bytes)
+    }
+
+    pub async fn lookup(&self, name: &str) -> Option<DeploymentInfo> {
+        self.inner
+            .lock()
+            .await
+            .apps
+            .0
+            .iter()
+            .find(|(_, a)| &a.info.name == name)
+            .map(|(_, a)| a.info.clone())
+    }
+
+    async fn save(
+        &self,
+        info: &DeploymentInfo,
+        tgz: Bytes,
+    ) -> Result<SavedDeployment, Box<dyn Error>> {
+        let app_path = app_dir(&self.root, info).join(info.id.to_string());
+
+        let timestamp = Local::now();
+        let hash = sha256(tgz.clone());
+        let saved = SavedDeployment { timestamp, hash };
+
+        let dir_name = saved.dir_name();
+        let save_path = app_path.join(dir_name);
+
+        write_tgz(&save_path, tgz)?;
+
+        Ok(saved)
     }
 }
 
 impl Inner {
     pub fn read(root: &PathBuf) -> Result<Self, Box<dyn Error>> {
-        let app_ids = read_apps(root)?;
+        let dir = app_root_dir(root);
+        let apps = read_apps(&dir)?;
 
         Ok(Self {
-            app_ids,
+            apps,
             instances: vec![],
         })
     }
+
+    pub fn insert(&mut self, info: &DeploymentInfo, saved: SavedDeployment) {
+        self.apps
+            .0
+            .entry(info.id)
+            .and_modify(|a| a.deployments.push(saved.clone()))
+            .or_insert(SavedApplication::new(info.clone(), vec![saved]));
+    }
 }
 
-fn app_dir(root: &PathBuf) -> PathBuf {
+impl SavedApplication {
+    pub fn new(info: DeploymentInfo, deployments: Vec<SavedDeployment>) -> Self {
+        Self { info, deployments }
+    }
+}
+
+impl SavedDeployment {
+    pub fn read(dir_name: &str) -> Option<Self> {
+        let mut ss = dir_name.split("-");
+
+        let ts_str = ss.next()?;
+        let ts_int = ts_str.parse().ok()?;
+        let timestamp = Local.timestamp_opt(ts_int, 0).single()?;
+
+        let hash_str = ss.next()?;
+        let hash = Hash::from_hex(hash_str).ok()?;
+
+        Some(Self { timestamp, hash })
+    }
+
+    pub fn dir_name(&self) -> String {
+        let ts = self.timestamp.second();
+        let hash = hex::encode(self.hash);
+
+        format!("{ts}-{hash}")
+    }
+}
+
+fn app_root_dir(root: &PathBuf) -> PathBuf {
     root.join("apps")
+}
+
+fn app_dir(root: &PathBuf, deployment: &DeploymentInfo) -> PathBuf {
+    app_root_dir(root).join(&deployment.name)
+}
+
+fn sha256(bin: Bytes) -> Hash {
+    let mut hasher = Sha256::new();
+    hasher.update(bin);
+    hasher.finalize().into()
 }
 
 impl ToString for Target {

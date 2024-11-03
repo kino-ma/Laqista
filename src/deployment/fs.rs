@@ -1,6 +1,6 @@
 use std::{
     error::Error,
-    fs::ReadDir,
+    fs::{DirEntry, ReadDir},
     io::{self, prelude::*, Result as IOResult},
     path::PathBuf,
 };
@@ -8,29 +8,57 @@ use std::{
 use bytes::Bytes;
 use flate2::read::GzDecoder;
 use tar::Archive;
-use uuid::Uuid;
 
-use super::database::Target;
+use crate::{proto::Deployment, utils::IdMap};
 
-pub fn read_apps(root: &PathBuf) -> Result<Vec<Uuid>, Box<dyn Error>> {
+use super::database::{SavedApplication, SavedDeployment, Target};
+
+pub fn read_apps(root: &PathBuf) -> Result<IdMap<SavedApplication>, Box<dyn Error>> {
     let entries = open_dir(root)?;
 
-    let mut app_ids = vec![];
+    let mut map = IdMap::new();
 
     for e in entries {
         let entry = e?;
 
-        let id_osstr = entry.file_name();
-        let id = id_osstr.to_str().ok_or(format!(
-            "Invalid UTF-8 sequence in file name: {:?}",
-            entry.file_name()
-        ))?;
-
-        let parsed = Uuid::try_parse(id)?;
-        app_ids.push(parsed);
+        let app = read_per_app(entry)?;
+        map.0.insert(app.info.id, app);
     }
 
-    Ok(app_ids)
+    Ok(map)
+}
+
+fn read_per_app(app_entry: DirEntry) -> Result<SavedApplication, Box<dyn Error>> {
+    let path = app_entry.path();
+    let mut v = vec![];
+    let mut info = None;
+
+    for e in std::fs::read_dir(path)? {
+        let entry = e?;
+
+        if entry.file_type()?.is_file() {
+            let deployment = read_info(&entry.path())?;
+            info = deployment.try_into().ok();
+            continue;
+        }
+
+        let dir_name = entry
+            .file_name()
+            .to_str()
+            .ok_or("failod to get file name")?
+            .to_owned();
+
+        let deployment =
+            SavedDeployment::read(&dir_name).ok_or("failed to parse directory name")?;
+
+        v.push(deployment)
+    }
+
+    if let Some(i) = info {
+        Ok(SavedApplication::new(i, v))
+    } else {
+        Err("failed to get id".to_owned())?
+    }
 }
 
 pub fn write_tgz(path: &PathBuf, tgz: Bytes) -> IOResult<()> {
@@ -82,6 +110,11 @@ pub fn read_binary(dir: &PathBuf, target: Target) -> IOResult<Bytes> {
 
     let buf = std::fs::read(entry.path())?;
     Ok(Bytes::from(buf))
+}
+
+fn read_info(path: &PathBuf) -> Result<Deployment, Box<dyn Error>> {
+    let contents = std::fs::read(path)?;
+    Ok(<Deployment as prost::Message>::decode(&contents[..])?)
 }
 
 fn open_dir(path: &PathBuf) -> Result<ReadDir, std::io::Error> {

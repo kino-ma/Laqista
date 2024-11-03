@@ -23,6 +23,7 @@ enum ServerState {
 message Deployment {
   string id = 1;
   string source = 2;
+  string name = 3;
 }
 
 message Group {
@@ -87,7 +88,7 @@ message LookupResponse {
 
 message DeployRequest {
   string source = 1;
-  bool authoritative = 2;
+  string name = 3;
 }
 message DeployResponse {
   bool success = 1;

@@ -9,12 +9,13 @@ use uuid::Uuid;
 #[derive(Clone, Debug)]
 pub struct DeploymentInfo {
     pub id: Uuid,
+    pub name: String,
     pub source: String,
 }
 
 impl DeploymentInfo {
-    pub fn new(source: String) -> Self {
+    pub fn new(name: String, source: String) -> Self {
         let id = Uuid::new_v4();
-        Self { source, id }
+        Self { name, source, id }
     }
 }

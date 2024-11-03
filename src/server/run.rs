@@ -242,16 +242,21 @@ impl ServerRunner {
         let router = {
             use face_proto::detector_server::DetectorServer;
 
-            let deployment: DeploymentInfo = todo!("find face app from database");
+            let deployment: DeploymentInfo = self
+                .database
+                .lookup("face")
+                .await
+                .ok_or("face application not found")?;
 
             let onnx = self
                 .database
-                .get(deployment.id, Target::Onnx)
+                .get(&deployment, Target::Onnx)
                 .await
                 .map_err(|e| format!("failed to read application binary from database: {e}"))?;
+
             let wasm = self
                 .database
-                .get(deployment.id, Target::Wasm)
+                .get(&deployment, Target::Wasm)
                 .await
                 .map_err(|e| format!("failed to read application binary from database: {e}"))?;
 

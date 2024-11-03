@@ -47,6 +47,8 @@ tar = "0.4.43"
 flate2 = "1.0.34"
 
 mless-core = { version = "0.1.0", path = "./mless-core" }
+sha2 = "0.10.8"
+hex = "0.4.3"
 
 [build-dependencies]
 tonic-build = "0.11"

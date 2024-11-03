@@ -3,7 +3,6 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::Status;
 use tonic::{Request, Response};
-use uuid::Uuid;
 
 use crate::deployment::database::DeploymentDatabase;
 use crate::proto::server_daemon_server::ServerDaemon as ServerDaemonTrait;
@@ -12,7 +11,7 @@ use crate::proto::{
     MonitorResponse, NominateRequest, NominateResponse, PingResponse, ServerState, SpawnRequest,
     SpawnResponse,
 };
-use crate::{RpcResult, ServerInfo};
+use crate::{Error as MlessError, RpcResult, ServerInfo};
 
 use super::{DaemonState, StateSender};
 
@@ -102,12 +101,15 @@ impl ServerDaemonTrait for ServerDaemon {
             .deployment
             .ok_or(Status::aborted("`deployment` is required`"))?;
 
-        let id = Uuid::try_parse(&deployment.id)
-            .map_err(|e| Status::aborted(format!("failed to parse uuid: {e}")))?;
+        let info = deployment
+            .try_into()
+            .map_err(<MlessError as Into<Status>>::into)?;
 
-        let database = &mut self.runtime.lock().await.database;
-        database
-            .add_instance(id, deployment.source)
+        self.runtime
+            .lock()
+            .await
+            .database
+            .add_instance(&info)
             .await
             .map_err(|e| {
                 Status::aborted(format!("failed to insert deployment into database: {e}"))
