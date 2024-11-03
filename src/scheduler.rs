@@ -6,7 +6,7 @@ use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::Mutex;
 use tonic::transport::Channel;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -19,7 +19,7 @@ use crate::proto::{
     LookupRequest, LookupResponse, Nomination, ReportRequest, ReportResponse, Server, SpawnRequest,
     SpawnResponse,
 };
-use crate::server::DaemonState;
+use crate::server::{DaemonState, StateSender};
 use crate::utils::IdMap;
 use crate::{AppInstanceMap, AppInstancesInfo, DeploymentInfo, GroupInfo, RpcResult, ServerInfo};
 use crate::{Error, Result};
@@ -30,7 +30,7 @@ use self::stats::{ServerStats, StatsMap};
 #[derive(Debug)]
 pub struct AuthoritativeScheduler {
     pub runtime: Arc<Mutex<SchedulerRuntime>>,
-    pub tx: Arc<Mutex<mpsc::Sender<DaemonState>>>,
+    pub tx: Arc<Mutex<StateSender>>,
 }
 
 #[derive(Clone, Debug)]
@@ -50,11 +50,7 @@ pub struct Cluster {
 }
 
 impl AuthoritativeScheduler {
-    pub fn new(
-        cluster: Cluster,
-        scheduler: Box<dyn DeploymentScheduler>,
-        tx: mpsc::Sender<DaemonState>,
-    ) -> Self {
+    pub fn new(cluster: Cluster, scheduler: Box<dyn DeploymentScheduler>, tx: StateSender) -> Self {
         let database = DeploymentDatabase::default();
 
         let runtime = Arc::new(Mutex::new(SchedulerRuntime {
@@ -72,7 +68,7 @@ impl AuthoritativeScheduler {
     pub fn from_server(
         server: &ServerInfo,
         scheduler: Box<dyn DeploymentScheduler>,
-        tx: mpsc::Sender<DaemonState>,
+        tx: StateSender,
     ) -> Self {
         let cluster = Cluster::new(server);
 

@@ -8,7 +8,7 @@ use crate::{
     monitor::{MetricsMonitor, SendMetrics},
     proto::{scheduler_client::SchedulerClient, ClusterState, MonitorWindow, ReportRequest},
     scheduler::{mean::MeanScheduler, AuthoritativeScheduler, Cluster},
-    server::DaemonState,
+    server::{DaemonState, StateCommand, StateSender},
     utils::cluster_differs,
     ServerInfo,
 };
@@ -17,17 +17,13 @@ pub struct MetricsReporter {
     scheduler: ServerInfo,
     server: ServerInfo,
     last_cluster_state: Option<ClusterState>,
-    state_tx: mpsc::Sender<DaemonState>,
+    state_tx: StateSender,
     rx: mpsc::Receiver<MonitorWindow>,
     sender_handle: JoinHandle<()>,
 }
 
 impl MetricsReporter {
-    pub fn new(
-        state_tx: mpsc::Sender<DaemonState>,
-        server: ServerInfo,
-        scheduler: ServerInfo,
-    ) -> Self {
+    pub fn new(state_tx: StateSender, server: ServerInfo, scheduler: ServerInfo) -> Self {
         let (tx, rx) = mpsc::channel(1);
 
         let sender: Box<dyn SendMetrics> = Box::new(MetricsMonitor::new());
@@ -118,7 +114,7 @@ impl MetricsReporter {
                             DaemonState::Joining(next_scheduler.addr.clone())
                         };
 
-                        self.state_tx.send(state).await?;
+                        self.state_tx.send(StateCommand::Update(state)).await?;
 
                         Ok(())
                     }

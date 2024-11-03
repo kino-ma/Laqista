@@ -34,8 +34,17 @@ pub struct ServerRunner {
     // Instead, it will be known when it is the "start" command.
     socket: SocketAddr,
     database: DeploymentDatabase,
-    rx: Mutex<mpsc::Receiver<DaemonState>>,
-    tx: mpsc::Sender<DaemonState>,
+    rx: Mutex<StateReceiver>,
+    tx: StateSender,
+}
+
+pub type StateSender = mpsc::Sender<StateCommand>;
+pub type StateReceiver = mpsc::Receiver<StateCommand>;
+
+#[derive(Clone, Debug)]
+pub enum StateCommand {
+    Update(DaemonState),
+    Keep,
 }
 
 #[derive(Clone, Debug)]
@@ -80,17 +89,23 @@ impl ServerRunner {
 
         loop {
             let daemon = self.create_daemon(info.clone(), state.clone());
-            let service_future = self.start_service(daemon, state);
+            let service_future = self.start_service(daemon, state.clone());
 
             let mut rx = self.rx.lock().await;
             let rcvd_future = rx.recv();
 
             // Terminate serving_future by selecting another future
-            state = match future::select(pin!(service_future), pin!(rcvd_future)).await {
+            let state_command = match future::select(pin!(service_future), pin!(rcvd_future)).await
+            {
                 future::Either::Left((state, _)) => state?,
                 future::Either::Right((state, _)) => {
                     state.ok_or(Error::Text("received None state from sender".to_owned()))?
                 }
+            };
+
+            state = match state_command {
+                StateCommand::Keep => state,
+                StateCommand::Update(new) => new,
             };
         }
     }
@@ -99,10 +114,10 @@ impl ServerRunner {
         &self,
         daemon: ServerDaemon,
         state: DaemonState,
-    ) -> Result<DaemonState> {
+    ) -> Result<StateCommand> {
         let server = daemon.runtime.lock().await.info.clone();
 
-        match state {
+        let new_state = match state {
             DaemonState::Joining(bootstrap_addr) => {
                 println!("Joining to a cluster...");
                 self.join_cluster(server, &bootstrap_addr).await
@@ -120,7 +135,9 @@ impl ServerRunner {
             DaemonState::Failed => {
                 panic!("invalid state: {:?}", state)
             }
-        }
+        }?;
+
+        return Ok(StateCommand::Update(new_state));
     }
 
     async fn join_cluster(&self, server: ServerInfo, addr: &str) -> Result<DaemonState> {

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::Mutex;
 use tonic::Status;
 use tonic::{Request, Response};
 use uuid::Uuid;
@@ -14,12 +14,12 @@ use crate::proto::{
 };
 use crate::{RpcResult, ServerInfo};
 
-use super::{DaemonState, DEFAULT_HOST};
+use super::{DaemonState, StateSender, DEFAULT_HOST};
 
 #[derive(Clone, Debug)]
 pub struct ServerDaemon {
     pub runtime: Arc<Mutex<ServerDaemonRuntime>>,
-    pub tx: mpsc::Sender<DaemonState>,
+    pub tx: StateSender,
     pub state: DaemonState,
 }
 
@@ -30,7 +30,7 @@ pub struct ServerDaemonRuntime {
 }
 
 impl ServerDaemon {
-    pub fn with_state(state: DaemonState, info: ServerInfo, tx: mpsc::Sender<DaemonState>) -> Self {
+    pub fn with_state(state: DaemonState, info: ServerInfo, tx: StateSender) -> Self {
         let database = DeploymentDatabase::default();
         let runtime = Arc::new(Mutex::new(ServerDaemonRuntime { info, database }));
 
