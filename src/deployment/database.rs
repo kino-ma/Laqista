@@ -1,6 +1,7 @@
-use std::{error::Error, path::PathBuf};
+use std::{error::Error, path::PathBuf, sync::Arc};
 
 use bytes::Bytes;
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::server::{StateCommand, StateSender};
@@ -13,9 +14,14 @@ use super::{
 #[derive(Debug, Clone)]
 pub struct DeploymentDatabase {
     root: PathBuf,
+    state_tx: StateSender,
+    inner: Arc<Mutex<Inner>>,
+}
+
+#[derive(Debug)]
+struct Inner {
     app_ids: Vec<Uuid>,
     instances: Vec<Uuid>,
-    state_tx: StateSender,
 }
 
 pub enum Target {
@@ -25,12 +31,11 @@ pub enum Target {
 
 impl DeploymentDatabase {
     pub fn read_dir(root: PathBuf, tx: StateSender) -> Result<Self, Box<dyn Error>> {
-        let app_ids = read_apps(&app_dir(&root))?;
+        let inner = Arc::new(Mutex::new(Inner::read(&root)?));
         Ok(Self {
             root,
-            app_ids,
-            instances: vec![],
             state_tx: tx,
+            inner,
         })
     }
 
@@ -44,25 +49,27 @@ impl DeploymentDatabase {
         app_id: Uuid,
         source: String,
     ) -> Result<(), Box<dyn Error>> {
-        if !self.app_ids.contains(&app_id) {
+        let mut inner = self.inner.lock().await;
+
+        if !inner.app_ids.contains(&app_id) {
             self.insert(app_id, source).await?;
         }
 
-        self.instances.push(app_id);
+        inner.instances.push(app_id);
 
         self.state_tx.send(StateCommand::Keep).await?;
 
         Ok(())
     }
 
-    pub async fn insert(&mut self, app_id: Uuid, source: String) -> Result<(), Box<dyn Error>> {
+    pub async fn insert(&self, app_id: Uuid, source: String) -> Result<(), Box<dyn Error>> {
         let bin = download(source).await?;
 
         let app_path = app_dir(&self.root).join(app_id.to_string());
 
         write_tgz(&app_path, bin)?;
 
-        self.app_ids.push(app_id);
+        self.inner.lock().await.app_ids.push(app_id);
 
         Ok(())
     }
@@ -71,6 +78,24 @@ impl DeploymentDatabase {
         let dir = app_dir(&self.root).join(app_id.to_string());
         let bytes = read_binary(&dir, target)?;
         Ok(bytes)
+    }
+}
+
+impl Inner {
+    pub fn new() -> Self {
+        Self {
+            app_ids: vec![],
+            instances: vec![],
+        }
+    }
+
+    pub fn read(root: &PathBuf) -> Result<Self, Box<dyn Error>> {
+        let app_ids = read_apps(root)?;
+
+        Ok(Self {
+            app_ids,
+            instances: vec![],
+        })
     }
 }
 
