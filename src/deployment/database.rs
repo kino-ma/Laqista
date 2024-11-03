@@ -3,7 +3,7 @@ use std::{error::Error, path::PathBuf};
 use bytes::Bytes;
 use uuid::Uuid;
 
-use crate::server::StateSender;
+use crate::server::{StateCommand, StateSender};
 
 use super::{
     fs::{read_apps, read_binary, write_tgz},
@@ -14,6 +14,7 @@ use super::{
 pub struct DeploymentDatabase {
     root: PathBuf,
     app_ids: Vec<Uuid>,
+    instances: Vec<Uuid>,
     state_tx: StateSender,
 }
 
@@ -28,6 +29,7 @@ impl DeploymentDatabase {
         Ok(Self {
             root,
             app_ids,
+            instances: vec![],
             state_tx: tx,
         })
     }
@@ -35,6 +37,22 @@ impl DeploymentDatabase {
     pub fn default(tx: StateSender) -> Self {
         let root = PathBuf::from("./.mless");
         Self::read_dir(root, tx).unwrap()
+    }
+
+    pub async fn add_instance(
+        &mut self,
+        app_id: Uuid,
+        source: String,
+    ) -> Result<(), Box<dyn Error>> {
+        if !self.app_ids.contains(&app_id) {
+            self.insert(app_id, source).await?;
+        }
+
+        self.instances.push(app_id);
+
+        self.state_tx.send(StateCommand::Keep).await?;
+
+        Ok(())
     }
 
     pub async fn insert(&mut self, app_id: Uuid, source: String) -> Result<(), Box<dyn Error>> {

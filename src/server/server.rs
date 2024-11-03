@@ -101,15 +101,19 @@ impl ServerDaemonTrait for ServerDaemon {
         let id = Uuid::try_parse(&deployment.id)
             .map_err(|e| Status::aborted(format!("failed to parse uuid: {e}")))?;
 
-        self.runtime
-            .lock()
-            .await
-            .database
-            .insert(id, deployment.source)
+        let database = &mut self.runtime.lock().await.database;
+        database
+            .add_instance(id, deployment.source)
             .await
             .map_err(|e| {
                 Status::aborted(format!("failed to insert deployment into database: {e}"))
             })?;
+        // Here an app isntance were added and the daemon should restart to start the appilcation.
+        // However this function will not emit the `StateCommand`, but DeploymentDatabase will.
+        // The purpose of this design is to concentrate the responsibility of signaling thet
+        // was caused from change in application instance.
+        // Other cases of such change include completion of downloading the app binaries, and it
+        // is only caused by database side. So we also put the responsibility here on it.
 
         Ok(Response::new(SpawnResponse {
             success: true,
