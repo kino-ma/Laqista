@@ -103,18 +103,14 @@ impl MetricsReporter {
 
                         let next_scheduler = cluster.choose_scheduler();
 
-                        let state = if next_scheduler.id == self.server.id {
-                            let scheduler = AuthoritativeScheduler::new(
-                                cluster,
-                                mean_scheduler,
-                                self.state_tx.clone(),
-                            );
-                            DaemonState::Authoritative(scheduler)
+                        let state_command = if next_scheduler.id == self.server.id {
+                            StateCommand::BecomeScheduler(cluster)
                         } else {
-                            DaemonState::Joining(next_scheduler.addr.clone())
+                            let state = DaemonState::Joining(next_scheduler.addr.clone());
+                            StateCommand::Update(state)
                         };
 
-                        self.state_tx.send(StateCommand::Update(state)).await?;
+                        self.state_tx.send(state_command).await?;
 
                         Ok(())
                     }

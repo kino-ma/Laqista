@@ -12,7 +12,7 @@ use tonic::transport::{server::Router, Channel, Server as TransportServer};
 use crate::deployment::database::DeploymentDatabase;
 use crate::proto::{scheduler_client::SchedulerClient, JoinRequest};
 use crate::report::MetricsReporter;
-use crate::scheduler::AuthoritativeScheduler;
+use crate::scheduler::{AuthoritativeScheduler, Cluster};
 use crate::{
     proto::{scheduler_server::SchedulerServer, server_daemon_server::ServerDaemonServer},
     scheduler::mean::MeanScheduler,
@@ -44,6 +44,7 @@ pub type StateReceiver = mpsc::Receiver<StateCommand>;
 #[derive(Clone, Debug)]
 pub enum StateCommand {
     Update(DaemonState),
+    BecomeScheduler(Cluster),
     Keep,
 }
 
@@ -106,6 +107,16 @@ impl ServerRunner {
             state = match state_command {
                 StateCommand::Keep => state,
                 StateCommand::Update(new) => new,
+                StateCommand::BecomeScheduler(cluster) => {
+                    let mean_scheduler = MeanScheduler {};
+                    let scheduler = AuthoritativeScheduler::new(
+                        cluster,
+                        Box::new(mean_scheduler),
+                        self.tx.clone(),
+                        self.database.clone(),
+                    );
+                    DaemonState::Authoritative(scheduler)
+                }
             };
         }
     }
@@ -241,7 +252,7 @@ impl ServerRunner {
     }
 
     fn create_daemon(&self, info: ServerInfo, state: DaemonState) -> ServerDaemon {
-        ServerDaemon::with_state(state, info, self.tx.clone())
+        ServerDaemon::with_state(state, info, self.tx.clone(), self.database.clone())
     }
 
     fn create_info(&self, start_command: &StartCommand) -> Result<ServerInfo> {
@@ -277,7 +288,12 @@ impl ServerRunner {
             None => {
                 let mean_scheduler = Box::new(MeanScheduler {});
                 let tx = self.tx.clone();
-                let scheduler = AuthoritativeScheduler::from_server(server, mean_scheduler, tx);
+                let scheduler = AuthoritativeScheduler::from_server(
+                    server,
+                    mean_scheduler,
+                    tx,
+                    self.database.clone(),
+                );
                 DaemonState::Authoritative(scheduler)
             }
         }

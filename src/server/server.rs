@@ -30,8 +30,12 @@ pub struct ServerDaemonRuntime {
 }
 
 impl ServerDaemon {
-    pub fn with_state(state: DaemonState, info: ServerInfo, tx: StateSender) -> Self {
-        let database = DeploymentDatabase::default(tx.clone());
+    pub fn with_state(
+        state: DaemonState,
+        info: ServerInfo,
+        tx: StateSender,
+        database: DeploymentDatabase,
+    ) -> Self {
         let runtime = Arc::new(Mutex::new(ServerDaemonRuntime { info, database }));
 
         Self { runtime, tx, state }
