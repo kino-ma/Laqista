@@ -60,7 +60,7 @@ impl DeploymentDatabase {
     }
 
     pub fn default(tx: StateSender) -> Self {
-        let root = PathBuf::from("./.mless");
+        let root = PathBuf::from(".mless");
         Self::read_dir(root, tx).unwrap()
     }
 
@@ -115,7 +115,7 @@ impl DeploymentDatabase {
         info: &DeploymentInfo,
         tgz: Bytes,
     ) -> Result<SavedDeployment, Box<dyn Error>> {
-        let app_path = app_dir(&self.root, info).join(info.id.to_string());
+        let app_path = app_dir(&self.root, info);
 
         let timestamp = Local::now();
         let hash = sha256(tgz.clone());
@@ -171,7 +171,7 @@ impl SavedDeployment {
     }
 
     pub fn dir_name(&self) -> String {
-        let ts = self.timestamp.second();
+        let ts = self.timestamp.timestamp();
         let hash = hex::encode(self.hash);
 
         format!("{ts}-{hash}")
@@ -198,5 +198,26 @@ impl ToString for Target {
             Self::Wasm => "wasm".to_owned(),
             Self::Onnx => "onnx".to_owned(),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use tokio::sync::mpsc;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn db_test() {
+        let (tx, _) = mpsc::channel(1);
+        let mut db = DeploymentDatabase::read_dir(PathBuf::from("./.mless-test"), tx).unwrap();
+
+        let info = DeploymentInfo {
+            id: Uuid::new_v4(),
+            name: "test".to_owned(),
+            source: "https://github.com/kino-ma/MLess/releases/download/v0.1.0/face_v0.1.0.tgz"
+                .to_owned(),
+        };
+        db.add_app(&info).await.unwrap();
     }
 }
