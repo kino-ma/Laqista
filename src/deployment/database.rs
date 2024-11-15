@@ -1,7 +1,7 @@
 use std::{error::Error, path::PathBuf, sync::Arc};
 
 use bytes::Bytes;
-use chrono::{Local, TimeZone, Timelike};
+use chrono::{Local, TimeZone};
 use hex::FromHex;
 use mless_core::DeploymentInfo;
 use sha2::{Digest, Sha256};
@@ -14,7 +14,7 @@ use crate::{
 };
 
 use super::{
-    fs::{read_apps, read_binary, write_tgz},
+    fs::{read_apps, read_binary, write_info, write_tgz},
     http::download,
 };
 
@@ -125,6 +125,9 @@ impl DeploymentDatabase {
         let save_path = app_path.join(dir_name);
 
         write_tgz(&save_path, tgz)?;
+
+        let info_path = app_path.join("info.mless");
+        write_info(&info_path, &info)?;
 
         Ok(saved)
     }

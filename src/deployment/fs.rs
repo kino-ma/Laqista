@@ -7,6 +7,7 @@ use std::{
 
 use bytes::Bytes;
 use flate2::read::GzDecoder;
+use mless_core::DeploymentInfo;
 use tar::Archive;
 
 use crate::{proto::Deployment, utils::IdMap};
@@ -79,6 +80,7 @@ pub fn write_tgz(path: &PathBuf, tgz: Bytes) -> IOResult<()> {
                 .ok_or(io::Error::from(io::ErrorKind::NotFound))?;
 
             let file_path = path.join(file_name);
+            dbg!(&path, &entry_path, &file_name, &file_path);
 
             let mut contents = vec![];
             entry.read_to_end(&mut contents)?;
@@ -90,6 +92,17 @@ pub fn write_tgz(path: &PathBuf, tgz: Bytes) -> IOResult<()> {
         .collect::<IOResult<Vec<_>>>()?;
 
     println!("write_tgz: Written files: {:?}", written_files);
+
+    Ok(())
+}
+
+pub fn write_info(path: &PathBuf, info: &DeploymentInfo) -> IOResult<()> {
+    use prost::Message;
+
+    let proto_info: Deployment = info.clone().into();
+    let msg = proto_info.encode_to_vec();
+
+    std::fs::write(path, msg)?;
 
     Ok(())
 }
