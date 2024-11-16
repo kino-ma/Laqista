@@ -47,12 +47,12 @@ impl Detector for FaceServer {
         &self,
         request: Request<DetectionRequest>,
     ) -> Result<Response<DetectionReply>, Status> {
-        let wasm_bin = &self.inner.lock().await.wasm;
+        let wasm_bin = self.inner.lock().await.wasm.clone();
         // FIXME: It would be better performant if we could instantiate the wasm module only once.
         //        However, if we reuse the instance for every request, it errors out with message
         //        saying "failed to allocate memory".
         //        Instead, we instantiate the module from compiler, for each request.
-        let mut wasm = WasmRunner::compile(wasm_bin).map_err(|e| {
+        let mut wasm = WasmRunner::compile(&wasm_bin).map_err(|e| {
             Status::aborted(format!("Failed to compile and setup wasm module: {e}"))
         })?;
 
