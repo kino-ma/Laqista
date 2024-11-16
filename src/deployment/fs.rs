@@ -15,12 +15,17 @@ use crate::{proto::Deployment, utils::IdMap};
 use super::database::{SavedApplication, SavedDeployment, Target};
 
 pub fn read_apps(root: &PathBuf) -> Result<IdMap<SavedApplication>, Box<dyn Error>> {
-    let entries = open_dir(root)?;
+    let entries = open_dir_root(root)?;
 
     let mut map = IdMap::new();
 
     for e in entries {
         let entry = e?;
+
+        // The directory may contain non-directory entries (e.g., .gitignore)
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
 
         let app = read_per_app(entry)?;
         map.0.insert(app.info.id, app);
@@ -127,6 +132,19 @@ pub fn read_binary(dir: &PathBuf, target: Target) -> IOResult<Bytes> {
 fn read_info(path: &PathBuf) -> Result<Deployment, Box<dyn Error>> {
     let contents = std::fs::read(path)?;
     Ok(<Deployment as prost::Message>::decode(&contents[..])?)
+}
+
+const GITIGNORE_FILE_NAME: &'static str = ".gitignore";
+const GITIGNORE_CONTENT: &'static str = "*";
+
+/// `open_dir_root`` works the same as `open_dir`, except for this creates `.gitignore`.
+fn open_dir_root(path: &PathBuf) -> Result<ReadDir, std::io::Error> {
+    let dir = open_dir(path)?;
+
+    let gitignore_path = path.join(GITIGNORE_FILE_NAME);
+    std::fs::write(&gitignore_path, GITIGNORE_CONTENT)?;
+
+    Ok(dir)
 }
 
 fn open_dir(path: &PathBuf) -> Result<ReadDir, std::io::Error> {
