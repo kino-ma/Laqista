@@ -5,6 +5,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use face::proto::detector_client::DetectorClient;
 use face::proto::{DetectionRequest, InferRequest};
 use futures::lock::Mutex;
+use mless_core::client::retry;
 use tokio::runtime::Runtime;
 use tonic::transport::Channel;
 
@@ -63,10 +64,6 @@ async fn setup_clients(
         .await
         .expect("failed to connect to the server");
 
-    let detector_client = face::proto::detector_client::DetectorClient::connect(addr.to_owned())
-        .await
-        .unwrap();
-
     let request = DeployRequest {
         name: "face".to_owned(),
         source: "https://github.com/kino-ma/MLess/releases/download/v0.1.0/face_v0.1.0.tgz"
@@ -78,6 +75,12 @@ async fn setup_clients(
         .await
         .expect("failed to deploy")
         .into_inner();
+
+    let detector_client = retry(|| async {
+        face::proto::detector_client::DetectorClient::connect(addr.to_owned()).await
+    })
+    .await
+    .unwrap();
 
     (client, detector_client, deployment.deployment.unwrap())
 }
