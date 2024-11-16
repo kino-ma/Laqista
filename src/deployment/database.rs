@@ -213,7 +213,7 @@ mod test {
     #[tokio::test]
     async fn db_test() {
         let (tx, _) = mpsc::channel(1);
-        let mut db = DeploymentDatabase::read_dir(PathBuf::from("./.mless-test"), tx).unwrap();
+        let db = DeploymentDatabase::read_dir(PathBuf::from("./.mless-test"), tx).unwrap();
 
         let info = DeploymentInfo {
             id: Uuid::new_v4(),
