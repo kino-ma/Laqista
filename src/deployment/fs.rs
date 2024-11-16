@@ -117,13 +117,17 @@ pub fn read_binary(dir: &PathBuf, target: Target) -> IOResult<Bytes> {
     let entry = dir
         .find_map(|e| {
             let entry = e.ok()?;
-            if entry.file_name().to_str()?.ends_with(&target.to_string()) {
+            let filename = entry.file_name();
+            if target.extension_matches(&filename) {
                 Some(entry)
             } else {
                 None
             }
         })
-        .ok_or(io::Error::new(io::ErrorKind::NotFound, "target not found"))?;
+        .ok_or(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("target not found: {}", target.to_string()),
+        ))?;
 
     let buf = std::fs::read(entry.path())?;
     Ok(Bytes::from(buf))

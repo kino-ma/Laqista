@@ -1,4 +1,4 @@
-use std::{error::Error, path::PathBuf, sync::Arc};
+use std::{error::Error, ffi::OsStr, path::PathBuf, sync::Arc};
 
 use bytes::Bytes;
 use chrono::{Local, TimeZone};
@@ -44,6 +44,7 @@ pub struct SavedDeployment {
 }
 type Hash = [u8; 32];
 
+#[derive(Debug, Clone)]
 pub enum Target {
     Onnx,
     Wasm,
@@ -94,8 +95,23 @@ impl DeploymentDatabase {
         info: &DeploymentInfo,
         target: Target,
     ) -> Result<Bytes, Box<dyn Error>> {
-        let dir = app_dir(&self.root, info);
+        let inner = self.inner.lock().await;
+
+        let app = inner
+            .apps
+            .0
+            .get(&info.id)
+            .ok_or(format!("Application not found: {info:?}"))?;
+
+        let latest_deployment = app
+            .deployments
+            .last()
+            .ok_or(format!("Deployment not found for app: {info:?}"))?;
+
+        let subdir_name = latest_deployment.dir_name();
+        let dir = app_dir(&self.root, info).join(subdir_name);
         let bytes = read_binary(&dir, target)?;
+
         Ok(bytes)
     }
 
@@ -193,6 +209,15 @@ fn sha256(bin: Bytes) -> Hash {
     let mut hasher = Sha256::new();
     hasher.update(bin);
     hasher.finalize().into()
+}
+
+impl Target {
+    pub fn extension_matches(&self, filename: &OsStr) -> bool {
+        let extension = self.to_string();
+        let matches = filename.to_str().unwrap().ends_with(&extension);
+        dbg!(self, filename, extension, matches);
+        matches
+    }
 }
 
 impl ToString for Target {
