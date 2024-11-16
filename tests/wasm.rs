@@ -1,5 +1,6 @@
 use face::proto::DetectionRequest;
 use mless::proto::{self, DeployRequest, LookupRequest};
+use mless_core::client::retry;
 
 static JPEG: &'static [u8] = include_bytes!("../data/pelican.jpeg");
 
@@ -10,11 +11,6 @@ async fn schedule_wasm() {
     let mut client = proto::scheduler_client::SchedulerClient::connect(addr.to_owned())
         .await
         .expect("failed to connect to the server");
-
-    let mut detector_client =
-        face::proto::detector_client::DetectorClient::connect(addr.to_owned())
-            .await
-            .unwrap();
 
     let request = DeployRequest {
         name: "face".to_owned(),
@@ -29,11 +25,22 @@ async fn schedule_wasm() {
         .into_inner();
 
     let request = LookupRequest {
-        deployment_id: deployment.deployment.unwrap().id,
+        deployment_id: deployment.deployment.unwrap().id.to_owned(),
         qos: None,
     };
 
-    let _resp = client.clone().lookup(request).await.unwrap().into_inner();
+    let resp = retry(|| async { client.clone().lookup(request.clone()).await })
+        .await
+        .unwrap()
+        .into_inner();
+
+    let target_addr = resp.server.unwrap().addr;
+    dbg!(addr, &target_addr);
+    assert_eq!(addr, &target_addr);
+    let detector_client =
+        retry(|| async { face::proto::detector_client::DetectorClient::connect(addr).await })
+            .await
+            .unwrap();
 
     // let mut app_client = app::proto::greeter_client::GreeterClient::connect(addr)
     //     .await
@@ -42,8 +49,7 @@ async fn schedule_wasm() {
         image_png: JPEG.to_vec(),
     };
 
-    let resp = detector_client
-        .run_detection(request)
+    let resp = retry(|| async { detector_client.clone().run_detection(request.clone()).await })
         .await
         .unwrap()
         .into_inner();

@@ -2299,6 +2299,7 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "prost",
+ "tokio",
  "tonic",
  "tonic-build",
  "uuid",
