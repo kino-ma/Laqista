@@ -80,7 +80,6 @@ pub fn write_tgz(path: &PathBuf, tgz: Bytes) -> IOResult<()> {
                 .ok_or(io::Error::from(io::ErrorKind::NotFound))?;
 
             let file_path = path.join(file_name);
-            dbg!(&path, &entry_path, &file_name, &file_path);
 
             let mut contents = vec![];
             entry.read_to_end(&mut contents)?;
