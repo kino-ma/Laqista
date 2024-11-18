@@ -1,11 +1,16 @@
 use face::proto::DetectionRequest;
-use mless::proto::{self, DeployRequest, LookupRequest};
+use mless::{
+    proto::{self, DeployRequest, LookupRequest},
+    server::test_helpers::initialize,
+};
 use mless_core::client::retry;
 
 static JPEG: &'static [u8] = include_bytes!("../data/pelican.jpeg");
 
 #[tokio::test]
 async fn schedule_wasm() {
+    initialize();
+
     let addr = "http://127.0.0.1:50051";
 
     let mut client = proto::scheduler_client::SchedulerClient::connect(addr.to_owned())

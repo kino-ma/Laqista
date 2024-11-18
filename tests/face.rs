@@ -1,6 +1,9 @@
 use face::proto::InferRequest;
 use image::{imageops::FilterType, GenericImageView, Pixel};
 use mless::proto::{self, DeployRequest, LookupRequest};
+#[cfg(test)]
+use mless::server::test_helpers::initialize;
+use mless_core::client::retry;
 
 static JPEG: &'static [u8] = include_bytes!("../data/sized-pelican.jpeg");
 static LABELS: &'static str = include_str!("../data/models/resnet-labels.txt");
@@ -10,11 +13,15 @@ const IMAGE_HEIGHT: usize = 224;
 
 #[tokio::test]
 async fn schedule_wasm() {
+    initialize();
+
     let addr = "http://127.0.0.1:50051";
 
-    let mut client = proto::scheduler_client::SchedulerClient::connect(addr.to_owned())
-        .await
-        .expect("failed to connect to the server");
+    let mut client = retry(|| async {
+        proto::scheduler_client::SchedulerClient::connect(addr.to_owned()).await
+    })
+    .await
+    .expect("failed to connect to the server");
 
     let mut detector_client =
         face::proto::detector_client::DetectorClient::connect(addr.to_owned())
