@@ -271,6 +271,34 @@ impl Scheduler for AuthoritativeScheduler {
             .ok_or(Status::aborted("Failed to schedule"))?
             .clone();
 
+        // Clone self.
+        // Because we have Arc<Mutex<_>> inside Self, we can edit the inner data from the clone.
+        let this = self.clone();
+        let target_moved = target.clone();
+        tokio::task::spawn(async move {
+            let runtime = this.runtime.lock().await;
+
+            let should_scale = {
+                let stats = runtime
+                    .cluster
+                    .server_stats
+                    .0
+                    .get(&target_moved.id)
+                    .ok_or(())?;
+                runtime.scheduler.needs_scale_out(&target_moved, stats)
+            };
+
+            if should_scale {
+                let deployment = runtime.deployments.0.get(&id).ok_or(())?;
+                this.deploy_in_us(deployment.clone())
+                    .await
+                    .err()
+                    .map(|e| println!("ERR: deploy_in_us failed: {e}"));
+            }
+
+            Ok::<(), ()>(())
+        });
+
         Ok(Response::new(LookupResponse {
             success: true,
             deployment_id: id.to_string(),

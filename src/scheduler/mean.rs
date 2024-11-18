@@ -8,6 +8,8 @@ use super::{
 #[derive(Clone, Debug)]
 pub struct MeanScheduler {}
 
+const SCALEOUT_THREASHOLD: usize = 70;
+
 impl DeploymentScheduler for MeanScheduler {
     fn schedule(&self, stats_map: &StatsMap) -> Option<ServerInfo> {
         let mut least_utilized = stats_map
@@ -53,6 +55,15 @@ impl DeploymentScheduler for MeanScheduler {
         }
 
         Some(least_utilized.server.clone())
+    }
+
+    fn needs_scale_out(&self, _server: &ServerInfo, stats: &ServerStats) -> bool {
+        let stat = match stats.stats.last() {
+            Some(s) => s,
+            None => return false,
+        };
+
+        return stat.utilization.as_ref().unwrap().cpu > SCALEOUT_THREASHOLD as _;
     }
 }
 
