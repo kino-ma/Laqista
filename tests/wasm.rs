@@ -35,12 +35,11 @@ async fn schedule_wasm() {
         .into_inner();
 
     let target_addr = resp.server.unwrap().addr;
-    dbg!(addr, &target_addr);
-    assert_eq!(addr, &target_addr);
-    let detector_client =
-        retry(|| async { face::proto::detector_client::DetectorClient::connect(addr).await })
-            .await
-            .unwrap();
+    let detector_client = retry(|| async {
+        face::proto::detector_client::DetectorClient::connect(target_addr.clone()).await
+    })
+    .await
+    .unwrap();
 
     // let mut app_client = app::proto::greeter_client::GreeterClient::connect(addr)
     //     .await
