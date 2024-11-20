@@ -1,4 +1,4 @@
-use mless_core::tensor::{AsInputs, Inputs, Outputs, OutputsParseError};
+use laqista_core::tensor::{AsInputs, Inputs, Outputs, OutputsParseError};
 use wonnx::utils::{InputTensor, OutputTensor};
 
 tonic::include_proto!("face");

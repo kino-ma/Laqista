@@ -1,5 +1,5 @@
 syntax = "proto3";
-package mless;
+package laqista;
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
@@ -114,7 +114,7 @@ service ServerDaemon {
   rpc Nominate(NominateRequest) returns (NominateResponse);
 
   // In addition, the Server Daemon proxies any requsets that is not to package
-  // "mless".
+  // "laqista".
 }
 
 message GetInfoRequest {}

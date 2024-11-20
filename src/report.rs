@@ -4,7 +4,7 @@ use tokio::{select, sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    error::Error as MlessError,
+    error::Error as LaqistaError,
     monitor::{MetricsMonitor, SendMetrics},
     proto::{scheduler_client::SchedulerClient, ClusterState, MonitorWindow, ReportRequest},
     scheduler::Cluster,
@@ -81,9 +81,9 @@ impl MetricsReporter {
                 Ok(())
             }
             Err(s) => {
-                let err: MlessError = s.into();
+                let err: LaqistaError = s.into();
                 match err {
-                    MlessError::TransportError(te) => {
+                    LaqistaError::TransportError(te) => {
                         println!("MetricsReporter::report: Failed to report to the server: {te}");
 
                         let cluster_result = self

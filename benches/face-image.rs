@@ -5,13 +5,13 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use face::proto::detector_client::DetectorClient;
 use face::proto::{DetectionRequest, InferRequest};
 use futures::lock::Mutex;
-use mless_core::client::retry;
+use laqista_core::client::retry;
 use tokio::runtime::Runtime;
 use tonic::transport::Channel;
 
-use mless::proto::scheduler_client::SchedulerClient;
-use mless::proto::{DeployRequest, Deployment, LookupRequest};
-use mless::*;
+use laqista::proto::scheduler_client::SchedulerClient;
+use laqista::proto::{DeployRequest, Deployment, LookupRequest};
+use laqista::*;
 
 static JPEG: &'static [u8] = include_bytes!("../data/pelican.jpeg");
 
@@ -66,7 +66,7 @@ async fn setup_clients(
 
     let request = DeployRequest {
         name: "face".to_owned(),
-        source: "https://github.com/kino-ma/MLess/releases/download/v0.1.0/face_v0.1.0.tgz"
+        source: "https://github.com/kino-ma/Laqista/releases/download/v0.1.0/face_v0.1.0.tgz"
             .to_owned(),
     };
 

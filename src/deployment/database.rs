@@ -3,7 +3,7 @@ use std::{error::Error, ffi::OsStr, path::PathBuf, sync::Arc};
 use bytes::Bytes;
 use chrono::{Local, TimeZone};
 use hex::FromHex;
-use mless_core::DeploymentInfo;
+use laqista_core::DeploymentInfo;
 use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
 use uuid::Uuid;
@@ -61,7 +61,7 @@ impl DeploymentDatabase {
     }
 
     pub fn default(tx: StateSender) -> Self {
-        let root = PathBuf::from(".mless");
+        let root = PathBuf::from(".laqista");
         Self::read_dir(root, tx).unwrap()
     }
 
@@ -142,7 +142,7 @@ impl DeploymentDatabase {
 
         write_tgz(&save_path, tgz)?;
 
-        let info_path = app_path.join("info.mless");
+        let info_path = app_path.join("info.laqista");
         write_info(&info_path, &info)?;
 
         Ok(saved)
@@ -238,12 +238,12 @@ mod test {
     #[tokio::test]
     async fn db_test() {
         let (tx, _) = mpsc::channel(1);
-        let db = DeploymentDatabase::read_dir(PathBuf::from("./.mless-test"), tx).unwrap();
+        let db = DeploymentDatabase::read_dir(PathBuf::from("./.laqista-test"), tx).unwrap();
 
         let info = DeploymentInfo {
             id: Uuid::new_v4(),
             name: "test".to_owned(),
-            source: "https://github.com/kino-ma/MLess/releases/download/v0.1.0/face_v0.1.0.tgz"
+            source: "https://github.com/kino-ma/laqista/releases/download/v0.1.0/face_v0.1.0.tgz"
                 .to_owned(),
         };
         db.add_app(&info).await.unwrap();

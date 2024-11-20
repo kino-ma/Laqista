@@ -11,7 +11,7 @@ use crate::proto::{
     MonitorResponse, NominateRequest, NominateResponse, PingResponse, ServerState, SpawnRequest,
     SpawnResponse,
 };
-use crate::{Error as MlessError, RpcResult, ServerInfo};
+use crate::{Error as LaqistaError, RpcResult, ServerInfo};
 
 use super::{DaemonState, StateSender};
 
@@ -103,7 +103,7 @@ impl ServerDaemonTrait for ServerDaemon {
 
         let info = deployment
             .try_into()
-            .map_err(<MlessError as Into<Status>>::into)?;
+            .map_err(<LaqistaError as Into<Status>>::into)?;
 
         self.runtime
             .lock()

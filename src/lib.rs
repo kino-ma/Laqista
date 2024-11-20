@@ -2,7 +2,7 @@
 
 use std::result::Result as StdResult;
 
-use mless_core::DeploymentInfo;
+use laqista_core::DeploymentInfo;
 use proto::{AppInstanceLocations, Deployment, Group, Server, ServerState};
 use server::DaemonState;
 use tonic::Status;
@@ -20,7 +20,7 @@ pub mod server;
 mod utils;
 
 pub mod proto {
-    tonic::include_proto!("mless");
+    tonic::include_proto!("laqista");
 }
 
 pub use error::{Error, Result};

@@ -96,7 +96,7 @@
         };
 
         packages = rec {
-          mless = rustPlatform.buildRustPackage
+          laqista = rustPlatform.buildRustPackage
             {
               inherit (cargoToml.package) name version;
               src = ./.;
@@ -114,16 +114,16 @@
               CLANG_PATH = "${pkgs.clang}/bin/clang";
             };
 
-          default = mless;
+          default = laqista;
         };
 
         apps = rec {
-          mless = {
+          laqista = {
             type = "app";
-            program = "${self.packages.${system}.mless}/bin/mless";
+            program = "${self.packages.${system}.laqista}/bin/laqista";
           };
 
-          default = mless;
+          default = laqista;
         };
       });
 }

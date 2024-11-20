@@ -1,7 +1,7 @@
 use std::{error::Error, sync::Arc};
 
 use bytes::Bytes;
-use mless_core::{
+use laqista_core::{
     proto::host::HostCall, server::AbtsractServer, session::Session, wasm::WasmRunner,
 };
 use tokio::sync::Mutex;

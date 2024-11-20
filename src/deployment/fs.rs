@@ -7,7 +7,7 @@ use std::{
 
 use bytes::Bytes;
 use flate2::read::GzDecoder;
-use mless_core::DeploymentInfo;
+use laqista_core::DeploymentInfo;
 use tar::Archive;
 
 use crate::{proto::Deployment, utils::IdMap};

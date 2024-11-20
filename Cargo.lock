@@ -1123,7 +1123,7 @@ dependencies = [
  "bytes",
  "criterion",
  "image",
- "mless-core",
+ "laqista-core",
  "ndarray",
  "prost",
  "prost-types",
@@ -2001,6 +2001,60 @@ dependencies = [
 ]
 
 [[package]]
+name = "laqista"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "bytes",
+ "chrono",
+ "clap",
+ "criterion",
+ "face",
+ "flate2",
+ "futures",
+ "h2 0.3.26",
+ "hello",
+ "hex",
+ "http-body 0.4.6",
+ "http-body-util",
+ "hyper 0.14.28",
+ "hyper-util",
+ "image",
+ "laqista-core",
+ "local-ip-address",
+ "mac_address",
+ "ndarray",
+ "nom",
+ "plist",
+ "prost",
+ "prost-types",
+ "reqwest",
+ "serde",
+ "sha2",
+ "tar",
+ "tokio",
+ "tokio-util",
+ "tonic",
+ "tonic-build",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "laqista-core"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "prost",
+ "tokio",
+ "tonic",
+ "tonic-build",
+ "uuid",
+ "wasmer",
+ "wonnx",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2251,60 +2305,6 @@ dependencies = [
  "libc",
  "wasi",
  "windows-sys 0.48.0",
-]
-
-[[package]]
-name = "mless"
-version = "0.1.0"
-dependencies = [
- "axum",
- "bytes",
- "chrono",
- "clap",
- "criterion",
- "face",
- "flate2",
- "futures",
- "h2 0.3.26",
- "hello",
- "hex",
- "http-body 0.4.6",
- "http-body-util",
- "hyper 0.14.28",
- "hyper-util",
- "image",
- "local-ip-address",
- "mac_address",
- "mless-core",
- "ndarray",
- "nom",
- "plist",
- "prost",
- "prost-types",
- "reqwest",
- "serde",
- "sha2",
- "tar",
- "tokio",
- "tokio-util",
- "tonic",
- "tonic-build",
- "url",
- "uuid",
-]
-
-[[package]]
-name = "mless-core"
-version = "0.1.0"
-dependencies = [
- "bytes",
- "prost",
- "tokio",
- "tonic",
- "tonic-build",
- "uuid",
- "wasmer",
- "wonnx",
 ]
 
 [[package]]
