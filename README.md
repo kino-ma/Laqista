@@ -1,8 +1,8 @@
-# MLess
+# Laqista
 
 ## Components
 
-MLess conists of three primary components.
+Laqista conists of three primary components.
 
 - Deployment
 - Server Daemon
@@ -31,7 +31,7 @@ your-user-name    ALL= NOPASSWD: /usr/bin/powermetrics
 ### Testing
 
 ```
-grpcurl -plaintext -import-path ./proto -proto mless.proto -d '{}' '127.0.0.1:50051' mless.ServerDaemon/Ping
+grpcurl -plaintext -import-path ./proto -proto laqista.proto -d '{}' '127.0.0.1:50051' laqista.ServerDaemon/Ping
 ```
 
 ### Notes

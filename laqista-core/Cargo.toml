@@ -1,5 +1,5 @@
 [package]
-name = "mless-core"
+name = "laqista-core"
 version = { workspace = true }
 edition = "2021"
 

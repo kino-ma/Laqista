@@ -3,12 +3,12 @@ use std::sync::Arc;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
 use futures::lock::Mutex;
-use mless::proto::{DeployRequest, Deployment, LookupRequest};
+use laqista::proto::{DeployRequest, Deployment, LookupRequest};
 use tokio::runtime::Runtime;
 use tonic::transport::Channel;
 
-use mless::proto::scheduler_client::SchedulerClient;
-use mless::*;
+use laqista::proto::scheduler_client::SchedulerClient;
+use laqista::*;
 
 use hello::proto::greeter_client::GreeterClient;
 use hello::proto::HelloRequest;
@@ -63,7 +63,7 @@ async fn setup_clients(
 
     let request = DeployRequest {
         name: "face".to_owned(),
-        source: "https://github.com/kino-ma/MLess/releases/download/v0.1.0/face_v0.1.0.tgz"
+        source: "https://github.com/kino-ma/Laqista/releases/download/v0.1.0/face_v0.1.0.tgz"
             .to_owned(),
     };
 
@@ -92,14 +92,14 @@ async fn run_scheduled(
     //     .await
     //     .unwrap();
     let request = HelloRequest {
-        name: "MLess benchamrk".to_owned(),
+        name: "Laqista benchamrk".to_owned(),
     };
     app_client.say_hello(request).await.unwrap();
 }
 
 async fn run_direct(app_client: &mut GreeterClient<Channel>) {
     let request = HelloRequest {
-        name: "MLess benchamrk".to_owned(),
+        name: "Laqista benchamrk".to_owned(),
     };
     app_client.say_hello(request).await.unwrap();
 }

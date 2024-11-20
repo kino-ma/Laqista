@@ -1,6 +1,6 @@
 use face::proto::InferRequest;
 use image::{imageops::FilterType, GenericImageView, Pixel};
-use mless::proto::{self, DeployRequest, LookupRequest};
+use laqista::proto::{self, DeployRequest, LookupRequest};
 
 static JPEG: &'static [u8] = include_bytes!("../data/sized-pelican.jpeg");
 static LABELS: &'static str = include_str!("../data/models/resnet-labels.txt");
@@ -23,7 +23,7 @@ async fn schedule_wasm() {
 
     let request = DeployRequest {
         name: "face".to_owned(),
-        source: "https://github.com/kino-ma/MLess/releases/download/v0.1.0/face_v0.1.0.tgz"
+        source: "https://github.com/kino-ma/Laqista/releases/download/v0.1.0/face_v0.1.0.tgz"
             .to_owned(),
     };
 

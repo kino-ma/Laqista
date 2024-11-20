@@ -1,6 +1,6 @@
 use clap::Parser;
 
-use mless::{
+use laqista::{
     cmd::{Cli, Commands},
     server::ServerRunner,
     Result,

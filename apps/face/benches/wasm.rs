@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use face::proto::{DetectionRequest, InferReply};
-use mless_core::wasm::WasmRunner;
+use laqista_core::wasm::WasmRunner;
 use wasmer::{imports, wat2wasm, Cranelift, Instance, Memory, MemoryType, Module, Store, Value};
 
 static JPEG: &'static [u8] = include_bytes!("../../../data/pelican.jpeg");
