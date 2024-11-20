@@ -18,6 +18,16 @@ It is implemented in Go, using [grpc-proxy](https://github.com/mwitkow/grpc-prox
 
 ## Development
 
+### Setup
+
+On macOS, `powermetrics` must be executable by `sudo`, without password.
+
+I.e., add the following to `sudoers` file:
+
+```
+your-user-name    ALL= NOPASSWD: /usr/bin/powermetrics
+```
+
 ### Testing
 
 ```

@@ -9,9 +9,10 @@ use tokio::sync::{mpsc, Mutex};
 use tokio_util::sync::CancellationToken;
 use tonic::transport::{server::Router, Channel, Server as TransportServer};
 
+use crate::deployment::database::{DeploymentDatabase, Target};
 use crate::proto::{scheduler_client::SchedulerClient, JoinRequest};
 use crate::report::MetricsReporter;
-use crate::scheduler::AuthoritativeScheduler;
+use crate::scheduler::{AuthoritativeScheduler, Cluster};
 use crate::{
     proto::{scheduler_server::SchedulerServer, server_daemon_server::ServerDaemonServer},
     scheduler::mean::MeanScheduler,
@@ -32,8 +33,19 @@ pub struct ServerRunner {
     // FIXME: socket is not known at instantiation of this struct.
     // Instead, it will be known when it is the "start" command.
     socket: SocketAddr,
-    rx: Mutex<mpsc::Receiver<DaemonState>>,
-    tx: mpsc::Sender<DaemonState>,
+    database: DeploymentDatabase,
+    rx: Mutex<StateReceiver>,
+    tx: StateSender,
+}
+
+pub type StateSender = mpsc::Sender<StateCommand>;
+pub type StateReceiver = mpsc::Receiver<StateCommand>;
+
+#[derive(Clone, Debug)]
+pub enum StateCommand {
+    Update(DaemonState),
+    BecomeScheduler(Cluster),
+    Keep,
 }
 
 #[derive(Clone, Debug)]
@@ -49,10 +61,12 @@ impl ServerRunner {
         let (tx, rx) = mpsc::channel(1);
         let rx = Mutex::new(rx);
         let socket = DEFAULT_HOST.parse().expect("failed to parse default host");
+        let database = DeploymentDatabase::default(tx.clone());
 
         Self {
             command,
             socket,
+            database,
             rx,
             tx,
         }
@@ -76,16 +90,32 @@ impl ServerRunner {
 
         loop {
             let daemon = self.create_daemon(info.clone(), state.clone());
-            let service_future = self.start_service(daemon, state);
+            let service_future = self.start_service(daemon, state.clone());
 
             let mut rx = self.rx.lock().await;
             let rcvd_future = rx.recv();
 
             // Terminate serving_future by selecting another future
-            state = match future::select(pin!(service_future), pin!(rcvd_future)).await {
+            let state_command = match future::select(pin!(service_future), pin!(rcvd_future)).await
+            {
                 future::Either::Left((state, _)) => state?,
                 future::Either::Right((state, _)) => {
                     state.ok_or(Error::Text("received None state from sender".to_owned()))?
+                }
+            };
+
+            state = match state_command {
+                StateCommand::Keep => state,
+                StateCommand::Update(new) => new,
+                StateCommand::BecomeScheduler(cluster) => {
+                    let mean_scheduler = MeanScheduler {};
+                    let scheduler = AuthoritativeScheduler::new(
+                        cluster,
+                        Box::new(mean_scheduler),
+                        self.tx.clone(),
+                        self.database.clone(),
+                    );
+                    DaemonState::Authoritative(scheduler)
                 }
             };
         }
@@ -95,10 +125,10 @@ impl ServerRunner {
         &self,
         daemon: ServerDaemon,
         state: DaemonState,
-    ) -> Result<DaemonState> {
-        let server = daemon.runtime.info.clone();
+    ) -> Result<StateCommand> {
+        let server = daemon.runtime.lock().await.info.clone();
 
-        match state {
+        let new_state = match state {
             DaemonState::Joining(bootstrap_addr) => {
                 println!("Joining to a cluster...");
                 self.join_cluster(server, &bootstrap_addr).await
@@ -116,7 +146,9 @@ impl ServerRunner {
             DaemonState::Failed => {
                 panic!("invalid state: {:?}", state)
             }
-        }
+        }?;
+
+        return Ok(StateCommand::Update(new_state));
     }
 
     async fn join_cluster(&self, server: ServerInfo, addr: &str) -> Result<DaemonState> {
@@ -144,7 +176,7 @@ impl ServerRunner {
         daemon: ServerDaemon,
         scheduler: AuthoritativeScheduler,
     ) -> Result<DaemonState> {
-        let server = daemon.runtime.info.clone();
+        let server = daemon.runtime.lock().await.info.clone();
 
         let scheduler_info = scheduler
             .runtime
@@ -206,20 +238,34 @@ impl ServerRunner {
             ));
 
         #[cfg(feature = "face")]
-        let router = {
+        let router = if let Some(deployment) = self.database.lookup("face").await {
             use face_proto::detector_server::DetectorServer;
-            let inner_server = FaceServer::create()
+            let onnx = self
+                .database
+                .get(&deployment, Target::Onnx)
+                .await
+                .map_err(|e| format!("failed to read application binary from database: {e}"))?;
+
+            let wasm = self
+                .database
+                .get(&deployment, Target::Wasm)
+                .await
+                .map_err(|e| format!("failed to read application binary from database: {e}"))?;
+
+            let inner_server = FaceServer::create(onnx, wasm)
                 .await
                 .map_err(|e| Error::AppInstantiation(e.to_string()))?;
             let server = DetectorServer::new(inner_server);
             router.add_service(server)
+        } else {
+            router
         };
 
         Ok(router)
     }
 
     fn create_daemon(&self, info: ServerInfo, state: DaemonState) -> ServerDaemon {
-        ServerDaemon::with_state(state, info, self.tx.clone())
+        ServerDaemon::with_state(state, info, self.tx.clone(), self.database.clone())
     }
 
     fn create_info(&self, start_command: &StartCommand) -> Result<ServerInfo> {
@@ -255,7 +301,12 @@ impl ServerRunner {
             None => {
                 let mean_scheduler = Box::new(MeanScheduler {});
                 let tx = self.tx.clone();
-                let scheduler = AuthoritativeScheduler::from_server(server, mean_scheduler, tx);
+                let scheduler = AuthoritativeScheduler::from_server(
+                    server,
+                    mean_scheduler,
+                    tx,
+                    self.database.clone(),
+                );
                 DaemonState::Authoritative(scheduler)
             }
         }

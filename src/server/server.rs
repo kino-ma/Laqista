@@ -1,32 +1,41 @@
-use tokio::sync::mpsc;
+use std::sync::Arc;
+
+use tokio::sync::Mutex;
 use tonic::Status;
 use tonic::{Request, Response};
 
+use crate::deployment::database::DeploymentDatabase;
 use crate::proto::server_daemon_server::ServerDaemon as ServerDaemonTrait;
 use crate::proto::{
     DestroyRequest, DestroyResponse, GetInfoRequest, GetInfoResponse, MonitorRequest,
     MonitorResponse, NominateRequest, NominateResponse, PingResponse, ServerState, SpawnRequest,
     SpawnResponse,
 };
-use crate::{RpcResult, ServerInfo};
+use crate::{Error as MlessError, RpcResult, ServerInfo};
 
-use super::{DaemonState, DEFAULT_HOST};
+use super::{DaemonState, StateSender};
 
 #[derive(Clone, Debug)]
 pub struct ServerDaemon {
-    pub runtime: ServerDaemonRuntime,
-    pub tx: mpsc::Sender<DaemonState>,
+    pub runtime: Arc<Mutex<ServerDaemonRuntime>>,
+    pub tx: StateSender,
     pub state: DaemonState,
 }
 
 #[derive(Clone, Debug)]
 pub struct ServerDaemonRuntime {
     pub info: ServerInfo,
+    pub database: DeploymentDatabase,
 }
 
 impl ServerDaemon {
-    pub fn with_state(state: DaemonState, info: ServerInfo, tx: mpsc::Sender<DaemonState>) -> Self {
-        let runtime = ServerDaemonRuntime { info };
+    pub fn with_state(
+        state: DaemonState,
+        info: ServerInfo,
+        tx: StateSender,
+        database: DeploymentDatabase,
+    ) -> Self {
+        let runtime = Arc::new(Mutex::new(ServerDaemonRuntime { info, database }));
 
         Self { runtime, tx, state }
     }
@@ -40,7 +49,7 @@ impl ServerDaemonTrait for ServerDaemon {
     ) -> RpcResult<Response<GetInfoResponse>> {
         println!("GetInfo called!");
 
-        let server = Some(self.runtime.info.clone().into());
+        let server = Some(self.runtime.lock().await.info.clone().into());
         let state = &self.state;
 
         use DaemonState::*;
@@ -86,7 +95,32 @@ impl ServerDaemonTrait for ServerDaemon {
     ) -> RpcResult<Response<MonitorResponse>> {
         Ok(Response::new(MonitorResponse { windows: vec![] }))
     }
-    async fn spawn(&self, _request: Request<SpawnRequest>) -> RpcResult<Response<SpawnResponse>> {
+    async fn spawn(&self, request: Request<SpawnRequest>) -> RpcResult<Response<SpawnResponse>> {
+        let deployment = request
+            .into_inner()
+            .deployment
+            .ok_or(Status::aborted("`deployment` is required`"))?;
+
+        let info = deployment
+            .try_into()
+            .map_err(<MlessError as Into<Status>>::into)?;
+
+        self.runtime
+            .lock()
+            .await
+            .database
+            .add_instance(&info)
+            .await
+            .map_err(|e| {
+                Status::aborted(format!("failed to insert deployment into database: {e}"))
+            })?;
+        // Here an app isntance were added and the daemon should restart to start the appilcation.
+        // However this function will not emit the `StateCommand`, but DeploymentDatabase will.
+        // The purpose of this design is to concentrate the responsibility of signaling thet
+        // was caused from change in application instance.
+        // Other cases of such change include completion of downloading the app binaries, and it
+        // is only caused by database side. So we also put the responsibility here on it.
+
         Ok(Response::new(SpawnResponse {
             success: true,
             deployment: None,
@@ -98,13 +132,5 @@ impl ServerDaemonTrait for ServerDaemon {
         _request: Request<DestroyRequest>,
     ) -> RpcResult<Response<DestroyResponse>> {
         Ok(Response::new(DestroyResponse { success: true }))
-    }
-}
-
-impl Default for ServerDaemonRuntime {
-    fn default() -> Self {
-        let info = ServerInfo::new(DEFAULT_HOST);
-
-        Self { info }
     }
 }

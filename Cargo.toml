@@ -7,6 +7,8 @@ edition = "2021"
 # members = ["apps/*"]
 members = [ "apps/face-wasm", "apps/hello", "mless-core"]
 
+package.version = "0.1.0"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [profile.dev]
@@ -42,6 +44,13 @@ hello = { path = "./apps/hello" }
 chrono = "0.4.38"
 face = { path = "./apps/face", optional = true }
 local-ip-address = "0.6.3"
+reqwest = "0.12.9"
+tar = "0.4.43"
+flate2 = "1.0.34"
+
+mless-core = { version = "0.1.0", path = "./mless-core", features = ["tokio"] }
+sha2 = "0.10.8"
+hex = "0.4.3"
 
 [build-dependencies]
 tonic-build = "0.11"

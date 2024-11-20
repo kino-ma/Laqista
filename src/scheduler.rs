@@ -6,11 +6,12 @@ use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::Mutex;
 use tonic::transport::Channel;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
+use crate::deployment::database::DeploymentDatabase;
 use crate::proto::scheduler_server::Scheduler;
 use crate::proto::server_daemon_client::ServerDaemonClient;
 use crate::proto::{
@@ -18,7 +19,7 @@ use crate::proto::{
     LookupRequest, LookupResponse, Nomination, ReportRequest, ReportResponse, Server, SpawnRequest,
     SpawnResponse,
 };
-use crate::server::DaemonState;
+use crate::server::{DaemonState, StateSender};
 use crate::utils::IdMap;
 use crate::{AppInstanceMap, AppInstancesInfo, DeploymentInfo, GroupInfo, RpcResult, ServerInfo};
 use crate::{Error, Result};
@@ -29,7 +30,7 @@ use self::stats::{ServerStats, StatsMap};
 #[derive(Debug)]
 pub struct AuthoritativeScheduler {
     pub runtime: Arc<Mutex<SchedulerRuntime>>,
-    pub tx: Arc<Mutex<mpsc::Sender<DaemonState>>>,
+    pub tx: Arc<Mutex<StateSender>>,
 }
 
 #[derive(Clone, Debug)]
@@ -37,6 +38,7 @@ pub struct SchedulerRuntime {
     pub cluster: Cluster,
     pub scheduler: Box<dyn DeploymentScheduler>,
     pub deployments: IdMap<DeploymentInfo>,
+    pub database: DeploymentDatabase,
 }
 
 #[derive(Clone, Debug)]
@@ -51,12 +53,14 @@ impl AuthoritativeScheduler {
     pub fn new(
         cluster: Cluster,
         scheduler: Box<dyn DeploymentScheduler>,
-        tx: mpsc::Sender<DaemonState>,
+        tx: StateSender,
+        database: DeploymentDatabase,
     ) -> Self {
         let runtime = Arc::new(Mutex::new(SchedulerRuntime {
             cluster,
             scheduler,
             deployments: IdMap::new(),
+            database,
         }));
 
         let tx = Arc::new(Mutex::new(tx));
@@ -67,11 +71,12 @@ impl AuthoritativeScheduler {
     pub fn from_server(
         server: &ServerInfo,
         scheduler: Box<dyn DeploymentScheduler>,
-        tx: mpsc::Sender<DaemonState>,
+        tx: StateSender,
+        database: DeploymentDatabase,
     ) -> Self {
         let cluster = Cluster::new(server);
 
-        Self::new(cluster, scheduler, tx)
+        Self::new(cluster, scheduler, tx, database)
     }
 
     pub async fn push_server(&self, server: ServerInfo) {
@@ -222,11 +227,17 @@ impl Scheduler for AuthoritativeScheduler {
     async fn deploy(&self, request: Request<DeployRequest>) -> RpcResult<Response<DeployResponse>> {
         println!("deploy() called!!");
 
-        let DeployRequest { source, .. } = request.into_inner();
+        let DeployRequest { name, source, .. } = request.into_inner();
 
-        let deployment_info = DeploymentInfo::new(source.clone());
+        let deployment_info = DeploymentInfo::new(name, source.clone());
         let deployment: Deployment = deployment_info.clone().into();
         println!("created info");
+
+        self.clone_inner()
+            .await
+            .save_deployment(&deployment_info)
+            .await
+            .map_err(<Error as Into<Status>>::into)?;
 
         let mut success = true;
 
@@ -260,6 +271,34 @@ impl Scheduler for AuthoritativeScheduler {
             .ok_or(Status::aborted("Failed to schedule"))?
             .clone();
 
+        // Clone self.
+        // Because we have Arc<Mutex<_>> inside Self, we can edit the inner data from the clone.
+        let this = self.clone();
+        let target_moved = target.clone();
+        tokio::task::spawn(async move {
+            let runtime = this.runtime.lock().await;
+
+            let should_scale = {
+                let stats = runtime
+                    .cluster
+                    .server_stats
+                    .0
+                    .get(&target_moved.id)
+                    .ok_or(())?;
+                runtime.scheduler.needs_scale_out(&target_moved, stats)
+            };
+
+            if should_scale {
+                let deployment = runtime.deployments.0.get(&id).ok_or(())?;
+                this.deploy_in_us(deployment.clone())
+                    .await
+                    .err()
+                    .map(|e| println!("ERR: deploy_in_us failed: {e}"));
+            }
+
+            Ok::<(), ()>(())
+        });
+
         Ok(Response::new(LookupResponse {
             success: true,
             deployment_id: id.to_string(),
@@ -281,14 +320,28 @@ impl Clone for AuthoritativeScheduler {
 }
 
 impl SchedulerRuntime {
-    pub fn new(this_server: &ServerInfo, scheduler: Box<dyn DeploymentScheduler>) -> Self {
+    pub fn new(
+        this_server: &ServerInfo,
+        scheduler: Box<dyn DeploymentScheduler>,
+        database: DeploymentDatabase,
+    ) -> Self {
         let cluster = Cluster::new(this_server);
 
         Self {
             cluster,
             scheduler,
             deployments: IdMap::new(),
+            database,
         }
+    }
+
+    pub async fn save_deployment(&mut self, deployment: &DeploymentInfo) -> Result<()> {
+        self.database
+            .add_app(deployment)
+            .await
+            .map_err(|e| format!("Failed to save deployment: {e}"))?;
+
+        Ok(())
     }
 
     pub fn wrap(self) -> Arc<Mutex<Self>> {

@@ -73,6 +73,7 @@ impl MetricsMonitor {
 
     fn commands() -> Vec<&'static str> {
         vec![
+            "sudo",
             "/usr/bin/powermetrics",
             "--sampler=gpu_power",
             "--sample-rate=1000", // in ms

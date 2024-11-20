@@ -1,5 +1,6 @@
 use std::{error::Error, sync::Arc};
 
+use bytes::Bytes;
 use mless_core::{
     proto::host::HostCall, server::AbtsractServer, session::Session, wasm::WasmRunner,
 };
@@ -7,11 +8,8 @@ use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
 use wasmer::Value;
 
-use crate::{
-    model_path,
-    proto::{
-        detector_server::Detector, DetectionReply, DetectionRequest, InferReply, InferRequest,
-    },
+use crate::proto::{
+    detector_server::Detector, DetectionReply, DetectionRequest, InferReply, InferRequest,
 };
 
 type ServerPointer = Arc<Mutex<AbtsractServer<InferRequest, InferReply>>>;
@@ -19,14 +17,10 @@ pub struct FaceServer {
     inner: ServerPointer,
 }
 
-static WASM: &'static [u8] =
-    include_bytes!("../../../target/wasm32-unknown-unknown/release/face_wasm.wasm");
-
 impl FaceServer {
-    pub async fn create() -> Result<Self, Box<dyn Error>> {
-        let path = model_path();
-        let session = Session::from_path(path).await?;
-        let server = AbtsractServer::new(session);
+    pub async fn create(onnx: Bytes, wasm: Bytes) -> Result<Self, Box<dyn Error>> {
+        let session = Session::from_bytes(&onnx).await?;
+        let server = AbtsractServer::new(session, onnx, wasm);
         let ptr = Arc::new(Mutex::new(server));
 
         Ok(Self { inner: ptr })
@@ -53,11 +47,12 @@ impl Detector for FaceServer {
         &self,
         request: Request<DetectionRequest>,
     ) -> Result<Response<DetectionReply>, Status> {
+        let wasm_bin = self.inner.lock().await.wasm.clone();
         // FIXME: It would be better performant if we could instantiate the wasm module only once.
         //        However, if we reuse the instance for every request, it errors out with message
         //        saying "failed to allocate memory".
         //        Instead, we instantiate the module from compiler, for each request.
-        let mut wasm = WasmRunner::compile(WASM).map_err(|e| {
+        let mut wasm = WasmRunner::compile(&wasm_bin).map_err(|e| {
             Status::aborted(format!("Failed to compile and setup wasm module: {e}"))
         })?;
 

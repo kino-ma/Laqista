@@ -62,8 +62,9 @@ async fn setup_clients(
         .unwrap();
 
     let request = DeployRequest {
-        source: "https://github.com/kino-ma/MLess".to_owned(),
-        authoritative: true,
+        name: "face".to_owned(),
+        source: "https://github.com/kino-ma/MLess/releases/download/v0.1.0/face_v0.1.0.tgz"
+            .to_owned(),
     };
 
     let deployment = client

@@ -2,6 +2,7 @@
 
 use std::result::Result as StdResult;
 
+use mless_core::DeploymentInfo;
 use proto::{AppInstanceLocations, Deployment, Group, Server, ServerState};
 use server::DaemonState;
 use tonic::Status;
@@ -9,6 +10,7 @@ use utils::{get_mac, IdMap};
 use uuid::Uuid;
 
 pub mod cmd;
+pub mod deployment;
 pub mod error;
 pub mod monitor;
 pub mod proxy;
@@ -34,12 +36,6 @@ pub struct ServerInfo {
 pub struct GroupInfo {
     number: u32,
     scheduler_info: ServerInfo,
-}
-
-#[derive(Clone, Debug)]
-pub struct DeploymentInfo {
-    id: Uuid,
-    source: String,
 }
 
 #[derive(Clone, Debug)]
@@ -151,27 +147,20 @@ impl Into<ServerState> for DaemonState {
     }
 }
 
-impl DeploymentInfo {
-    pub fn new(source: String) -> Self {
-        let id = Uuid::new_v4();
-        Self { source, id }
-    }
-}
-
 impl TryFrom<Deployment> for DeploymentInfo {
     type Error = Error;
     fn try_from(deployment: Deployment) -> Result<Self> {
-        let Deployment { source, id } = deployment;
+        let Deployment { name, source, id } = deployment;
         let id = Uuid::parse_str(&id)?;
-        Ok(Self { source, id })
+        Ok(Self { name, source, id })
     }
 }
 
 impl Into<Deployment> for DeploymentInfo {
     fn into(self) -> Deployment {
-        let Self { source, id } = self;
+        let Self { name, source, id } = self;
         let id = id.to_string();
-        Deployment { source, id }
+        Deployment { name, source, id }
     }
 }
 

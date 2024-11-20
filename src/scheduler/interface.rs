@@ -1,10 +1,11 @@
 use crate::ServerInfo;
 
-use super::stats::StatsMap;
+use super::stats::{ServerStats, StatsMap};
 
 pub trait DeploymentScheduler: SchedulerClone + std::fmt::Debug + Send + Sync {
     fn schedule(&self, stats: &StatsMap) -> Option<ServerInfo>;
     fn schedule_gpu(&self, stats: &StatsMap) -> Option<ServerInfo>;
+    fn needs_scale_out(&self, server: &ServerInfo, stats: &ServerStats) -> bool;
 }
 
 pub trait SchedulerClone {

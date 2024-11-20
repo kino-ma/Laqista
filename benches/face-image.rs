@@ -5,6 +5,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use face::proto::detector_client::DetectorClient;
 use face::proto::{DetectionRequest, InferRequest};
 use futures::lock::Mutex;
+use mless_core::client::retry;
 use tokio::runtime::Runtime;
 use tonic::transport::Channel;
 
@@ -63,13 +64,10 @@ async fn setup_clients(
         .await
         .expect("failed to connect to the server");
 
-    let detector_client = face::proto::detector_client::DetectorClient::connect(addr.to_owned())
-        .await
-        .unwrap();
-
     let request = DeployRequest {
-        source: "https://github.com/kino-ma/MLess/apps/face".to_owned(),
-        authoritative: true,
+        name: "face".to_owned(),
+        source: "https://github.com/kino-ma/MLess/releases/download/v0.1.0/face_v0.1.0.tgz"
+            .to_owned(),
     };
 
     let deployment = client
@@ -77,6 +75,12 @@ async fn setup_clients(
         .await
         .expect("failed to deploy")
         .into_inner();
+
+    let detector_client = retry(|| async {
+        face::proto::detector_client::DetectorClient::connect(addr.to_owned()).await
+    })
+    .await
+    .unwrap();
 
     (client, detector_client, deployment.deployment.unwrap())
 }
@@ -94,9 +98,11 @@ async fn run_scheduled(
     let resp = client.clone().lookup(request).await.unwrap().into_inner();
     let addr = resp.server.unwrap().addr;
 
-    let mut detector_client = face::proto::detector_client::DetectorClient::connect(addr)
-        .await
-        .unwrap();
+    let mut detector_client = retry(|| async {
+        face::proto::detector_client::DetectorClient::connect(addr.to_owned()).await
+    })
+    .await
+    .unwrap();
 
     // let mut app_client = app::proto::greeter_client::GreeterClient::connect(addr)
     //     .await
@@ -185,9 +191,11 @@ async fn run_wasm_scheduled(
     let resp = client.clone().lookup(request).await.unwrap().into_inner();
     let addr = resp.server.unwrap().addr;
 
-    let mut detector_client = face::proto::detector_client::DetectorClient::connect(addr)
-        .await
-        .unwrap();
+    let mut detector_client = retry(|| async {
+        face::proto::detector_client::DetectorClient::connect(addr.clone()).await
+    })
+    .await
+    .unwrap();
 
     // let mut app_client = app::proto::greeter_client::GreeterClient::connect(addr)
     //     .await

@@ -1,5 +1,7 @@
 use std::{error::Error, marker::PhantomData};
 
+use bytes::Bytes;
+
 use crate::{
     session::Session,
     tensor::{AsInputs, TryFromOutputs},
@@ -7,14 +9,18 @@ use crate::{
 
 pub struct AbtsractServer<I: AsInputs, O: TryFromOutputs> {
     session: Session,
+    pub onnx: Bytes,
+    pub wasm: Bytes,
     /// Phantom field for combine I/O types for this struct
     phantom: PhantomData<(I, O)>,
 }
 
 impl<I: AsInputs, O: TryFromOutputs> AbtsractServer<I, O> {
-    pub fn new(session: Session) -> Self {
+    pub fn new(session: Session, onnx: Bytes, wasm: Bytes) -> Self {
         Self {
             session,
+            onnx,
+            wasm,
             phantom: PhantomData,
         }
     }
