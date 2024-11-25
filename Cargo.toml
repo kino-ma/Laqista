@@ -51,6 +51,7 @@ flate2 = "1.0.34"
 laqista-core = { version = "0.1.0", path = "./laqista-core", features = ["tokio"] }
 sha2 = "0.10.8"
 hex = "0.4.3"
+tower-http = "0.6.2"
 
 [build-dependencies]
 tonic-build = "0.11"
