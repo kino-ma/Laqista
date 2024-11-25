@@ -8,10 +8,6 @@ use local_ip_address::local_ip;
 use tokio::sync::{mpsc, Mutex};
 use tokio_util::sync::CancellationToken;
 use tonic::transport::{server::Router, Channel, Server as TransportServer};
-use tower::layer::util::{Identity, Stack};
-use tower::Layer;
-use tower_http::classify::{GrpcErrorsAsFailures, SharedClassifier};
-use tower_http::trace::TraceLayer;
 
 use crate::deployment::database::{DeploymentDatabase, Target};
 use crate::proto::{scheduler_client::SchedulerClient, JoinRequest};
@@ -214,7 +210,7 @@ impl ServerRunner {
     ) -> Result<DaemonState> {
         let reporter_token = self.start_reporter(server.clone(), group.scheduler_info.clone());
 
-        let grpc_router = self.common_services::<Identity>(daemon).await?;
+        let grpc_router = self.common_services(daemon).await?;
 
         grpc_router.serve(self.socket).await?;
 
@@ -236,7 +232,6 @@ impl ServerRunner {
 
     async fn common_services(&self, daemon: ServerDaemon) -> Result<Router> {
         let router = TransportServer::builder()
-            .trace_fn(|x| println!("{x}"))
             .add_service(ServerDaemonServer::new(daemon))
             .add_service(hello::proto::greeter_server::GreeterServer::new(
                 hello::MyGreeter::default(),
@@ -265,7 +260,6 @@ impl ServerRunner {
         } else {
             router
         };
-        router.serve(self.socket).await?;
 
         Ok(router)
     }
