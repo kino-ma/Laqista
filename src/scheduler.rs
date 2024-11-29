@@ -5,7 +5,9 @@ pub mod stats;
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
+use stats::{AppLatency, AppsMap};
 use tokio::sync::Mutex;
 use tonic::transport::Channel;
 use tonic::{Request, Response, Status};
@@ -20,7 +22,7 @@ use crate::proto::{
     ReportResponse, Server, SpawnRequest, SpawnResponse,
 };
 use crate::server::{DaemonState, StateSender};
-use crate::utils::IdMap;
+use crate::utils::{parse_rpc_path, IdMap};
 use crate::{AppInstanceMap, AppInstancesInfo, DeploymentInfo, GroupInfo, RpcResult, ServerInfo};
 use crate::{Error, Result};
 
@@ -47,6 +49,7 @@ pub struct Cluster {
     pub servers: Vec<ServerInfo>,
     pub instances: AppInstanceMap,
     pub server_stats: StatsMap,
+    pub app_stats: AppsMap,
 }
 
 impl AuthoritativeScheduler {
@@ -203,7 +206,11 @@ impl Scheduler for AuthoritativeScheduler {
     }
 
     async fn report(&self, request: Request<ReportRequest>) -> RpcResult<Response<ReportResponse>> {
-        let ReportRequest { server, windows } = request.into_inner();
+        let ReportRequest {
+            server,
+            windows,
+            app_latencies,
+        } = request.into_inner();
 
         let server: Server = server.ok_or(Status::aborted("server cannot be empty"))?;
         let server = ServerInfo::try_from(server);
@@ -215,6 +222,8 @@ impl Scheduler for AuthoritativeScheduler {
         let runtime = lock.borrow_mut();
 
         runtime.cluster.insert_stats(stats);
+        let info_by_name = runtime.database.list_by_names().await;
+        runtime.cluster.push_latency(info_by_name, app_latencies);
 
         let cluster = runtime.cluster.clone().into();
 
@@ -380,12 +389,14 @@ impl Cluster {
         let servers = vec![scheduler.clone()];
         let instances = AppInstanceMap::new();
         let server_stats = StatsMap::new();
+        let app_stats = AppsMap::new();
 
         Self {
             group,
             servers,
             instances,
             server_stats,
+            app_stats,
         }
     }
 
@@ -394,12 +405,14 @@ impl Cluster {
         let servers = vec![group.scheduler_info.clone()];
         let instances = AppInstanceMap::new();
         let server_stats = StatsMap::new();
+        let app_stats = AppsMap::new();
 
         Self {
             group,
             servers,
             instances,
             server_stats,
+            app_stats,
         }
     }
 
@@ -452,6 +465,27 @@ impl Cluster {
             .entry(id)
             .and_modify(|s| s.append(stats.stats.clone()))
             .or_insert(stats);
+    }
+
+    pub fn push_latency(
+        &mut self,
+        info_by_name: HashMap<String, DeploymentInfo>,
+        latencies: HashMap<String, u32>,
+    ) {
+        for (path, elapsed) in latencies {
+            let (app, _, rpc) = parse_rpc_path(&path)
+                .expect(("failed to parse gRPC path".to_owned() + &path).as_str());
+
+            let dur = Duration::from_millis(elapsed as _);
+
+            let info = &info_by_name[app];
+
+            self.app_stats
+                .0
+                .entry(info.id)
+                .and_modify(|e| e.insert(rpc, dur))
+                .or_insert(AppLatency::new(info.clone()));
+        }
     }
 
     pub fn remove_server(&mut self, id: &Uuid) -> Option<ServerInfo> {
@@ -519,12 +553,14 @@ impl TryFrom<ClusterState> for Cluster {
             .map(IdMap)?;
 
         let server_stats = IdMap::new();
+        let app_stats = AppsMap::new();
 
         Ok(Self {
             group,
             servers,
             instances,
             server_stats,
+            app_stats,
         })
     }
 }

@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::{collections::HashMap, error::Error};
 
 use tokio::{select, sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
@@ -9,7 +9,7 @@ use crate::{
     proto::{scheduler_client::SchedulerClient, ClusterState, MonitorWindow, ReportRequest},
     scheduler::Cluster,
     server::{AppMetricReceiver, DaemonState, StateCommand, StateSender},
-    utils::cluster_differs,
+    utils::{cluster_differs, rpc_path},
     ServerInfo,
 };
 
@@ -77,7 +77,18 @@ impl MetricsReporter {
 
         let windows = vec![metrics.clone().into()];
 
-        let req = ReportRequest { windows, server };
+        let mut app_latencies = HashMap::new();
+        while !self.app_rx.is_empty() {
+            let metric = self.app_rx.blocking_recv().unwrap();
+            let path = rpc_path(&metric.app, &metric.service, &metric.rpc);
+            app_latencies.insert(path, metric.elapsed.as_millis() as _);
+        }
+
+        let req = ReportRequest {
+            windows,
+            server,
+            app_latencies,
+        };
 
         let report_result = client.report(req).await;
 

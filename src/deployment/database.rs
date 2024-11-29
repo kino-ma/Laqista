@@ -1,4 +1,4 @@
-use std::{error::Error, ffi::OsStr, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, error::Error, ffi::OsStr, path::PathBuf, sync::Arc};
 
 use bytes::Bytes;
 use chrono::{Local, TimeZone};
@@ -113,6 +113,18 @@ impl DeploymentDatabase {
         let bytes = read_binary(&dir, target)?;
 
         Ok(bytes)
+    }
+
+    /// List all applications saved in this node (or cluster, if this is authoritative).
+    pub async fn list_by_names(&self) -> HashMap<String, DeploymentInfo> {
+        self.inner
+            .lock()
+            .await
+            .apps
+            .0
+            .iter()
+            .map(|(_, v)| (v.info.name.clone(), v.info.clone()))
+            .collect()
     }
 
     pub async fn lookup(&self, name: &str) -> Option<DeploymentInfo> {

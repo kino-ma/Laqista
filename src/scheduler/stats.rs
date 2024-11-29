@@ -10,6 +10,7 @@ use crate::{
 };
 
 pub type StatsMap = IdMap<ServerStats>;
+pub type AppsMap = IdMap<AppLatency>;
 
 #[derive(Clone, Debug)]
 pub struct ServerStats {

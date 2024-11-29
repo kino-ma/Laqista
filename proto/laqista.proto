@@ -72,6 +72,7 @@ message NotifyResponse { bool success = 1; }
 message ReportRequest {
   Server server = 1;
   repeated MonitorWindow windows = 2;
+  map<string, uint32> app_latencies = 3;
 }
 message ReportResponse {
   bool success = 1;
