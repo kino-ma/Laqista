@@ -92,7 +92,7 @@
 
           RUST_SRC_PATH = "${pkgs.fenix.complete.rust-src}/lib/rustlib/src/rust/";
           LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
-          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc pkgs.libclang pkgs.pkgs.vulkan-loader ];
+          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc pkgs.libclang pkgs.vulkan-loader pkgs.openssl ];
         };
 
         packages = rec {
@@ -110,7 +110,7 @@
               RUST_SRC_PATH = "${pkgs.fenix.complete.rust-src}/lib/rustlib/src/rust/";
               PROTOC = "${pkgs.protobuf}/bin/protoc";
               LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
-              LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc ];
+              LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc ] ++ (pkgs.lib.optionals (system == "x86_64-linux") [ pkgs.openssl ]);
               CLANG_PATH = "${pkgs.clang}/bin/clang";
             };
 
