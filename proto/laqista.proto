@@ -24,6 +24,7 @@ message Deployment {
   string id = 1;
   string source = 2;
   string name = 3;
+  map<string, float> accuracies_percent = 4;
 }
 
 message Group {
@@ -31,7 +32,19 @@ message Group {
   Server scheduler = 2;
 }
 
-message QoS {}
+message QoS {
+  uint32 latency_ms = 1;
+  float accuracy_percent = 2;
+  Locality locality = 3;
+}
+
+message Locality {
+  oneof specification {
+    string id = 1;
+    string host = 2;
+    string pubkey = 3;
+  }
+}
 
 /*
  * Scheduler services
@@ -41,10 +54,12 @@ service Scheduler {
   // For cluster management.
   rpc Join(JoinRequest) returns (JoinResponse);
   rpc Report(ReportRequest) returns (ReportResponse);
+  rpc Connect(ConnectRequest) returns (ConnectResponse);
 
   // For managing and calling applictions.
   rpc Deploy(DeployRequest) returns (DeployResponse);
   rpc Lookup(LookupRequest) returns (LookupResponse);
+  rpc GetApps(GetAppsRequest) returns (GetAppsResponse);
 }
 
 message NotifyRequest { ClusterState cluster = 1; }
@@ -75,6 +90,9 @@ message JoinResponse {
   Group group = 2;
 }
 message Nomination { ClusterState cluster = 1; }
+
+message GetAppsRequest { repeated string names = 1; }
+message GetAppsResponse { repeated Deployment apps = 1; }
 
 message LookupRequest {
   string deployment_id = 1;
