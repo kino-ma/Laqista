@@ -79,7 +79,7 @@ impl MetricsReporter {
 
         let mut app_latencies = HashMap::new();
         while !self.app_rx.is_empty() {
-            let metric = self.app_rx.blocking_recv().unwrap();
+            let metric = self.app_rx.recv().await.unwrap();
             let path = rpc_path(&metric.app, &metric.service, &metric.rpc);
             app_latencies.insert(path, metric.elapsed.as_millis() as _);
         }
