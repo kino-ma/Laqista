@@ -15,4 +15,7 @@ pub struct StartCommand {
 
     #[arg(short = 'i', long = "id")]
     pub id: Option<String>,
+
+    #[arg(short = 'a', long = "layer", default_value = "cloud")]
+    pub layer: String,
 }

@@ -51,8 +51,8 @@ pub enum StateCommand {
 #[derive(Clone, Debug)]
 pub enum DaemonState {
     Cloud(GroupInfo),
-    Fog(GroupInfo),
-    Dew(ServerInfo),
+    Fog(String),
+    Dew(String),
     Joining(String),
     Authoritative(AuthoritativeScheduler),
     Failed,
@@ -141,17 +141,17 @@ impl ServerRunner {
 
                 self.start_cloud(daemon, server, group).await
             }
-            DaemonState::Fog(group) => {
+            DaemonState::Fog(cloud) => {
                 println!("Running a new fog server...");
-                println!("group = {:?}", group);
+                println!("cloud scheduler = {:?}", cloud);
 
-                self.start_fog(daemon, server, group).await
+                self.start_fog(daemon, server, &cloud).await
             }
             DaemonState::Dew(parent) => {
                 println!("Running a new dew server...");
                 println!("parent = {:?}", parent);
 
-                self.start_dew(daemon, server, parent).await
+                self.start_dew(daemon, server, &parent).await
             }
             DaemonState::Authoritative(scheduler) => {
                 println!("Running an Authoritative server...");
@@ -238,7 +238,7 @@ impl ServerRunner {
         &self,
         daemon: ServerDaemon,
         server: ServerInfo,
-        group: GroupInfo,
+        cloud: &str,
     ) -> Result<DaemonState> {
         println!("Starting fog server...");
 
@@ -251,14 +251,14 @@ impl ServerRunner {
         println!("cancel reporter (running)");
         reporter_token.cancel();
 
-        Ok(DaemonState::Fog(group.clone()))
+        Ok(DaemonState::Fog(cloud.to_owned()))
     }
 
     async fn start_dew(
         &self,
         daemon: ServerDaemon,
         server: ServerInfo,
-        parent: ServerInfo,
+        parent: &str,
     ) -> Result<DaemonState> {
         println!("Starting dew server...");
 
@@ -271,7 +271,7 @@ impl ServerRunner {
         println!("cancel reporter (running)");
         reporter_token.cancel();
 
-        Ok(DaemonState::Dew(parent.clone()))
+        Ok(DaemonState::Dew(parent.to_owned()))
     }
     fn start_reporter(&self, server: ServerInfo, scheduler: ServerInfo) -> CancellationToken {
         let token = CancellationToken::new();
@@ -347,6 +347,30 @@ impl ServerRunner {
         start_command: &StartCommand,
         server: &ServerInfo,
     ) -> DaemonState {
+        match start_command.layer.as_ref() {
+            "cloud" => (),
+            "fog" => {
+                return DaemonState::Fog(
+                    start_command
+                        .bootstrap_addr
+                        .as_ref()
+                        .expect("Bootstrap server address is required on fog layer")
+                        .clone(),
+                )
+            }
+            "dew" => {
+                return DaemonState::Dew(
+                    start_command
+                        .bootstrap_addr
+                        .as_ref()
+                        .expect("Bootstrap server address is required on dew layer")
+                        .clone(),
+                )
+            }
+            layer => {
+                panic!("Unexpected layer specification: {}", layer)
+            }
+        }
         let maybe_bootstrap_addr = start_command.bootstrap_addr.as_deref();
 
         match maybe_bootstrap_addr {

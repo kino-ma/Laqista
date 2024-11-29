@@ -54,9 +54,8 @@ impl ServerDaemonTrait for ServerDaemon {
 
         use DaemonState::*;
         let group = match &state {
-            Failed | Joining(_) => None,
-            Cloud(group) | Fog(group) => Some(group.clone().into()),
-            Dew(_) => None,
+            Failed | Joining(_) | Fog(_) | Dew(_) => None,
+            Cloud(group) => Some(group.clone().into()),
             Authoritative(scheduler) => {
                 Some(scheduler.runtime.lock().await.cluster.group.clone().into())
             }
