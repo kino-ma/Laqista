@@ -54,7 +54,6 @@ service Scheduler {
   // For cluster management.
   rpc Join(JoinRequest) returns (JoinResponse);
   rpc Report(ReportRequest) returns (ReportResponse);
-  rpc Connect(ConnectRequest) returns (ConnectResponse);
 
   // For managing and calling applictions.
   rpc Deploy(DeployRequest) returns (DeployResponse);
