@@ -139,7 +139,9 @@ impl Into<ServerState> for DaemonState {
         use ServerState::*;
 
         match self {
-            Self::Running(_) => Running,
+            Self::Cloud(_) => Cloud,
+            Self::Fog(_) => Fog,
+            Self::Dew(_) => Dew,
             Self::Joining(_) => Starting,
             Self::Authoritative(_) => Authoritative,
             Self::Failed => Failed,

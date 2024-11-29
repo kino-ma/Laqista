@@ -14,9 +14,14 @@ message Server {
 }
 enum ServerState {
   STARTING = 0;
-  RUNNING = 1;
-  FAILED = 2;
+
   AUTHORITATIVE = 3;
+  CLOUD = 1;
+
+  FOG = 5;
+  DEW = 6;
+
+  FAILED = 2;
   UNINITIALIZED = 4;
 }
 

@@ -50,7 +50,9 @@ pub enum StateCommand {
 
 #[derive(Clone, Debug)]
 pub enum DaemonState {
-    Running(GroupInfo),
+    Cloud(GroupInfo),
+    Fog(GroupInfo),
+    Dew(ServerInfo),
     Joining(String),
     Authoritative(AuthoritativeScheduler),
     Failed,
@@ -133,11 +135,23 @@ impl ServerRunner {
                 println!("Joining to a cluster...");
                 self.join_cluster(server, &bootstrap_addr).await
             }
-            DaemonState::Running(group) => {
+            DaemonState::Cloud(group) => {
                 println!("Running a new server...");
                 println!("group = {:?}", group);
 
                 self.start_running(daemon, server, group).await
+            }
+            DaemonState::Fog(group) => {
+                println!("Running a new fog server...");
+                println!("group = {:?}", group);
+
+                self.start_fog(daemon, server, group).await
+            }
+            DaemonState::Dew(parent) => {
+                println!("Running a new dew server...");
+                println!("parent = {:?}", parent);
+
+                self.start_dew(daemon, server, parent).await
             }
             DaemonState::Authoritative(scheduler) => {
                 println!("Running an Authoritative server...");
@@ -168,7 +182,7 @@ impl ServerRunner {
             .expect("Group in response cannot be empty")
             .try_into()?;
 
-        Ok(DaemonState::Running(group))
+        Ok(DaemonState::Cloud(group))
     }
 
     async fn start_authoritative(
@@ -217,7 +231,7 @@ impl ServerRunner {
         println!("cancel reporter (running)");
         reporter_token.cancel();
 
-        Ok(DaemonState::Running(group.clone()))
+        Ok(DaemonState::Cloud(group.clone()))
     }
 
     fn start_reporter(&self, server: ServerInfo, scheduler: ServerInfo) -> CancellationToken {
