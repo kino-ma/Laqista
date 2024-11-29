@@ -26,6 +26,8 @@ use crate::server::{ServerCommand, StartCommand};
 use super::middleware::MetricsMiddleware;
 use super::ServerDaemon;
 
+use hello::proto::greeter_server::GreeterServer;
+
 #[cfg(feature = "face")]
 use face::proto as face_proto;
 
@@ -317,12 +319,10 @@ impl ServerRunner {
         app_tx: AppMetricSender,
     ) -> Result<Router> {
         let router = TransportServer::builder()
+            .add_service(ServerDaemonServer::new(daemon))
             .add_service(MiddlewareFor::new(
-                ServerDaemonServer::new(daemon),
-                MetricsMiddleware { tx: app_tx },
-            ))
-            .add_service(hello::proto::greeter_server::GreeterServer::new(
-                hello::MyGreeter::default(),
+                GreeterServer::new(hello::MyGreeter::default()),
+                MetricsMiddleware { tx: app_tx.clone() },
             ));
 
         #[cfg(feature = "face")]
@@ -344,7 +344,10 @@ impl ServerRunner {
                 .await
                 .map_err(|e| Error::AppInstantiation(e.to_string()))?;
             let server = DetectorServer::new(inner_server);
-            router.add_service(server)
+            router.add_service(MiddlewareFor::new(
+                server,
+                MetricsMiddleware { tx: app_tx.clone() },
+            ))
         } else {
             router
         };
