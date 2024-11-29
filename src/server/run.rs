@@ -5,11 +5,11 @@ use std::time::Duration;
 
 use face::server::FaceServer;
 use futures::future;
-use laqista_core::DeploymentInfo;
 use local_ip_address::local_ip;
 use tokio::sync::{mpsc, Mutex};
 use tokio_util::sync::CancellationToken;
 use tonic::transport::{server::Router, Channel, Server as TransportServer};
+use tonic_middleware::MiddlewareFor;
 
 use crate::deployment::database::{DeploymentDatabase, Target};
 use crate::proto::{scheduler_client::SchedulerClient, JoinRequest};
@@ -23,6 +23,7 @@ use crate::{Error, GroupInfo, Result, ServerInfo};
 
 use crate::server::{ServerCommand, StartCommand};
 
+use super::middleware::MetricsMiddleware;
 use super::ServerDaemon;
 
 #[cfg(feature = "face")]
@@ -44,9 +45,10 @@ pub type StateSender = mpsc::Sender<StateCommand>;
 pub type StateReceiver = mpsc::Receiver<StateCommand>;
 
 pub struct AppMetric {
-    info: DeploymentInfo,
-    rpc: String,
-    elapsed: Duration,
+    pub app: String,
+    pub service: String,
+    pub rpc: String,
+    pub elapsed: Duration,
 }
 pub type AppMetricSender = mpsc::Sender<AppMetric>;
 pub type AppMetricReceiver = mpsc::Receiver<AppMetric>;
@@ -295,7 +297,12 @@ impl ServerRunner {
 
     async fn common_services(&self, daemon: ServerDaemon) -> Result<Router> {
         let router = TransportServer::builder()
-            .add_service(ServerDaemonServer::new(daemon))
+            .add_service(MiddlewareFor::new(
+                ServerDaemonServer::new(daemon),
+                MetricsMiddleware {
+                    tx: mpsc::channel(1).0,
+                },
+            ))
             .add_service(hello::proto::greeter_server::GreeterServer::new(
                 hello::MyGreeter::default(),
             ));
