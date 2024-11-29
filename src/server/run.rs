@@ -139,7 +139,7 @@ impl ServerRunner {
                 println!("Running a new server...");
                 println!("group = {:?}", group);
 
-                self.start_running(daemon, server, group).await
+                self.start_cloud(daemon, server, group).await
             }
             DaemonState::Fog(group) => {
                 println!("Running a new fog server...");
@@ -216,7 +216,7 @@ impl ServerRunner {
         Ok(DaemonState::Authoritative(scheduler.clone()))
     }
 
-    async fn start_running(
+    async fn start_cloud(
         &self,
         daemon: ServerDaemon,
         server: ServerInfo,
@@ -234,6 +234,45 @@ impl ServerRunner {
         Ok(DaemonState::Cloud(group.clone()))
     }
 
+    async fn start_fog(
+        &self,
+        daemon: ServerDaemon,
+        server: ServerInfo,
+        group: GroupInfo,
+    ) -> Result<DaemonState> {
+        println!("Starting fog server...");
+
+        let reporter_token = self.start_reporter(server.clone(), server.clone());
+
+        let grpc_router = self.common_services(daemon).await?;
+
+        grpc_router.serve(self.socket).await?;
+
+        println!("cancel reporter (running)");
+        reporter_token.cancel();
+
+        Ok(DaemonState::Fog(group.clone()))
+    }
+
+    async fn start_dew(
+        &self,
+        daemon: ServerDaemon,
+        server: ServerInfo,
+        parent: ServerInfo,
+    ) -> Result<DaemonState> {
+        println!("Starting dew server...");
+
+        let reporter_token = self.start_reporter(server.clone(), server.clone());
+
+        let grpc_router = self.common_services(daemon).await?;
+
+        grpc_router.serve(self.socket).await?;
+
+        println!("cancel reporter (running)");
+        reporter_token.cancel();
+
+        Ok(DaemonState::Dew(parent.clone()))
+    }
     fn start_reporter(&self, server: ServerInfo, scheduler: ServerInfo) -> CancellationToken {
         let token = CancellationToken::new();
         let cloned = token.clone();
