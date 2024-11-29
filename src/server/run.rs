@@ -204,6 +204,8 @@ impl ServerRunner {
     ) -> Result<DaemonState> {
         let server = daemon.runtime.lock().await.info.clone();
 
+        let (app_tx, app_rx) = mpsc::channel(16);
+
         let scheduler_info = scheduler
             .runtime
             .lock()
@@ -212,10 +214,11 @@ impl ServerRunner {
             .group
             .scheduler_info
             .clone();
-        let reporter_token = self.start_reporter(server.clone(), scheduler_info);
+
+        let reporter_token = self.start_reporter(server.clone(), scheduler_info, app_rx);
 
         let grpc_server = self
-            .common_services(daemon)
+            .common_services(daemon, app_tx)
             .await?
             .add_service(SchedulerServer::new(scheduler.clone()));
 
@@ -234,9 +237,12 @@ impl ServerRunner {
         server: ServerInfo,
         group: GroupInfo,
     ) -> Result<DaemonState> {
-        let reporter_token = self.start_reporter(server.clone(), group.scheduler_info.clone());
+        let (app_tx, app_rx) = mpsc::channel(16);
 
-        let grpc_router = self.common_services(daemon).await?;
+        let reporter_token =
+            self.start_reporter(server.clone(), group.scheduler_info.clone(), app_rx);
+
+        let grpc_router = self.common_services(daemon, app_tx).await?;
 
         grpc_router.serve(self.socket).await?;
 
@@ -254,9 +260,11 @@ impl ServerRunner {
     ) -> Result<DaemonState> {
         println!("Starting fog server...");
 
-        let reporter_token = self.start_reporter(server.clone(), server.clone());
+        let (app_tx, app_rx) = mpsc::channel(16);
 
-        let grpc_router = self.common_services(daemon).await?;
+        let reporter_token = self.start_reporter(server.clone(), server.clone(), app_rx);
+
+        let grpc_router = self.common_services(daemon, app_tx).await?;
 
         grpc_router.serve(self.socket).await?;
 
@@ -274,9 +282,11 @@ impl ServerRunner {
     ) -> Result<DaemonState> {
         println!("Starting dew server...");
 
-        let reporter_token = self.start_reporter(server.clone(), server.clone());
+        let (app_tx, app_rx) = mpsc::channel(16);
 
-        let grpc_router = self.common_services(daemon).await?;
+        let reporter_token = self.start_reporter(server.clone(), server.clone(), app_rx);
+
+        let grpc_router = self.common_services(daemon, app_tx).await?;
 
         grpc_router.serve(self.socket).await?;
 
@@ -285,23 +295,31 @@ impl ServerRunner {
 
         Ok(DaemonState::Dew(parent.to_owned()))
     }
-    fn start_reporter(&self, server: ServerInfo, scheduler: ServerInfo) -> CancellationToken {
+
+    fn start_reporter(
+        &self,
+        server: ServerInfo,
+        scheduler: ServerInfo,
+        app_rx: AppMetricReceiver,
+    ) -> CancellationToken {
         let token = CancellationToken::new();
         let cloned = token.clone();
 
-        let mut reporter = MetricsReporter::new(self.tx.clone(), server, scheduler);
+        let mut reporter = MetricsReporter::new(self.tx.clone(), app_rx, server, scheduler);
         tokio::spawn(async move { reporter.start(cloned).await });
 
         token
     }
 
-    async fn common_services(&self, daemon: ServerDaemon) -> Result<Router> {
+    async fn common_services(
+        &self,
+        daemon: ServerDaemon,
+        app_tx: AppMetricSender,
+    ) -> Result<Router> {
         let router = TransportServer::builder()
             .add_service(MiddlewareFor::new(
                 ServerDaemonServer::new(daemon),
-                MetricsMiddleware {
-                    tx: mpsc::channel(1).0,
-                },
+                MetricsMiddleware { tx: app_tx },
             ))
             .add_service(hello::proto::greeter_server::GreeterServer::new(
                 hello::MyGreeter::default(),

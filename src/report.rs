@@ -8,7 +8,7 @@ use crate::{
     monitor::{MetricsMonitor, SendMetrics},
     proto::{scheduler_client::SchedulerClient, ClusterState, MonitorWindow, ReportRequest},
     scheduler::Cluster,
-    server::{DaemonState, StateCommand, StateSender},
+    server::{AppMetricReceiver, DaemonState, StateCommand, StateSender},
     utils::cluster_differs,
     ServerInfo,
 };
@@ -18,12 +18,18 @@ pub struct MetricsReporter {
     server: ServerInfo,
     last_cluster_state: Option<ClusterState>,
     state_tx: StateSender,
+    app_rx: AppMetricReceiver,
     rx: mpsc::Receiver<MonitorWindow>,
     sender_handle: JoinHandle<()>,
 }
 
 impl MetricsReporter {
-    pub fn new(state_tx: StateSender, server: ServerInfo, scheduler: ServerInfo) -> Self {
+    pub fn new(
+        state_tx: StateSender,
+        app_rx: AppMetricReceiver,
+        server: ServerInfo,
+        scheduler: ServerInfo,
+    ) -> Self {
         let (tx, rx) = mpsc::channel(1);
 
         let sender: Box<dyn SendMetrics> = Box::new(MetricsMonitor::new());
@@ -34,6 +40,7 @@ impl MetricsReporter {
             server,
             last_cluster_state: None,
             state_tx,
+            app_rx,
             rx,
             sender_handle: monitor_handle,
         }
