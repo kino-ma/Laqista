@@ -150,17 +150,37 @@ impl Into<ServerState> for DaemonState {
 impl TryFrom<Deployment> for DeploymentInfo {
     type Error = Error;
     fn try_from(deployment: Deployment) -> Result<Self> {
-        let Deployment { name, source, id } = deployment;
+        let Deployment {
+            name,
+            source,
+            id,
+            accuracies_percent,
+        } = deployment;
         let id = Uuid::parse_str(&id)?;
-        Ok(Self { name, source, id })
+        Ok(Self {
+            name,
+            source,
+            id,
+            accuracies: accuracies_percent,
+        })
     }
 }
 
 impl Into<Deployment> for DeploymentInfo {
     fn into(self) -> Deployment {
-        let Self { name, source, id } = self;
+        let Self {
+            name,
+            source,
+            id,
+            accuracies,
+        } = self;
         let id = id.to_string();
-        Deployment { name, source, id }
+        Deployment {
+            name,
+            source,
+            id,
+            accuracies_percent: accuracies,
+        }
     }
 }
 
