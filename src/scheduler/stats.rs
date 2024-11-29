@@ -1,3 +1,6 @@
+use std::{collections::HashMap, time::Duration};
+
+use laqista_core::DeploymentInfo;
 use prost_types::Timestamp;
 
 use crate::{
@@ -65,5 +68,46 @@ impl<'a> Iterator for Windows<'a> {
             nanos,
             utilization,
         })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct AppLatency {
+    info: DeploymentInfo,
+    rpcs: HashMap<String, RpcLatency>,
+}
+
+impl AppLatency {
+    pub fn new(info: DeploymentInfo) -> Self {
+        let rpcs = HashMap::new();
+        Self { info, rpcs }
+    }
+
+    pub fn insert(&mut self, rpc: &str, elapsed: Duration) {
+        self.rpcs
+            .entry(rpc.to_owned())
+            .and_modify(|e| e.insert(elapsed))
+            .or_insert_with(|| RpcLatency::with_first(elapsed));
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct RpcLatency {
+    pub average: Duration,
+    latencies: Vec<Duration>,
+}
+
+impl RpcLatency {
+    pub fn with_first(elapsed: Duration) -> Self {
+        Self {
+            average: elapsed,
+            latencies: vec![elapsed],
+        }
+    }
+    pub fn insert(&mut self, elapsed: Duration) {
+        let len = self.latencies.len() as _;
+        self.average = (self.average * len + elapsed) / len;
+
+        self.latencies.push(elapsed);
     }
 }
