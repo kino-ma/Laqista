@@ -273,7 +273,11 @@ impl Scheduler for AuthoritativeScheduler {
         let target = runtime
             .scheduler
             .schedule(id, &request.get_ref().name, &stats_map, &apps_map)
-            .ok_or(Status::aborted("Failed to schedule"))?
+            .or_else(|| {
+                println!("WARN: failed to schedule. using random server");
+                runtime.cluster.servers.get(0).map(|s| s.clone())
+            })
+            .ok_or(Status::aborted("Failed to schedule: No server found"))?
             .clone();
 
         // Clone self.
