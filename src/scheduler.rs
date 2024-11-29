@@ -15,9 +15,9 @@ use crate::deployment::database::DeploymentDatabase;
 use crate::proto::scheduler_server::Scheduler;
 use crate::proto::server_daemon_client::ServerDaemonClient;
 use crate::proto::{
-    ClusterState, DeployRequest, DeployResponse, Deployment, JoinRequest, JoinResponse,
-    LookupRequest, LookupResponse, Nomination, ReportRequest, ReportResponse, Server, SpawnRequest,
-    SpawnResponse,
+    ClusterState, DeployRequest, DeployResponse, Deployment, GetAppsRequest, GetAppsResponse,
+    JoinRequest, JoinResponse, LookupRequest, LookupResponse, Nomination, ReportRequest,
+    ReportResponse, Server, SpawnRequest, SpawnResponse,
 };
 use crate::server::{DaemonState, StateSender};
 use crate::utils::IdMap;
@@ -304,6 +304,26 @@ impl Scheduler for AuthoritativeScheduler {
             deployment_id: id.to_string(),
             server: Some(target.into()),
         }))
+    }
+
+    async fn get_apps(
+        &self,
+        request: Request<GetAppsRequest>,
+    ) -> RpcResult<Response<GetAppsResponse>> {
+        let names = request.into_inner().names;
+
+        let runtime = self.runtime.lock().await.clone();
+        let apps = runtime
+            .deployments
+            .0
+            .into_iter()
+            .filter(|(_, v)| names.contains(&v.name))
+            .map(|(_, v)| v.into())
+            .collect();
+
+        let resp = GetAppsResponse { apps };
+
+        Ok(Response::new(resp))
     }
 }
 
