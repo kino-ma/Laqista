@@ -3,6 +3,7 @@ use tokio::time::Instant;
 use tonic::{
     body::BoxBody,
     codegen::http::{Request, Response},
+    transport::Body,
 };
 use tonic_middleware::{Middleware, ServiceBound};
 
@@ -20,7 +21,7 @@ where
 {
     async fn call(
         &self,
-        req: Request<BoxBody>,
+        req: Request<Body>,
         mut service: S,
     ) -> Result<Response<BoxBody>, S::Error> {
         let start_time = Instant::now();
