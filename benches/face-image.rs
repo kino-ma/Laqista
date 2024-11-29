@@ -93,6 +93,7 @@ async fn run_scheduled(
     let request = LookupRequest {
         deployment_id: deployment_id.to_owned(),
         qos: None,
+        name: "Infer".to_owned(),
     };
 
     let resp = client.clone().lookup(request).await.unwrap().into_inner();
@@ -186,6 +187,7 @@ async fn run_wasm_scheduled(
     let request = LookupRequest {
         deployment_id: deployment_id.to_owned(),
         qos: None,
+        name: "RunDetection".to_owned(),
     };
 
     let resp = client.clone().lookup(request).await.unwrap().into_inner();

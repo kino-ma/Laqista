@@ -36,6 +36,7 @@ async fn schedule_wasm() {
     let request = LookupRequest {
         deployment_id: deployment.deployment.unwrap().id,
         qos: None,
+        name: "RunDetection".to_owned(),
     };
 
     let _resp = client.clone().lookup(request).await.unwrap().into_inner();

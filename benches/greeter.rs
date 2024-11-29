@@ -84,6 +84,7 @@ async fn run_scheduled(
     let request = LookupRequest {
         deployment_id: deployment_id.to_owned(),
         qos: None,
+        name: "SayHello".to_owned(),
     };
 
     let _resp = client.clone().lookup(request).await.unwrap().into_inner();
