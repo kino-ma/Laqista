@@ -1,8 +1,10 @@
+use uuid::Uuid;
+
 use crate::{utils::mul_as_percent, ServerInfo};
 
 use super::{
     interface::DeploymentScheduler,
-    stats::{ServerStats, StatsMap},
+    stats::{AppsMap, ServerStats, StatsMap},
 };
 
 #[derive(Clone, Debug)]
@@ -11,8 +13,14 @@ pub struct MeanScheduler {}
 const SCALEOUT_THREASHOLD: usize = 70;
 
 impl DeploymentScheduler for MeanScheduler {
-    fn schedule(&self, stats_map: &StatsMap) -> Option<ServerInfo> {
-        let mut least_utilized = stats_map
+    fn schedule(
+        &self,
+        id: Uuid,
+        name: &str,
+        stats_map: &StatsMap,
+        apps_map: &AppsMap,
+    ) -> Option<ServerInfo> {
+        let mut least_estimated = stats_map
             .iter()
             .next()
             .or_else(|| {
@@ -20,41 +28,73 @@ impl DeploymentScheduler for MeanScheduler {
                 None
             })?
             .1;
-        let mut least_utilized_rate = 0.;
+        let mut least_estimated_latency = 0.;
 
-        for (_id, stats) in stats_map.iter() {
+        let server_latencies = apps_map.0.get(&id)?;
+
+        for (id, stats) in stats_map.iter() {
             let utilized_rate = self.cpu_utilized_rate(stats);
+            let free = 1. - utilized_rate;
 
-            if utilized_rate < least_utilized_rate {
-                least_utilized = stats;
-                least_utilized_rate = utilized_rate;
+            let latency = server_latencies.0.get(id)?.rpcs.get(name)?;
+
+            // We consider greatest latency will become `free-resource-ratio * average-latency`
+            let estimated_latency = free * (latency.average.as_millis() as f64);
+
+            if estimated_latency < least_estimated_latency {
+                least_estimated = &stats;
+                least_estimated_latency = estimated_latency;
             }
         }
 
-        Some(least_utilized.server.clone())
+        Some(least_estimated.server.clone())
     }
 
-    fn schedule_gpu(&self, stats_map: &StatsMap) -> Option<ServerInfo> {
-        let mut least_utilized = stats_map
+    fn schedule_gpu(
+        &self,
+        id: Uuid,
+        name: &str,
+        stats_map: &StatsMap,
+        apps_map: &AppsMap,
+    ) -> Option<ServerInfo> {
+        let mut least_estimated = stats_map
             .iter()
             .next()
-            .or({
+            .or_else(|| {
                 println!("WARN: stats are empty");
                 None
             })?
             .1;
-        let mut least_utilized_rate = 0.;
+        let mut least_estimated_latency = 0.;
 
-        for (_id, stats) in stats_map.iter() {
+        let server_latencies = apps_map.0.get(&id)?;
+
+        for (id, stats) in stats_map.iter() {
             let utilized_rate = self.gpu_utilized_rate(stats);
+            let free = 1. - utilized_rate;
 
-            if utilized_rate < least_utilized_rate {
-                least_utilized = stats;
-                least_utilized_rate = utilized_rate;
+            let latency = server_latencies.0.get(id)?.rpcs.get(name)?;
+
+            // We consider greatest latency will become `free-resource-ratio * average-latency`
+            let estimated_latency = free * (latency.average.as_millis() as f64);
+
+            if estimated_latency < least_estimated_latency {
+                least_estimated = &stats;
+                least_estimated_latency = estimated_latency;
             }
         }
 
-        Some(least_utilized.server.clone())
+        Some(least_estimated.server.clone())
+    }
+
+    fn least_utilized(&self, stats_map: &StatsMap) -> ServerInfo {
+        let mut utils = stats_map
+            .0
+            .values()
+            .map(|s| (s.server.clone(), self.cpu_utilized_rate(s)))
+            .collect::<Vec<_>>();
+        utils.sort_by_key(|t| (t.1 * 100.) as u64);
+        utils[0].0.clone()
     }
 
     fn needs_scale_out(&self, _server: &ServerInfo, stats: &ServerStats) -> bool {

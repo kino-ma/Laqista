@@ -92,17 +92,10 @@ impl AuthoritativeScheduler {
         };
 
         let target_server = {
-            println!("taking lock of runtime to get scheduler and stats");
             let runtime = self.runtime.lock().await;
-            println!("took lock");
-
             runtime
                 .scheduler
-                .schedule(&runtime.cluster.server_stats)
-                .unwrap_or({
-                    println!("WARN: failed to schedule. Using the first server");
-                    runtime.cluster.servers[0].clone()
-                })
+                .least_utilized(&runtime.cluster.server_stats)
         };
         println!("got target server = {:?}", &target_server);
 
@@ -216,14 +209,16 @@ impl Scheduler for AuthoritativeScheduler {
         let server = ServerInfo::try_from(server);
         let server = server.map_err(|e| <Error as Into<Status>>::into(e))?;
 
-        let stats = ServerStats::from_stats(server, windows);
+        let stats = ServerStats::from_stats(server.clone(), windows);
 
         let mut lock = self.runtime.lock().await;
         let runtime = lock.borrow_mut();
 
         runtime.cluster.insert_stats(stats);
         let info_by_name = runtime.database.list_by_names().await;
-        runtime.cluster.push_latency(info_by_name, app_latencies);
+        runtime
+            .cluster
+            .push_latency(&server, info_by_name, app_latencies);
 
         let cluster = runtime.cluster.clone().into();
 
@@ -273,10 +268,11 @@ impl Scheduler for AuthoritativeScheduler {
             .map_err(|e| Status::aborted(e.to_string()))?;
 
         let stats_map = runtime.cluster.server_stats.clone_by_ids(&server_ids);
+        let apps_map = runtime.cluster.app_stats.clone();
 
         let target = runtime
             .scheduler
-            .schedule(&stats_map)
+            .schedule(id, &request.get_ref().name, &stats_map, &apps_map)
             .ok_or(Status::aborted("Failed to schedule"))?
             .clone();
 
@@ -469,6 +465,7 @@ impl Cluster {
 
     pub fn push_latency(
         &mut self,
+        server: &ServerInfo,
         info_by_name: HashMap<String, DeploymentInfo>,
         latencies: HashMap<String, u32>,
     ) {
@@ -483,8 +480,15 @@ impl Cluster {
             self.app_stats
                 .0
                 .entry(info.id)
-                .and_modify(|e| e.insert(rpc, dur))
-                .or_insert(AppLatency::new(info.clone()));
+                .and_modify(|e| {
+                    e.0.entry(server.id)
+                        .and_modify(|latency| latency.insert(rpc, dur));
+                })
+                .or_insert(IdMap(
+                    [(server.id, AppLatency::new(info.clone()))]
+                        .into_iter()
+                        .collect(),
+                ));
         }
     }
 

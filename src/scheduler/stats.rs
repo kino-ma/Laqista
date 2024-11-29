@@ -10,7 +10,7 @@ use crate::{
 };
 
 pub type StatsMap = IdMap<ServerStats>;
-pub type AppsMap = IdMap<AppLatency>;
+pub type AppsMap = IdMap<IdMap<AppLatency>>;
 
 #[derive(Clone, Debug)]
 pub struct ServerStats {
@@ -74,8 +74,8 @@ impl<'a> Iterator for Windows<'a> {
 
 #[derive(Clone, Debug)]
 pub struct AppLatency {
-    info: DeploymentInfo,
-    rpcs: HashMap<String, RpcLatency>,
+    pub info: DeploymentInfo,
+    pub rpcs: HashMap<String, RpcLatency>,
 }
 
 impl AppLatency {

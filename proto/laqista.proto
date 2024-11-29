@@ -102,6 +102,7 @@ message GetAppsResponse { repeated Deployment apps = 1; }
 message LookupRequest {
   string deployment_id = 1;
   QoS qos = 2;
+  string name = 3;
 }
 message LookupResponse {
   bool success = 1;

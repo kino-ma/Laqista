@@ -1,10 +1,27 @@
+use uuid::Uuid;
+
 use crate::ServerInfo;
 
-use super::stats::{ServerStats, StatsMap};
+use super::stats::{AppsMap, ServerStats, StatsMap};
 
 pub trait DeploymentScheduler: SchedulerClone + std::fmt::Debug + Send + Sync {
-    fn schedule(&self, stats: &StatsMap) -> Option<ServerInfo>;
-    fn schedule_gpu(&self, stats: &StatsMap) -> Option<ServerInfo>;
+    fn schedule(
+        &self,
+        id: Uuid,
+        name: &str,
+        stats: &StatsMap,
+        apps_map: &AppsMap,
+    ) -> Option<ServerInfo>;
+
+    fn schedule_gpu(
+        &self,
+        id: Uuid,
+        name: &str,
+        stats: &StatsMap,
+        apps_map: &AppsMap,
+    ) -> Option<ServerInfo>;
+
+    fn least_utilized(&self, stats: &StatsMap) -> ServerInfo;
     fn needs_scale_out(&self, server: &ServerInfo, stats: &ServerStats) -> bool;
 }
 
