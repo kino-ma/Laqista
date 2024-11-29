@@ -1,9 +1,11 @@
 use std::net::SocketAddr;
 use std::pin::pin;
 use std::str::FromStr;
+use std::time::Duration;
 
 use face::server::FaceServer;
 use futures::future;
+use laqista_core::DeploymentInfo;
 use local_ip_address::local_ip;
 use tokio::sync::{mpsc, Mutex};
 use tokio_util::sync::CancellationToken;
@@ -40,6 +42,14 @@ pub struct ServerRunner {
 
 pub type StateSender = mpsc::Sender<StateCommand>;
 pub type StateReceiver = mpsc::Receiver<StateCommand>;
+
+pub struct AppMetric {
+    info: DeploymentInfo,
+    rpc: String,
+    elapsed: Duration,
+}
+pub type AppMetricSender = mpsc::Sender<AppMetric>;
+pub type AppMetricReceiver = mpsc::Receiver<AppMetric>;
 
 #[derive(Clone, Debug)]
 pub enum StateCommand {
