@@ -107,22 +107,6 @@ pub fn instances_differ(a: &Vec<AppInstanceLocations>, b: &Vec<AppInstanceLocati
     a.len() != b.len()
 }
 
-pub fn rpc_path(package: &str, service: &str, rpc: &str) -> String {
-    format!("/{package}.{service}/{rpc}")
-}
-
-pub fn parse_rpc_path(path: &str) -> Option<(&str, &str, &str)> {
-    let mut paths = path.split("/").skip(1);
-    let pkg_svc = paths.next()?;
-    let rpc = paths.next()?;
-
-    let mut iter = pkg_svc.split(".");
-    let pkg = iter.next()?;
-    let svc = iter.next()?;
-
-    Some((pkg, svc, rpc))
-}
-
 pub fn is_hosts_equal(a: &str, b: &str) -> bool {
     let a_url: Url = match a.parse() {
         Ok(u) => u,
@@ -159,20 +143,5 @@ mod test {
 
         println!("{:?}", cloned);
         assert_eq!(cloned.0.len(), ids.len());
-    }
-
-    #[test]
-    fn test_rpc_path() {
-        let path = "/laqista.Scheduler/Deploy";
-        let expected = ("laqista", "Scheduler", "Deploy");
-        let (package, service, rpc) = expected;
-
-        let generated = rpc_path(package, service, rpc);
-
-        assert_eq!(generated, path);
-
-        let parsed = parse_rpc_path(&generated).unwrap();
-
-        assert_eq!(parsed, expected);
     }
 }

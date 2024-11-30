@@ -3,9 +3,11 @@ pub mod mean;
 pub mod stats;
 
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use laqista_core::{try_collect_accuracies, AppRpc};
 use stats::{AppLatency, AppsMap};
 use tokio::sync::Mutex;
 use tonic::transport::Channel;
@@ -21,7 +23,7 @@ use crate::proto::{
     ReportResponse, Server, SpawnRequest, SpawnResponse,
 };
 use crate::server::{DaemonState, StateSender};
-use crate::utils::{parse_rpc_path, IdMap};
+use crate::utils::IdMap;
 use crate::{
     AppInstanceMap, AppInstancesInfo, DeploymentInfo, GroupInfo, QoSSpec, RpcResult, ServerInfo,
 };
@@ -239,7 +241,10 @@ impl Scheduler for AuthoritativeScheduler {
             accuracies_percent,
         } = request.into_inner();
 
-        let deployment_info = DeploymentInfo::new(name, source.clone(), accuracies_percent);
+        let accuracies = try_collect_accuracies(accuracies_percent)
+            .ok_or(Status::aborted("failed to parse rpc path"))?;
+
+        let deployment_info = DeploymentInfo::new(name, source.clone(), accuracies);
         let deployment: Deployment = deployment_info.clone().into();
         println!("created info");
 
@@ -286,9 +291,12 @@ impl Scheduler for AuthoritativeScheduler {
         let stats_map = runtime.cluster.server_stats.clone_by_ids(&server_ids);
         let apps_map = runtime.cluster.app_stats.clone();
 
+        let rpc =
+            AppRpc::from_str(&name).map_err(|_| Status::aborted("failed to parse rpc path"))?;
+
         let target = runtime
             .scheduler
-            .schedule(id, &name, &stats_map, &apps_map, qos)
+            .schedule(&rpc, &stats_map, &apps_map, qos)
             .or_else(|| {
                 println!("WARN: failed to schedule. using random server");
                 runtime.cluster.servers.get(0).map(|s| s.clone())
@@ -497,25 +505,25 @@ impl Cluster {
         latencies: HashMap<String, u32>,
     ) {
         for (path, elapsed) in latencies {
-            let (app, _, rpc) = parse_rpc_path(&path)
+            let rpc = AppRpc::from_str(&path)
                 .expect(("failed to parse gRPC path".to_owned() + &path).as_str());
 
             let dur = Duration::from_millis(elapsed as _);
 
             let info = &info_by_name
-                .get(app)
+                .get(&rpc.service)
                 .expect(&format!(
                     "failed to get key '{}' from:\n{:?}",
-                    app, info_by_name
+                    &rpc.service, info_by_name
                 ))
                 .to_owned();
 
             self.app_stats
                 .0
-                .entry(info.id)
+                .entry(rpc.to_owned().into())
                 .and_modify(|e| {
                     e.0.entry(server.id)
-                        .and_modify(|latency| latency.insert(rpc, dur));
+                        .and_modify(|latency| latency.insert(&rpc, dur));
                 })
                 .or_insert(IdMap(
                     [(server.id, AppLatency::new(info.clone()))]

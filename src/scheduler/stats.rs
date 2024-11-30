@@ -1,6 +1,6 @@
 use std::{collections::HashMap, time::Duration};
 
-use laqista_core::DeploymentInfo;
+use laqista_core::{AppRpc, AppService, DeploymentInfo};
 use prost_types::Timestamp;
 
 use crate::{
@@ -10,8 +10,6 @@ use crate::{
 };
 
 pub type StatsMap = IdMap<ServerStats>;
-pub type AppsMap = IdMap<IdMap<AppLatency>>;
-
 #[derive(Clone, Debug)]
 pub struct ServerStats {
     pub server: ServerInfo,
@@ -73,9 +71,34 @@ impl<'a> Iterator for Windows<'a> {
 }
 
 #[derive(Clone, Debug)]
+pub struct AppsMap(pub HashMap<AppService, IdMap<AppLatency>>);
+
+impl AppsMap {
+    pub fn new() -> Self {
+        Self(HashMap::new())
+    }
+
+    /// `AppsMap::filter_by_rpc()` filters latency history by rpc name.
+    /// It returns a map from Node ID to RPC Latency.
+    pub fn filter_by_rpc(&self, rpc: &AppRpc) -> IdMap<RpcLatency> {
+        let app = match self.0.get(&rpc.to_owned().into()) {
+            Some(a) => a,
+            None => return IdMap::new(),
+        };
+
+        app.clone()
+            .0
+            .into_iter()
+            .filter_map(|(id, lat)| lat.rpcs.get(rpc).map(|l| (id, l.clone())))
+            .collect::<HashMap<_, _>>()
+            .into()
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct AppLatency {
     pub info: DeploymentInfo,
-    pub rpcs: HashMap<String, RpcLatency>,
+    pub rpcs: HashMap<AppRpc, RpcLatency>,
 }
 
 impl AppLatency {
@@ -84,11 +107,18 @@ impl AppLatency {
         Self { info, rpcs }
     }
 
-    pub fn insert(&mut self, rpc: &str, elapsed: Duration) {
+    pub fn insert(&mut self, rpc: &AppRpc, elapsed: Duration) {
         self.rpcs
             .entry(rpc.to_owned())
             .and_modify(|e| e.insert(elapsed))
             .or_insert_with(|| RpcLatency::with_first(elapsed));
+    }
+
+    pub fn lookup_service(&self, service: &AppService) -> HashMap<&AppRpc, &RpcLatency> {
+        self.rpcs
+            .iter()
+            .filter(|(rpc, _)| service.contains(rpc))
+            .collect()
     }
 }
 

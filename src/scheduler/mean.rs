@@ -1,5 +1,7 @@
+use core::f32;
 use std::collections::HashMap;
 
+use laqista_core::{AppRpc, AppService};
 use uuid::Uuid;
 
 use crate::{
@@ -20,16 +22,14 @@ const SCALEOUT_THREASHOLD: usize = 70;
 impl DeploymentScheduler for MeanScheduler {
     fn schedule(
         &self,
-        id: Uuid,
-        name: &str,
+        rpc: &AppRpc,
         stats_map: &StatsMap,
         apps_map: &AppsMap,
         qos: QoSSpec,
     ) -> Option<ServerInfo> {
         self.abstract_schedule(
             |s| self.cpu_utilized_rate(s),
-            id,
-            name,
+            &rpc.to_owned().into(),
             stats_map,
             apps_map,
             qos,
@@ -38,16 +38,14 @@ impl DeploymentScheduler for MeanScheduler {
 
     fn schedule_gpu(
         &self,
-        id: Uuid,
-        name: &str,
+        rpc: &AppRpc,
         stats_map: &StatsMap,
         apps_map: &AppsMap,
         qos: QoSSpec,
     ) -> Option<ServerInfo> {
         self.abstract_schedule(
             |s| self.gpu_utilized_rate(s),
-            id,
-            name,
+            &rpc.to_owned().into(),
             stats_map,
             apps_map,
             qos,
@@ -81,8 +79,7 @@ impl MeanScheduler {
     fn abstract_schedule<F>(
         &self,
         get_util: F,
-        id: Uuid,
-        name: &str,
+        service: &AppService,
         stats_map: &StatsMap,
         apps_map: &AppsMap,
         qos: QoSSpec,
@@ -90,6 +87,7 @@ impl MeanScheduler {
     where
         F: Fn(&ServerStats) -> f64,
     {
+        let required_accuracy = qos.accuracy.unwrap_or(f32::MIN);
         let required_latency = qos.latency.unwrap_or(u32::MAX);
 
         let local_stats = self.filter_locality(stats_map.clone(), &qos.locality);
@@ -113,25 +111,27 @@ impl MeanScheduler {
         let mut target_latency = 0.;
         let mut target_utilization = 0.;
 
-        let server_latencies = apps_map.0.get(&id)?;
+        let server_latencies = apps_map.0.get(service)?;
 
         for (id, stats) in local_stats.iter() {
             let utilized_rate = get_util(stats);
             let free = 1. - utilized_rate;
 
-            let latency = server_latencies.0.get(id)?.rpcs.get(name)?;
+            let latencies = server_latencies.0.get(id)?.lookup_service(service);
 
-            // We consider greatest latency will become `free-resource-ratio * average-latency`
-            let estimated_latency = free * (latency.average.as_millis() as f64);
+            for (rpc, latency) in latencies {
+                // We consider greatest latency will become `free-resource-ratio * average-latency`
+                let estimated_latency = free * (latency.average.as_millis() as f64);
 
-            let satisfies = estimated_latency <= required_latency as f64;
-            let faster = estimated_latency <= target_latency;
-            let less_utilized = utilized_rate <= target_utilization;
+                let satisfies = estimated_latency <= required_latency as f64;
+                let faster = estimated_latency <= target_latency;
+                let less_utilized = utilized_rate <= target_utilization;
 
-            if (faster || satisfies) && less_utilized {
-                target = stats;
-                target_latency = estimated_latency;
-                target_utilization = utilized_rate;
+                if (faster || satisfies) && less_utilized {
+                    target = stats;
+                    target_latency = estimated_latency;
+                    target_utilization = utilized_rate;
+                }
             }
         }
 

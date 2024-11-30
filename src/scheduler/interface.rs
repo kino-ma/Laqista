@@ -1,4 +1,4 @@
-use uuid::Uuid;
+use laqista_core::AppRpc;
 
 use crate::{QoSSpec, ServerInfo};
 
@@ -7,8 +7,7 @@ use super::stats::{AppsMap, ServerStats, StatsMap};
 pub trait DeploymentScheduler: SchedulerClone + std::fmt::Debug + Send + Sync {
     fn schedule(
         &self,
-        id: Uuid,
-        name: &str,
+        rpc: &AppRpc,
         stats: &StatsMap,
         apps_map: &AppsMap,
         qos: QoSSpec,
@@ -16,8 +15,7 @@ pub trait DeploymentScheduler: SchedulerClone + std::fmt::Debug + Send + Sync {
 
     fn schedule_gpu(
         &self,
-        id: Uuid,
-        name: &str,
+        rpc: &AppRpc,
         stats: &StatsMap,
         apps_map: &AppsMap,
         qos: QoSSpec,

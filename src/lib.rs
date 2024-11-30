@@ -1,8 +1,8 @@
 #![feature(test)]
 
-use std::result::Result as StdResult;
+use std::{result::Result as StdResult, str::FromStr};
 
-use laqista_core::DeploymentInfo;
+use laqista_core::{AppRpc, DeploymentInfo};
 use proto::{AppInstanceLocations, Deployment, Group, Locality, QoS, Server, ServerState};
 use server::DaemonState;
 use tonic::Status;
@@ -159,11 +159,20 @@ impl TryFrom<Deployment> for DeploymentInfo {
             accuracies_percent,
         } = deployment;
         let id = Uuid::parse_str(&id)?;
+
+        let accuracies = accuracies_percent
+            .into_iter()
+            .filter_map(|(path, acc)| {
+                let rpc = AppRpc::from_str(&path).ok()?;
+                Some((rpc, acc))
+            })
+            .collect();
+
         Ok(Self {
             name,
             source,
             id,
-            accuracies: accuracies_percent,
+            accuracies,
         })
     }
 }
@@ -177,11 +186,16 @@ impl Into<Deployment> for DeploymentInfo {
             accuracies,
         } = self;
         let id = id.to_string();
+        let accuracies_percent = accuracies
+            .into_iter()
+            .map(|(rpc, acc)| (rpc.to_string(), acc))
+            .collect();
+
         Deployment {
             name,
             source,
             id,
-            accuracies_percent: accuracies,
+            accuracies_percent,
         }
     }
 }

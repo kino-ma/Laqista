@@ -1,5 +1,6 @@
 use std::{collections::HashMap, error::Error};
 
+use laqista_core::AppRpc;
 use tokio::{select, sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
@@ -9,7 +10,7 @@ use crate::{
     proto::{scheduler_client::SchedulerClient, ClusterState, MonitorWindow, ReportRequest},
     scheduler::Cluster,
     server::{AppMetricReceiver, DaemonState, StateCommand, StateSender},
-    utils::{cluster_differs, rpc_path},
+    utils::cluster_differs,
     ServerInfo,
 };
 
@@ -77,8 +78,8 @@ impl MetricsReporter {
 
         let mut app_latencies = HashMap::new();
         while let Ok(metric) = self.app_rx.try_recv() {
-            let path = rpc_path(&metric.app, &metric.service, &metric.rpc);
-            app_latencies.insert(path, metric.elapsed.as_millis() as _);
+            let rpc = AppRpc::new(&metric.app, &metric.service, &metric.rpc);
+            app_latencies.insert(rpc.to_string(), metric.elapsed.as_millis() as _);
         }
 
         let req = ReportRequest {

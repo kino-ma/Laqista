@@ -115,6 +115,9 @@ message LookupResponse {
 message DeployRequest {
   string source = 1;
   string name = 3;
+  // e.g.)
+  // modelless.ObjectDetection/Squeeze => 0.83
+  // face.Detector/Small => 0.65
   map<string, float> accuracies_percent = 4;
 }
 message DeployResponse {
