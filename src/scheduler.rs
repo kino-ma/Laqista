@@ -495,7 +495,13 @@ impl Cluster {
 
             let dur = Duration::from_millis(elapsed as _);
 
-            let info = &info_by_name[app];
+            let info = &info_by_name
+                .get(app)
+                .expect(&format!(
+                    "failed to get key '{}' from:\n{:?}",
+                    app, info_by_name
+                ))
+                .to_owned();
 
             self.app_stats
                 .0
