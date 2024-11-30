@@ -39,7 +39,7 @@ async fn schedule_wasm() {
     let request = LookupRequest {
         deployment_id: deployment.deployment.unwrap().id,
         qos: None,
-        name: "Infer".to_owned(),
+        service: "Infer".to_owned(),
     };
 
     let _resp = client.clone().lookup(request).await.unwrap().into_inner();
