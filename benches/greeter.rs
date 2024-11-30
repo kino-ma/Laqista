@@ -63,10 +63,10 @@ async fn setup_clients(
         .unwrap();
 
     let request = DeployRequest {
-        name: "face".to_owned(),
+        name: "hello".to_owned(),
         source: "https://github.com/kino-ma/Laqista/releases/download/v0.1.0/face_v0.1.0.tgz"
             .to_owned(),
-        accuracies_percent: HashMap::from([("Infer".to_owned(), 80.3)]),
+        accuracies_percent: HashMap::new(),
     };
 
     let deployment = client
