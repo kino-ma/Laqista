@@ -263,8 +263,19 @@ impl Scheduler for AuthoritativeScheduler {
     async fn lookup(&self, request: Request<LookupRequest>) -> RpcResult<Response<LookupResponse>> {
         let runtime = self.clone_inner().await;
 
-        let id = Uuid::parse_str(&request.get_ref().deployment_id)
-            .map_err(|e| Status::aborted(e.to_string()))?;
+        let LookupRequest {
+            deployment_id,
+            qos: maybe_qos,
+            name,
+        } = request.into_inner();
+
+        let id = Uuid::parse_str(&deployment_id).map_err(|e| Status::aborted(e.to_string()))?;
+
+        let qos = maybe_qos.unwrap_or_default();
+        let locality = qos
+            .locality
+            .try_into()
+            .map_err(<Error as Into<Status>>::into)?;
 
         let server_ids = runtime
             .cluster
@@ -276,7 +287,7 @@ impl Scheduler for AuthoritativeScheduler {
 
         let target = runtime
             .scheduler
-            .schedule(id, &request.get_ref().name, &stats_map, &apps_map)
+            .schedule(id, &name, &stats_map, &apps_map, &locality)
             .or_else(|| {
                 println!("WARN: failed to schedule. using random server");
                 runtime.cluster.servers.get(0).map(|s| s.clone())

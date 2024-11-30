@@ -3,6 +3,7 @@ package laqista;
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
+import "google/protobuf/struct.proto";
 
 /*
  * Core messages
@@ -38,9 +39,9 @@ message Group {
 }
 
 message QoS {
-  uint32 latency_ms = 1;
-  float accuracy_percent = 2;
-  Locality locality = 3;
+  optional uint32 latency_ms = 1;
+  optional float accuracy_percent = 2;
+  optional Locality locality = 3;
 }
 
 message Locality {
@@ -48,6 +49,7 @@ message Locality {
     string id = 1;
     string host = 2;
     string pubkey = 3;
+    google.protobuf.NullValue none = 4;
   }
 }
 

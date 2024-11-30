@@ -6,6 +6,7 @@ use std::{
 use chrono::{DateTime, Timelike, Utc};
 use mac_address::{get_mac_address, MacAddress, MacAddressError};
 use prost_types::Timestamp;
+use url::Url;
 use uuid::Uuid;
 
 use crate::proto::{AppInstanceLocations, ClusterState, Group, Server};
@@ -29,6 +30,12 @@ impl<T: Clone + Debug> IdMap<T> {
 
     pub fn iter(&self) -> Iter<Uuid, T> {
         self.0.iter()
+    }
+}
+
+impl<T: Clone + Debug> From<HashMap<Uuid, T>> for IdMap<T> {
+    fn from(map: HashMap<Uuid, T>) -> Self {
+        Self(map)
     }
 }
 
@@ -114,6 +121,20 @@ pub fn parse_rpc_path(path: &str) -> Option<(&str, &str, &str)> {
     let svc = iter.next()?;
 
     Some((pkg, svc, rpc))
+}
+
+pub fn is_hosts_equal(a: &str, b: &str) -> bool {
+    let a_url: Url = match a.parse() {
+        Ok(u) => u,
+        Err(_) => return false,
+    };
+
+    let b_url: Url = match b.parse() {
+        Ok(u) => u,
+        Err(_) => return false,
+    };
+
+    a_url.host_str() == b_url.host_str() && a_url.port() == b_url.port()
 }
 
 #[cfg(test)]

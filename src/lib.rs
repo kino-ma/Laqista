@@ -3,7 +3,7 @@
 use std::result::Result as StdResult;
 
 use laqista_core::DeploymentInfo;
-use proto::{AppInstanceLocations, Deployment, Group, Server, ServerState};
+use proto::{AppInstanceLocations, Deployment, Group, Locality, Server, ServerState};
 use server::DaemonState;
 use tonic::Status;
 use utils::{get_mac, IdMap};
@@ -216,5 +216,82 @@ impl TryFrom<AppInstanceLocations> for AppInstancesInfo {
             deployment,
             servers,
         })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum LocalitySpec {
+    NodeId(Uuid),
+    NodeHost(String),
+    PublicKey(String),
+    None,
+}
+
+impl LocalitySpec {
+    pub fn id(self) -> Option<Uuid> {
+        match self {
+            Self::NodeId(id) => Some(id),
+            _ => None,
+        }
+    }
+
+    pub fn host(self) -> Option<String> {
+        match self {
+            Self::NodeHost(host) => Some(host),
+            _ => None,
+        }
+    }
+
+    pub fn pubkey(self) -> Option<String> {
+        match self {
+            Self::PublicKey(key) => Some(key),
+            _ => None,
+        }
+    }
+
+    pub fn is_none(&self) -> bool {
+        match self {
+            Self::None => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_some(&self) -> bool {
+        !self.is_none()
+    }
+}
+
+impl TryFrom<Locality> for LocalitySpec {
+    type Error = Error;
+    fn try_from(locality: Locality) -> StdResult<Self, Self::Error> {
+        use proto::locality::Specification;
+
+        let spec = locality.specification.ok_or(Error::NoneError)?;
+        match spec {
+            Specification::Id(id) => Ok(Uuid::try_parse(&id).map(Self::NodeId)?),
+            Specification::Host(host) => Ok(Self::NodeHost(host)),
+            Specification::Pubkey(key) => Ok(Self::PublicKey(key)),
+            Specification::None(_) => Ok(Self::None),
+        }
+    }
+}
+
+impl TryFrom<Option<Locality>> for LocalitySpec {
+    type Error = Error;
+    fn try_from(locality: Option<Locality>) -> StdResult<Self, Self::Error> {
+        use proto::locality::Specification;
+
+        let spec = if let Some(l) = locality {
+            l.specification.ok_or(Error::NoneError)?
+        } else {
+            return Ok(Self::None);
+        };
+
+        match spec {
+            Specification::Id(id) => Ok(Uuid::try_parse(&id).map(Self::NodeId)?),
+            Specification::Host(host) => Ok(Self::NodeHost(host)),
+            Specification::Pubkey(key) => Ok(Self::PublicKey(key)),
+            Specification::None(_) => Ok(Self::None),
+        }
     }
 }

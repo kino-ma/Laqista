@@ -1,6 +1,11 @@
+use std::collections::HashMap;
+
 use uuid::Uuid;
 
-use crate::{utils::mul_as_percent, ServerInfo};
+use crate::{
+    utils::{is_hosts_equal, mul_as_percent},
+    LocalitySpec, ServerInfo,
+};
 
 use super::{
     interface::DeploymentScheduler,
@@ -19,8 +24,16 @@ impl DeploymentScheduler for MeanScheduler {
         name: &str,
         stats_map: &StatsMap,
         apps_map: &AppsMap,
+        locality: &LocalitySpec,
     ) -> Option<ServerInfo> {
-        let mut least_estimated = stats_map
+        let local_stats = self.filter_locality(stats_map.clone(), locality);
+
+        if local_stats.is_empty() {
+            println!("WARN: No servers matched locality specification: {locality:?}");
+            return None;
+        }
+
+        let mut least_estimated = local_stats
             .iter()
             .next()
             .or_else(|| {
@@ -32,7 +45,7 @@ impl DeploymentScheduler for MeanScheduler {
 
         let server_latencies = apps_map.0.get(&id)?;
 
-        for (id, stats) in stats_map.iter() {
+        for (id, stats) in local_stats.iter() {
             let utilized_rate = self.cpu_utilized_rate(stats);
             let free = 1. - utilized_rate;
 
@@ -56,8 +69,11 @@ impl DeploymentScheduler for MeanScheduler {
         name: &str,
         stats_map: &StatsMap,
         apps_map: &AppsMap,
+        locality: &LocalitySpec,
     ) -> Option<ServerInfo> {
-        let mut least_estimated = stats_map
+        let local_stats = self.filter_locality(stats_map.clone(), locality);
+
+        let mut least_estimated = local_stats
             .iter()
             .next()
             .or_else(|| {
@@ -69,7 +85,7 @@ impl DeploymentScheduler for MeanScheduler {
 
         let server_latencies = apps_map.0.get(&id)?;
 
-        for (id, stats) in stats_map.iter() {
+        for (id, stats) in local_stats.iter() {
             let utilized_rate = self.gpu_utilized_rate(stats);
             let free = 1. - utilized_rate;
 
@@ -108,6 +124,32 @@ impl DeploymentScheduler for MeanScheduler {
 }
 
 impl MeanScheduler {
+    fn filter_locality(
+        &self,
+        stats: StatsMap,
+        locality: &LocalitySpec,
+    ) -> HashMap<Uuid, ServerStats> {
+        use LocalitySpec::*;
+
+        if locality.is_some() {
+            stats
+                .0
+                .into_iter()
+                .filter(|(id, stats)| match locality {
+                    NodeId(spec_id) => id == spec_id,
+                    NodeHost(host) => is_hosts_equal(&host, &stats.server.addr),
+                    _ => {
+                        unimplemented!(
+                            "Scheduling with locality other than node id/host is not supproted"
+                        )
+                    }
+                })
+                .collect::<HashMap<_, _>>()
+        } else {
+            stats.0
+        }
+    }
+
     fn gpu_utilized_rate(&self, stats: &ServerStats) -> f64 {
         let total: f64 = stats.windows().map(|w| w.nanos as f64).sum();
 
