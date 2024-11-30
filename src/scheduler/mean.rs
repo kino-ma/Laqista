@@ -26,6 +26,11 @@ impl DeploymentScheduler for MeanScheduler {
         apps_map: &AppsMap,
         qos: QoSSpec,
     ) -> Option<ServerInfo> {
+        // `MeanSchedule::schedule()` returns the least utilized node while satisfying QoS specifications.
+        // If no node can satisfy the requirement, it returns the node whose estimated latency is shortest.
+
+        let required_latency = qos.latency.unwrap_or(u32::MAX);
+
         let local_stats = self.filter_locality(stats_map.clone(), &qos.locality);
 
         if local_stats.is_empty() {
@@ -36,7 +41,7 @@ impl DeploymentScheduler for MeanScheduler {
             return None;
         }
 
-        let mut least_estimated = local_stats
+        let mut target = local_stats
             .iter()
             .next()
             .or_else(|| {
@@ -44,7 +49,8 @@ impl DeploymentScheduler for MeanScheduler {
                 None
             })?
             .1;
-        let mut least_estimated_latency = 0.;
+        let mut target_latency = 0.;
+        let mut target_utilization = 0.;
 
         let server_latencies = apps_map.0.get(&id)?;
 
@@ -57,13 +63,18 @@ impl DeploymentScheduler for MeanScheduler {
             // We consider greatest latency will become `free-resource-ratio * average-latency`
             let estimated_latency = free * (latency.average.as_millis() as f64);
 
-            if estimated_latency < least_estimated_latency {
-                least_estimated = &stats;
-                least_estimated_latency = estimated_latency;
+            let satisfies = estimated_latency <= required_latency as f64;
+            let faster = estimated_latency <= target_latency;
+            let less_utilized = utilized_rate <= target_utilization;
+
+            if (faster || satisfies) && less_utilized {
+                target = stats;
+                target_latency = estimated_latency;
+                target_utilization = utilized_rate;
             }
         }
 
-        Some(least_estimated.server.clone())
+        Some(target.server.clone())
     }
 
     fn schedule_gpu(
