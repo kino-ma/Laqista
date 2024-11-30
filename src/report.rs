@@ -76,8 +76,7 @@ impl MetricsReporter {
         let windows = vec![metrics.clone().into()];
 
         let mut app_latencies = HashMap::new();
-        while !self.app_rx.is_empty() {
-            let metric = self.app_rx.recv().await.unwrap();
+        while let Ok(metric) = self.app_rx.try_recv() {
             let path = rpc_path(&metric.app, &metric.service, &metric.rpc);
             app_latencies.insert(path, metric.elapsed.as_millis() as _);
         }
