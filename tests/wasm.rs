@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use face::proto::DetectionRequest;
 use laqista::proto::{self, DeployRequest, LookupRequest};
 use laqista_core::client::retry;
@@ -16,6 +18,7 @@ async fn schedule_wasm() {
         name: "face".to_owned(),
         source: "https://github.com/kino-ma/Laqista/releases/download/v0.1.0/face_v0.1.0.tgz"
             .to_owned(),
+        accuracies_percent: HashMap::from([("Infer".to_owned(), 80.3)]),
     };
 
     let deployment = client
