@@ -21,9 +21,9 @@ pub struct DeploymentInfo {
 }
 
 impl DeploymentInfo {
-    pub fn new(name: String, source: String) -> Self {
+    pub fn new(name: String, source: String, accuracies: HashMap<String, f32>) -> Self {
         let id = Uuid::new_v4();
-        let accuracies = HashMap::new();
+
         Self {
             name,
             source,

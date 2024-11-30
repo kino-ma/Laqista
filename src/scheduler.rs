@@ -231,9 +231,13 @@ impl Scheduler for AuthoritativeScheduler {
     async fn deploy(&self, request: Request<DeployRequest>) -> RpcResult<Response<DeployResponse>> {
         println!("deploy() called!!");
 
-        let DeployRequest { name, source, .. } = request.into_inner();
+        let DeployRequest {
+            name,
+            source,
+            accuracies_percent,
+        } = request.into_inner();
 
-        let deployment_info = DeploymentInfo::new(name, source.clone());
+        let deployment_info = DeploymentInfo::new(name, source.clone(), accuracies_percent);
         let deployment: Deployment = deployment_info.clone().into();
         println!("created info");
 
