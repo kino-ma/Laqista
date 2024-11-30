@@ -3,7 +3,7 @@
 use std::result::Result as StdResult;
 
 use laqista_core::DeploymentInfo;
-use proto::{AppInstanceLocations, Deployment, Group, Locality, Server, ServerState};
+use proto::{AppInstanceLocations, Deployment, Group, Locality, QoS, Server, ServerState};
 use server::DaemonState;
 use tonic::Status;
 use utils::{get_mac, IdMap};
@@ -215,6 +215,24 @@ impl TryFrom<AppInstanceLocations> for AppInstancesInfo {
         Ok(Self {
             deployment,
             servers,
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct QoSSpec {
+    pub latency: Option<u32>,
+    pub accuracy: Option<f32>,
+    pub locality: LocalitySpec,
+}
+
+impl TryFrom<QoS> for QoSSpec {
+    type Error = Error;
+    fn try_from(qos: QoS) -> StdResult<Self, Self::Error> {
+        Ok(Self {
+            latency: qos.latency_ms,
+            accuracy: qos.accuracy_percent,
+            locality: qos.locality.try_into()?,
         })
     }
 }

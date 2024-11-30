@@ -1,6 +1,6 @@
 use uuid::Uuid;
 
-use crate::{LocalitySpec, ServerInfo};
+use crate::{QoSSpec, ServerInfo};
 
 use super::stats::{AppsMap, ServerStats, StatsMap};
 
@@ -11,7 +11,7 @@ pub trait DeploymentScheduler: SchedulerClone + std::fmt::Debug + Send + Sync {
         name: &str,
         stats: &StatsMap,
         apps_map: &AppsMap,
-        locality: &LocalitySpec,
+        qos: QoSSpec,
     ) -> Option<ServerInfo>;
 
     fn schedule_gpu(
@@ -20,7 +20,7 @@ pub trait DeploymentScheduler: SchedulerClone + std::fmt::Debug + Send + Sync {
         name: &str,
         stats: &StatsMap,
         apps_map: &AppsMap,
-        locality: &LocalitySpec,
+        qos: QoSSpec,
     ) -> Option<ServerInfo>;
 
     fn least_utilized(&self, stats: &StatsMap) -> ServerInfo;

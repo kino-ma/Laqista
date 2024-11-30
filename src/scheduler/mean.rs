@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     utils::{is_hosts_equal, mul_as_percent},
-    LocalitySpec, ServerInfo,
+    LocalitySpec, QoSSpec, ServerInfo,
 };
 
 use super::{
@@ -24,12 +24,15 @@ impl DeploymentScheduler for MeanScheduler {
         name: &str,
         stats_map: &StatsMap,
         apps_map: &AppsMap,
-        locality: &LocalitySpec,
+        qos: QoSSpec,
     ) -> Option<ServerInfo> {
-        let local_stats = self.filter_locality(stats_map.clone(), locality);
+        let local_stats = self.filter_locality(stats_map.clone(), &qos.locality);
 
         if local_stats.is_empty() {
-            println!("WARN: No servers matched locality specification: {locality:?}");
+            println!(
+                "WARN: No servers matched locality specification: {:?}",
+                qos.locality
+            );
             return None;
         }
 
@@ -69,9 +72,9 @@ impl DeploymentScheduler for MeanScheduler {
         name: &str,
         stats_map: &StatsMap,
         apps_map: &AppsMap,
-        locality: &LocalitySpec,
+        qos: QoSSpec,
     ) -> Option<ServerInfo> {
-        let local_stats = self.filter_locality(stats_map.clone(), locality);
+        let local_stats = self.filter_locality(stats_map.clone(), &qos.locality);
 
         let mut least_estimated = local_stats
             .iter()

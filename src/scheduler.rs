@@ -23,7 +23,9 @@ use crate::proto::{
 };
 use crate::server::{DaemonState, StateSender};
 use crate::utils::{parse_rpc_path, IdMap};
-use crate::{AppInstanceMap, AppInstancesInfo, DeploymentInfo, GroupInfo, RpcResult, ServerInfo};
+use crate::{
+    AppInstanceMap, AppInstancesInfo, DeploymentInfo, GroupInfo, QoSSpec, RpcResult, ServerInfo,
+};
 use crate::{Error, Result};
 
 use self::interface::DeploymentScheduler;
@@ -271,9 +273,8 @@ impl Scheduler for AuthoritativeScheduler {
 
         let id = Uuid::parse_str(&deployment_id).map_err(|e| Status::aborted(e.to_string()))?;
 
-        let qos = maybe_qos.unwrap_or_default();
-        let locality = qos
-            .locality
+        let qos: QoSSpec = maybe_qos
+            .unwrap_or_default()
             .try_into()
             .map_err(<Error as Into<Status>>::into)?;
 
@@ -287,7 +288,7 @@ impl Scheduler for AuthoritativeScheduler {
 
         let target = runtime
             .scheduler
-            .schedule(id, &name, &stats_map, &apps_map, &locality)
+            .schedule(id, &name, &stats_map, &apps_map, qos)
             .or_else(|| {
                 println!("WARN: failed to schedule. using random server");
                 runtime.cluster.servers.get(0).map(|s| s.clone())
