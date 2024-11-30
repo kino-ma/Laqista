@@ -273,10 +273,18 @@ impl Scheduler for AuthoritativeScheduler {
         let LookupRequest {
             deployment_id,
             qos: maybe_qos,
-            name,
+            service,
         } = request.into_inner();
 
         let id = Uuid::parse_str(&deployment_id).map_err(|e| Status::aborted(e.to_string()))?;
+        let app = runtime
+            .deployments
+            .0
+            .get(&id)
+            .ok_or(Status::aborted(format!(
+                "Application with that id not found: {}",
+                id
+            )))?;
 
         let qos: QoSSpec = maybe_qos
             .unwrap_or_default()
@@ -292,14 +300,18 @@ impl Scheduler for AuthoritativeScheduler {
         let apps_map = runtime.cluster.app_stats.clone();
 
         let rpc =
-            AppRpc::from_str(&name).map_err(|_| Status::aborted("failed to parse rpc path"))?;
+            AppRpc::from_str(&service).map_err(|_| Status::aborted("failed to parse rpc path"))?;
 
         let target = runtime
             .scheduler
-            .schedule(&rpc, &stats_map, &apps_map, qos)
+            .schedule(&rpc, &app, &stats_map, &apps_map, qos)
             .or_else(|| {
                 println!("WARN: failed to schedule. using random server");
-                runtime.cluster.servers.get(0).map(|s| s.clone())
+                runtime
+                    .cluster
+                    .servers
+                    .get(0)
+                    .map(|s| (s.clone(), rpc.clone()))
             })
             .ok_or(Status::aborted("Failed to schedule: No server found"))?
             .clone();
@@ -316,9 +328,9 @@ impl Scheduler for AuthoritativeScheduler {
                     .cluster
                     .server_stats
                     .0
-                    .get(&target_moved.id)
+                    .get(&target_moved.0.id)
                     .ok_or(())?;
-                runtime.scheduler.needs_scale_out(&target_moved, stats)
+                runtime.scheduler.needs_scale_out(&target_moved.0, stats)
             };
 
             if should_scale {
@@ -335,7 +347,8 @@ impl Scheduler for AuthoritativeScheduler {
         Ok(Response::new(LookupResponse {
             success: true,
             deployment_id: id.to_string(),
-            server: Some(target.into()),
+            server: Some(target.0.into()),
+            rpc: rpc.to_string(),
         }))
     }
 

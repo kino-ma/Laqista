@@ -1,7 +1,7 @@
 use core::f32;
 use std::collections::HashMap;
 
-use laqista_core::{AppRpc, AppService};
+use laqista_core::{AppRpc, AppService, DeploymentInfo};
 use uuid::Uuid;
 
 use crate::{
@@ -23,13 +23,15 @@ impl DeploymentScheduler for MeanScheduler {
     fn schedule(
         &self,
         rpc: &AppRpc,
+        app: &DeploymentInfo,
         stats_map: &StatsMap,
         apps_map: &AppsMap,
         qos: QoSSpec,
-    ) -> Option<ServerInfo> {
+    ) -> Option<(ServerInfo, AppRpc)> {
         self.abstract_schedule(
             |s| self.cpu_utilized_rate(s),
             &rpc.to_owned().into(),
+            app,
             stats_map,
             apps_map,
             qos,
@@ -39,13 +41,15 @@ impl DeploymentScheduler for MeanScheduler {
     fn schedule_gpu(
         &self,
         rpc: &AppRpc,
+        app: &DeploymentInfo,
         stats_map: &StatsMap,
         apps_map: &AppsMap,
         qos: QoSSpec,
-    ) -> Option<ServerInfo> {
+    ) -> Option<(ServerInfo, AppRpc)> {
         self.abstract_schedule(
             |s| self.gpu_utilized_rate(s),
             &rpc.to_owned().into(),
+            app,
             stats_map,
             apps_map,
             qos,
@@ -80,15 +84,26 @@ impl MeanScheduler {
         &self,
         get_util: F,
         service: &AppService,
+        app: &DeploymentInfo,
         stats_map: &StatsMap,
         apps_map: &AppsMap,
         qos: QoSSpec,
-    ) -> Option<ServerInfo>
+    ) -> Option<(ServerInfo, AppRpc)>
     where
         F: Fn(&ServerStats) -> f64,
     {
         let required_accuracy = qos.accuracy.unwrap_or(f32::MIN);
         let required_latency = qos.latency.unwrap_or(u32::MAX);
+
+        let available_rpcs = app
+            .accuracies
+            .iter()
+            .filter(|(_, acc)| **acc > required_accuracy)
+            .collect::<HashMap<_, _>>();
+
+        if available_rpcs.is_empty() {
+            return None;
+        }
 
         let local_stats = self.filter_locality(stats_map.clone(), &qos.locality);
 
@@ -108,6 +123,7 @@ impl MeanScheduler {
                 None
             })?
             .1;
+        let mut target_rpc = AppRpc::new("", "", "");
         let mut target_latency = 0.;
         let mut target_utilization = 0.;
 
@@ -117,7 +133,12 @@ impl MeanScheduler {
             let utilized_rate = get_util(stats);
             let free = 1. - utilized_rate;
 
-            let latencies = server_latencies.0.get(id)?.lookup_service(service);
+            let latencies = server_latencies
+                .0
+                .get(id)?
+                .lookup_service(service)
+                .into_iter()
+                .filter(|(rpc, _)| available_rpcs.keys().find(|k| *k == rpc).is_some());
 
             for (rpc, latency) in latencies {
                 // We consider greatest latency will become `free-resource-ratio * average-latency`
@@ -129,13 +150,18 @@ impl MeanScheduler {
 
                 if (faster || satisfies) && less_utilized {
                     target = stats;
+                    target_rpc = rpc.clone();
                     target_latency = estimated_latency;
                     target_utilization = utilized_rate;
                 }
             }
         }
 
-        Some(target.server.clone())
+        if target_rpc.package == "" {
+            None
+        } else {
+            Some((target.server.clone(), target_rpc))
+        }
     }
 
     fn filter_locality(
