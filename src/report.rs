@@ -71,8 +71,6 @@ impl MetricsReporter {
     }
 
     pub async fn report(&mut self, metrics: &MonitorWindow) -> Result<(), Box<dyn Error>> {
-        let mut client = SchedulerClient::connect(self.scheduler.addr.clone()).await?;
-
         let server = Some(self.server.clone().into());
 
         let windows = vec![metrics.clone().into()];
@@ -89,6 +87,19 @@ impl MetricsReporter {
             server,
             app_latencies,
         };
+
+        let addr = self.scheduler.addr.clone();
+        let mut counter = 0;
+        let mut client = loop {
+            let result = SchedulerClient::connect(addr.clone())
+                .await
+                .map_err(|e| LaqistaError::from(e));
+
+            counter += 1;
+            if result.is_ok() || counter >= 3 {
+                break result;
+            }
+        }?;
 
         let report_result = client.report(req).await;
 

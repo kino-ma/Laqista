@@ -2,7 +2,6 @@ pub mod interface;
 pub mod mean;
 pub mod stats;
 
-use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -213,8 +212,7 @@ impl Scheduler for AuthoritativeScheduler {
 
         let stats = ServerStats::from_stats(server.clone(), windows);
 
-        let mut lock = self.runtime.lock().await;
-        let runtime = lock.borrow_mut();
+        let mut runtime = SchedulerRuntime::clone_inner(&self.runtime).await;
 
         runtime.cluster.insert_stats(stats);
         let info_by_name = runtime.database.list_by_names().await;
@@ -223,6 +221,8 @@ impl Scheduler for AuthoritativeScheduler {
             .push_latency(&server, info_by_name, app_latencies);
 
         let cluster = runtime.cluster.clone().into();
+
+        self.runtime.lock().await.clone_from(runtime);
 
         Ok(Response::new(ReportResponse {
             success: true,
@@ -396,6 +396,13 @@ impl SchedulerRuntime {
     pub async fn clone_inner(arc: &Arc<Mutex<Self>>) -> Self {
         println!("WARN: cloning SchedulerRuntime");
         arc.lock().await.clone()
+    }
+
+    pub fn clone_from(&mut self, other: Self) {
+        self.cluster = other.cluster;
+        self.scheduler = other.scheduler;
+        self.deployments = other.deployments;
+        self.database = other.database;
     }
 }
 
