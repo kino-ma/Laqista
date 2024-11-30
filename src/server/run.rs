@@ -206,7 +206,7 @@ impl ServerRunner {
     ) -> Result<DaemonState> {
         let server = daemon.runtime.lock().await.info.clone();
 
-        let (app_tx, app_rx) = mpsc::channel(16);
+        let (app_tx, app_rx) = mpsc::channel(1024);
 
         let scheduler_info = scheduler
             .runtime
@@ -239,7 +239,7 @@ impl ServerRunner {
         server: ServerInfo,
         group: GroupInfo,
     ) -> Result<DaemonState> {
-        let (app_tx, app_rx) = mpsc::channel(16);
+        let (app_tx, app_rx) = mpsc::channel(1024);
 
         let reporter_token =
             self.start_reporter(server.clone(), group.scheduler_info.clone(), app_rx);
@@ -262,7 +262,7 @@ impl ServerRunner {
     ) -> Result<DaemonState> {
         println!("Starting fog server...");
 
-        let (app_tx, app_rx) = mpsc::channel(16);
+        let (app_tx, app_rx) = mpsc::channel(1024);
 
         let reporter_token = self.start_reporter(server.clone(), server.clone(), app_rx);
 
@@ -284,7 +284,7 @@ impl ServerRunner {
     ) -> Result<DaemonState> {
         println!("Starting dew server...");
 
-        let (app_tx, app_rx) = mpsc::channel(16);
+        let (app_tx, app_rx) = mpsc::channel(1024);
 
         let reporter_token = self.start_reporter(server.clone(), server.clone(), app_rx);
 
