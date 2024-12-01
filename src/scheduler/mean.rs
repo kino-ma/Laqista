@@ -22,7 +22,7 @@ const SCALEOUT_THREASHOLD: usize = 70;
 impl DeploymentScheduler for MeanScheduler {
     fn schedule(
         &self,
-        rpc: &AppRpc,
+        rpc: &AppService,
         app: &DeploymentInfo,
         stats_map: &StatsMap,
         apps_map: &AppsMap,
@@ -40,7 +40,7 @@ impl DeploymentScheduler for MeanScheduler {
 
     fn schedule_gpu(
         &self,
-        rpc: &AppRpc,
+        rpc: &AppService,
         app: &DeploymentInfo,
         stats_map: &StatsMap,
         apps_map: &AppsMap,
