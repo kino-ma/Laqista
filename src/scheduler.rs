@@ -414,7 +414,6 @@ impl SchedulerRuntime {
     }
 
     pub async fn clone_inner(arc: &Arc<Mutex<Self>>) -> Self {
-        println!("WARN: cloning SchedulerRuntime");
         arc.lock().await.clone()
     }
 
