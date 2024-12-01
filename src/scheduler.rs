@@ -302,7 +302,7 @@ impl Scheduler for AuthoritativeScheduler {
         let apps_map = runtime.cluster.app_stats.clone();
 
         let service = AppService::from_str(&service)
-            .map_err(|_| Status::aborted("failed to parse rpc path"))?;
+            .map_err(|_| Status::aborted(format!("failed to parse service path '{service}'")))?;
 
         let (target, rpc) = runtime
             .scheduler
