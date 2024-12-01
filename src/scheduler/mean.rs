@@ -131,7 +131,6 @@ impl MeanScheduler {
         let server_latencies = apps_map.0.get(service)?;
 
         for (id, stats) in local_stats.iter() {
-            assert_eq!(id, &stats.server.id);
             let utilized_rate = get_util(stats);
             let free = 1. - utilized_rate;
             let factor = 1. / if free > 0.0 { free } else { 0.01 };
@@ -150,7 +149,7 @@ impl MeanScheduler {
                 let satisfies = estimated_latency <= required_latency as f64;
                 let faster = estimated_latency <= target_latency;
                 let less_utilized = utilized_rate < target_utilization;
-                let both_free = utilized_rate <= 30. && target_utilization <= 30.;
+                let both_free = utilized_rate <= 0.3 && target_utilization <= 0.3;
 
                 // Select target if either:
                 //   - No target has satisfied and faster
