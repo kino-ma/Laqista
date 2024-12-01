@@ -124,14 +124,17 @@ impl MeanScheduler {
             })?
             .1;
         let mut target_rpc = AppRpc::new("", "", "");
-        let mut target_latency = 0.;
-        let mut target_utilization = 0.;
+        let mut target_latency = f64::MAX;
+        let mut target_utilization = 100.0;
+        let mut target_satisfies = false;
 
         let server_latencies = apps_map.0.get(service)?;
 
         for (id, stats) in local_stats.iter() {
+            assert_eq!(id, &stats.server.id);
             let utilized_rate = get_util(stats);
             let free = 1. - utilized_rate;
+            let factor = 1. / if free > 0.0 { free } else { 0.01 };
 
             let latencies = server_latencies
                 .0
@@ -142,22 +145,31 @@ impl MeanScheduler {
 
             for (rpc, latency) in latencies {
                 // We consider greatest latency will become `free-resource-ratio * average-latency`
-                let estimated_latency = free * (latency.average.as_millis() as f64);
+                let estimated_latency = factor * (latency.average.as_millis() as f64);
 
                 let satisfies = estimated_latency <= required_latency as f64;
                 let faster = estimated_latency <= target_latency;
-                let less_utilized = utilized_rate <= target_utilization;
+                let less_utilized = utilized_rate < target_utilization;
+                let both_free = utilized_rate <= 30. && target_utilization <= 30.;
 
-                if (faster || satisfies) && less_utilized {
+                // Select target if either:
+                //   - No target has satisfied and faster
+                //   - Satisfies the rquirements and less utilized
+                if !target_satisfies && (satisfies || faster)
+                    || satisfies && less_utilized
+                    || (satisfies && both_free && faster)
+                {
                     target = stats;
                     target_rpc = rpc.clone();
                     target_latency = estimated_latency;
                     target_utilization = utilized_rate;
+                    target_satisfies = satisfies;
                 }
             }
         }
 
         if target_rpc.package == "" {
+            println!("No node matched specified qos");
             None
         } else {
             Some((target.server.clone(), target_rpc))
@@ -186,12 +198,17 @@ impl MeanScheduler {
                 })
                 .collect::<HashMap<_, _>>()
         } else {
+            println!("no locality");
             stats.0
         }
     }
 
     fn gpu_utilized_rate(&self, stats: &ServerStats) -> f64 {
         let total: f64 = stats.windows().map(|w| w.nanos as f64).sum();
+
+        if total <= 0. {
+            return 0.;
+        }
 
         let utilized: f64 = stats
             .windows()
@@ -204,6 +221,10 @@ impl MeanScheduler {
     fn cpu_utilized_rate(&self, stats: &ServerStats) -> f64 {
         let total: f64 = stats.windows().map(|w| w.nanos as f64).sum();
 
+        if total <= 0. {
+            return 0.;
+        }
+
         let utilized: f64 = stats
             .windows()
             .map(|w| mul_as_percent(w.nanos, w.utilization.cpu as _) as f64)
@@ -215,10 +236,10 @@ impl MeanScheduler {
 
 #[cfg(test)]
 mod test {
-    use std::time::Duration;
+    use std::time::{Duration, SystemTime};
 
     use crate::{
-        proto::{MonitorWindow, ResourceUtilization},
+        proto::{MonitorWindow, ResourceUtilization, TimeWindow},
         scheduler::stats::AppLatency,
         utils::IdMap,
     };
@@ -229,12 +250,12 @@ mod test {
     fn test_schedule_qos() {
         let scheduler = MeanScheduler {};
         let app = get_deployment();
-        let service = AppService::new("laqista", "Schedule");
-        let stats = get_stats_map();
+        let service = AppService::new("laqista", "Scheduler");
+        let stats = get_stats_map(None);
         let apps_map = get_apps_map(service.clone());
         let qos = QoSSpec {
-            latency: Some(0),
-            accuracy: Some(0.),
+            latency: None,
+            accuracy: None,
             locality: LocalitySpec::None,
         };
 
@@ -247,8 +268,74 @@ mod test {
         assert_eq!(rpc, service.rpc("fifty"));
     }
 
+    #[test]
+    fn test_schedule_qos_accurate() {
+        let scheduler = MeanScheduler {};
+        let app = get_deployment();
+        let service = AppService::new("laqista", "Scheduler");
+        let stats = get_stats_map(None);
+        let apps_map = get_apps_map(service.clone());
+        let qos = QoSSpec {
+            latency: None,
+            accuracy: Some(65.),
+            locality: LocalitySpec::None,
+        };
+
+        let Some((server, rpc)) = scheduler.schedule(&service, &app, &stats, &apps_map, qos) else {
+            panic!("failed to schedule")
+        };
+
+        // Should return fastest rpc & host
+        assert_eq!(server.id, Uuid::from_u128(3));
+        assert_eq!(rpc, service.rpc("seventy"));
+    }
+
+    #[test]
+    fn test_schedule_qos_util() {
+        let scheduler = MeanScheduler {};
+        let app = get_deployment();
+        let service = AppService::new("laqista", "Scheduler");
+        let stats = get_stats_map(Some((40., 10., 70.)));
+        let apps_map = get_apps_map(service.clone());
+        let qos = QoSSpec {
+            latency: None,
+            accuracy: None,
+            locality: LocalitySpec::None,
+        };
+
+        let Some((server, rpc)) = scheduler.schedule(&service, &app, &stats, &apps_map, qos) else {
+            panic!("failed to schedule")
+        };
+
+        // Should return fastest rpc & host
+        assert_eq!(server.id, Uuid::from_u128(2));
+        assert_eq!(rpc, service.rpc("fifty"));
+    }
+
+    #[test]
+    fn test_schedule_qos_latency_and_util() {
+        let scheduler = MeanScheduler {};
+        let app = get_deployment();
+        let service = AppService::new("laqista", "Scheduler");
+        let stats = get_stats_map(Some((40., 10., 70.)));
+        let apps_map = get_apps_map(service.clone());
+        let qos = QoSSpec {
+            latency: Some(100),
+            accuracy: Some(55.),
+            locality: LocalitySpec::None,
+        };
+
+        let Some((server, rpc)) = scheduler.schedule(&service, &app, &stats, &apps_map, qos) else {
+            panic!("failed to schedule")
+        };
+
+        // Should return fastest rpc & host
+        assert_eq!(server.id, Uuid::from_u128(1));
+        assert_eq!(rpc, service.rpc("sixty"));
+    }
+
     fn get_deployment() -> DeploymentInfo {
-        let service = AppService::new("laqista", "Schedule");
+        let service = AppService::new("laqista", "Scheduler");
         let services = HashMap::from([(
             service.clone(),
             vec![
@@ -279,17 +366,26 @@ mod test {
         }
     }
 
-    fn get_server_stats(_i: u128) -> ServerStats {
-        let mut s = ServerStats::new(get_server(1));
+    fn get_server_stats(i: u128, util: f32) -> ServerStats {
+        let mut s = ServerStats::new(get_server(i));
+        let u = util as _;
         let window = MonitorWindow {
-            window: None,
+            window: Some(TimeWindow {
+                start: Some(SystemTime::now().into()),
+                end: Some(
+                    SystemTime::now()
+                        .checked_add(Duration::from_secs(1))
+                        .unwrap()
+                        .into(),
+                ),
+            }),
             utilization: Some(ResourceUtilization {
-                cpu: 0,
-                ram_total: 0,
-                ram_used: 0,
-                gpu: 0,
-                vram_total: 0,
-                vram_used: 0,
+                cpu: u,
+                ram_total: u,
+                ram_used: u,
+                gpu: u,
+                vram_total: u,
+                vram_used: u,
             }),
         };
         s.append(vec![window]);
@@ -297,11 +393,12 @@ mod test {
         s
     }
 
-    fn get_stats_map() -> StatsMap {
+    fn get_stats_map(utils: Option<(f32, f32, f32)>) -> StatsMap {
+        let utils = utils.unwrap_or_default();
         let map = HashMap::from([
-            (Uuid::from_u128(1), get_server_stats(1)),
-            (Uuid::from_u128(2), get_server_stats(2)),
-            (Uuid::from_u128(3), get_server_stats(3)),
+            (Uuid::from_u128(1), get_server_stats(1, utils.0)),
+            (Uuid::from_u128(2), get_server_stats(2, utils.1)),
+            (Uuid::from_u128(3), get_server_stats(3, utils.2)),
         ]);
 
         IdMap(map)
