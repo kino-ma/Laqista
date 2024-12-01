@@ -7,7 +7,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use laqista_core::{try_collect_accuracies, AppRpc};
+use laqista_core::{try_collect_accuracies, AppRpc, AppService};
 use stats::{AppLatency, AppsMap};
 use tokio::sync::Mutex;
 use tonic::transport::Channel;
@@ -239,12 +239,14 @@ impl Scheduler for AuthoritativeScheduler {
             name,
             source,
             accuracies_percent,
+            rpcs,
         } = request.into_inner();
 
         let accuracies = try_collect_accuracies(accuracies_percent)
             .ok_or(Status::aborted("failed to parse rpc path"))?;
 
-        let deployment_info = DeploymentInfo::new(name, source.clone(), accuracies);
+        let deployment_info = DeploymentInfo::from_rpcs(name, source.clone(), &rpcs, accuracies)
+            .ok_or(Status::aborted("failed to parse rpc names"))?;
         let deployment: Deployment = deployment_info.clone().into();
         println!("created info");
 
@@ -299,19 +301,16 @@ impl Scheduler for AuthoritativeScheduler {
         let stats_map = runtime.cluster.server_stats.clone_by_ids(&server_ids);
         let apps_map = runtime.cluster.app_stats.clone();
 
-        let rpc =
-            AppRpc::from_str(&service).map_err(|_| Status::aborted("failed to parse rpc path"))?;
+        let service = AppService::from_str(&service)
+            .map_err(|_| Status::aborted("failed to parse rpc path"))?;
 
-        let target = runtime
+        let (target, rpc) = runtime
             .scheduler
-            .schedule(&rpc, &app, &stats_map, &apps_map, qos)
+            .schedule(&service, &app, &stats_map, &apps_map, qos)
             .or_else(|| {
                 println!("WARN: failed to schedule. using random server");
-                runtime
-                    .cluster
-                    .servers
-                    .get(0)
-                    .map(|s| (s.clone(), rpc.clone()))
+                todo!("get rpc from database");
+                // runtime.cluster.servers.get(0).map(|s| (s.clone(), ()))
             })
             .ok_or(Status::aborted("Failed to schedule: No server found"))?
             .clone();
@@ -328,9 +327,9 @@ impl Scheduler for AuthoritativeScheduler {
                     .cluster
                     .server_stats
                     .0
-                    .get(&target_moved.0.id)
+                    .get(&target_moved.id)
                     .ok_or(())?;
-                runtime.scheduler.needs_scale_out(&target_moved.0, stats)
+                runtime.scheduler.needs_scale_out(&target_moved, stats)
             };
 
             if should_scale {
@@ -347,7 +346,7 @@ impl Scheduler for AuthoritativeScheduler {
         Ok(Response::new(LookupResponse {
             success: true,
             deployment_id: id.to_string(),
-            server: Some(target.0.into()),
+            server: Some(target.into()),
             rpc: rpc.to_string(),
         }))
     }

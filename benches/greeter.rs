@@ -5,6 +5,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
 use futures::lock::Mutex;
 use laqista::proto::{DeployRequest, Deployment, LookupRequest};
+use laqista_core::AppService;
 use tokio::runtime::Runtime;
 use tonic::transport::Channel;
 
@@ -62,10 +63,17 @@ async fn setup_clients(
         .await
         .unwrap();
 
+    let wasm_service = AppService::new("face", "Detector");
+    let onnx_service = AppService::new("face", "ObjectDetection");
+
     let request = DeployRequest {
         name: "hello".to_owned(),
         source: "https://github.com/kino-ma/Laqista/releases/download/v0.1.0/face_v0.1.0.tgz"
             .to_owned(),
+        rpcs: vec![
+            wasm_service.rpc("Runetection").to_string(),
+            onnx_service.rpc("Squeeze").to_string(),
+        ],
         accuracies_percent: HashMap::new(),
     };
 

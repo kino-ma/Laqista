@@ -212,3 +212,130 @@ impl MeanScheduler {
         utilized / total
     }
 }
+
+#[cfg(test)]
+mod test {
+    use std::time::Duration;
+
+    use crate::{
+        proto::{MonitorWindow, ResourceUtilization},
+        scheduler::stats::AppLatency,
+        utils::IdMap,
+    };
+
+    use super::*;
+
+    #[test]
+    fn test_schedule_qos() {
+        let scheduler = MeanScheduler {};
+        let app = get_deployment();
+        let service = AppService::new("laqista", "Schedule");
+        let stats = get_stats_map();
+        let apps_map = get_apps_map(service.clone());
+        let qos = QoSSpec {
+            latency: Some(0),
+            accuracy: Some(0.),
+            locality: LocalitySpec::None,
+        };
+
+        let Some((server, rpc)) = scheduler.schedule(&service, &app, &stats, &apps_map, qos) else {
+            panic!("failed to schedule")
+        };
+
+        // Should return fastest rpc & host
+        assert_eq!(server.id, Uuid::from_u128(3));
+        assert_eq!(rpc, service.rpc("fifty"));
+    }
+
+    fn get_deployment() -> DeploymentInfo {
+        let service = AppService::new("laqista", "Schedule");
+        let services = HashMap::from([(
+            service.clone(),
+            vec![
+                service.rpc("fifty"),
+                service.rpc("sixty"),
+                service.rpc("seventy"),
+            ],
+        )]);
+
+        DeploymentInfo {
+            id: Uuid::default(),
+            name: "laqista".to_owned(),
+            source: "https://github.com/kino-ma/Laqista/releases/download/v0.1.0/face_v0.1.0.tgz"
+                .to_owned(),
+            services,
+            accuracies: HashMap::from([
+                (service.rpc("fifty"), 50.),
+                (service.rpc("sixty"), 60.),
+                (service.rpc("seventy"), 70.),
+            ]),
+        }
+    }
+
+    fn get_server(i: u128) -> ServerInfo {
+        ServerInfo {
+            id: Uuid::from_u128(i),
+            addr: format!("http://127.0.0.{i}:50051"),
+        }
+    }
+
+    fn get_server_stats(_i: u128) -> ServerStats {
+        let mut s = ServerStats::new(get_server(1));
+        let window = MonitorWindow {
+            window: None,
+            utilization: Some(ResourceUtilization {
+                cpu: 0,
+                ram_total: 0,
+                ram_used: 0,
+                gpu: 0,
+                vram_total: 0,
+                vram_used: 0,
+            }),
+        };
+        s.append(vec![window]);
+
+        s
+    }
+
+    fn get_stats_map() -> StatsMap {
+        let map = HashMap::from([
+            (Uuid::from_u128(1), get_server_stats(1)),
+            (Uuid::from_u128(2), get_server_stats(2)),
+            (Uuid::from_u128(3), get_server_stats(3)),
+        ]);
+
+        IdMap(map)
+    }
+
+    fn get_app_latency(latencies: &[(&str, u32)]) -> AppLatency {
+        let mut l = AppLatency::new(get_deployment());
+
+        for (name, ms) in latencies {
+            let rpc = AppRpc::new("laqista", "Scheduler", name);
+            let elapsed = Duration::from_millis(*ms as _);
+            l.insert(&rpc, elapsed);
+        }
+
+        l
+    }
+
+    fn get_apps_map(service: AppService) -> AppsMap {
+        let latency_map = HashMap::from([
+            (
+                Uuid::from_u128(1),
+                get_app_latency(&[("fifty", 50), ("sixty", 60), ("seventy", 70)]),
+            ),
+            (
+                Uuid::from_u128(2),
+                get_app_latency(&[("fifty", 100), ("sixty", 120), ("seventy", 140)]),
+            ),
+            (
+                Uuid::from_u128(3),
+                get_app_latency(&[("fifty", 40), ("sixty", 48), ("seventy", 56)]),
+            ),
+        ]);
+        let map = HashMap::from([(service, IdMap(latency_map))]);
+
+        AppsMap(map)
+    }
+}

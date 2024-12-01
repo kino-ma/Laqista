@@ -31,6 +31,7 @@ message Deployment {
   string source = 2;
   string name = 3;
   map<string, float> accuracies_percent = 4;
+  repeated string rpcs = 5;
 }
 
 message Group {
@@ -120,6 +121,8 @@ message DeployRequest {
   // modelless.ObjectDetection/Squeeze => 0.83
   // face.Detector/Small => 0.65
   map<string, float> accuracies_percent = 4;
+  // Names of RPCs in this deployment
+  repeated string rpcs = 5;
 }
 message DeployResponse {
   bool success = 1;

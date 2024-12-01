@@ -155,11 +155,10 @@ impl TryFrom<Deployment> for DeploymentInfo {
         let Deployment {
             name,
             source,
-            id,
+            id: _,
+            rpcs,
             accuracies_percent,
         } = deployment;
-        let id = Uuid::parse_str(&id)?;
-
         let accuracies = accuracies_percent
             .into_iter()
             .filter_map(|(path, acc)| {
@@ -168,12 +167,7 @@ impl TryFrom<Deployment> for DeploymentInfo {
             })
             .collect();
 
-        Ok(Self {
-            name,
-            source,
-            id,
-            accuracies,
-        })
+        Self::from_rpcs(name, source, &rpcs, accuracies).ok_or(Error::NoneError)
     }
 }
 
@@ -183,6 +177,7 @@ impl Into<Deployment> for DeploymentInfo {
             name,
             source,
             id,
+            services,
             accuracies,
         } = self;
         let id = id.to_string();
@@ -191,10 +186,19 @@ impl Into<Deployment> for DeploymentInfo {
             .map(|(rpc, acc)| (rpc.to_string(), acc))
             .collect();
 
+        let rpcs = services
+            .into_values()
+            .collect::<Vec<_>>()
+            .concat()
+            .into_iter()
+            .map(|r| r.to_string())
+            .collect();
+
         Deployment {
             name,
             source,
             id,
+            rpcs,
             accuracies_percent,
         }
     }

@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use face::proto::InferRequest;
 use image::{imageops::FilterType, GenericImageView, Pixel};
 use laqista::proto::{self, DeployRequest, LookupRequest};
+use laqista_core::AppService;
 
 static JPEG: &'static [u8] = include_bytes!("../data/sized-pelican.jpeg");
 static LABELS: &'static str = include_str!("../data/models/resnet-labels.txt");
@@ -18,15 +19,22 @@ async fn schedule_wasm() {
         .await
         .expect("failed to connect to the server");
 
-    let mut detector_client =
-        face::proto::detector_client::DetectorClient::connect(addr.to_owned())
+    let mut od_client =
+        face::proto::object_detection_client::ObjectDetectionClient::connect(addr.to_owned())
             .await
             .unwrap();
+
+    let wasm_service = AppService::new("face", "Detector");
+    let onnx_service = AppService::new("face", "ObjectDetection");
 
     let request = DeployRequest {
         name: "face".to_owned(),
         source: "https://github.com/kino-ma/Laqista/releases/download/v0.1.0/face_v0.1.0.tgz"
             .to_owned(),
+        rpcs: vec![
+            wasm_service.rpc("main").to_string(),
+            onnx_service.rpc("Squeeze").to_string(),
+        ],
         accuracies_percent: HashMap::from([("Infer".to_owned(), 80.3)]),
     };
 
@@ -65,7 +73,7 @@ async fn schedule_wasm() {
         data: input.to_vec(),
     };
 
-    let resp = detector_client.infer(request).await.unwrap().into_inner();
+    let resp = od_client.squeeze(request).await.unwrap().into_inner();
     let mut probs: Vec<_> = resp
         .squeezenet0_flatten0_reshape0
         .iter()

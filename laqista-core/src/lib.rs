@@ -30,19 +30,46 @@ pub struct DeploymentInfo {
     pub id: Uuid,
     pub name: String,
     pub source: String,
+    pub services: HashMap<AppService, Vec<AppRpc>>,
     pub accuracies: HashMap<AppRpc, f32>,
 }
 
 impl DeploymentInfo {
-    pub fn new(name: String, source: String, accuracies: HashMap<AppRpc, f32>) -> Self {
+    pub fn new(
+        name: String,
+        source: String,
+        services: HashMap<AppService, Vec<AppRpc>>,
+        accuracies: HashMap<AppRpc, f32>,
+    ) -> Self {
         let id = Uuid::new_v4();
 
         Self {
             name,
             source,
             id,
+            services,
             accuracies,
         }
+    }
+
+    pub fn from_rpcs<S: AsRef<str>>(
+        name: String,
+        source: String,
+        rpcs: &[S],
+        accuracies: HashMap<AppRpc, f32>,
+    ) -> Option<Self> {
+        let mut services = HashMap::new();
+
+        for rpc_name in rpcs {
+            let rpc = AppRpc::from_str(rpc_name.as_ref()).ok()?;
+            let service = rpc.clone().into();
+            services
+                .entry(service)
+                .and_modify(|v: &mut Vec<AppRpc>| v.push(rpc.clone()))
+                .or_insert(vec![rpc]);
+        }
+
+        Some(Self::new(name, source, services, accuracies))
     }
 }
 
@@ -56,6 +83,10 @@ impl AppService {
 
     pub fn contains(&self, rpc: &AppRpc) -> bool {
         self.package == rpc.package && self.service == rpc.service
+    }
+
+    pub fn rpc(&self, name: &str) -> AppRpc {
+        AppRpc::new(&self.package, &self.service, name)
     }
 }
 

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use face::proto::DetectionRequest;
 use laqista::proto::{self, DeployRequest, LookupRequest};
-use laqista_core::client::retry;
+use laqista_core::{client::retry, AppService};
 
 static JPEG: &'static [u8] = include_bytes!("../data/pelican.jpeg");
 
@@ -14,10 +14,17 @@ async fn schedule_wasm() {
         .await
         .expect("failed to connect to the server");
 
+    let wasm_service = AppService::new("face", "Detector");
+    let onnx_service = AppService::new("face", "ObjectDetection");
+
     let request = DeployRequest {
         name: "face".to_owned(),
         source: "https://github.com/kino-ma/Laqista/releases/download/v0.1.0/face_v0.1.0.tgz"
             .to_owned(),
+        rpcs: vec![
+            wasm_service.rpc("main").to_string(),
+            onnx_service.rpc("Squeeze").to_string(),
+        ],
         accuracies_percent: HashMap::from([("Infer".to_owned(), 80.3)]),
     };
 

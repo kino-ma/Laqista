@@ -259,6 +259,7 @@ mod test {
             name: "test".to_owned(),
             source: "https://github.com/kino-ma/laqista/releases/download/v0.1.0/face_v0.1.0.tgz"
                 .to_owned(),
+            services: HashMap::new(),
             accuracies: HashMap::new(),
         };
         db.add_app(&info).await.unwrap();

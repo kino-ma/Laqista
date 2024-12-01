@@ -9,7 +9,8 @@ use tonic::{Request, Response, Status};
 use wasmer::Value;
 
 use crate::proto::{
-    detector_server::Detector, DetectionReply, DetectionRequest, InferReply, InferRequest,
+    detector_server::Detector, object_detection_server::ObjectDetection, DetectionReply,
+    DetectionRequest, InferReply, InferRequest,
 };
 
 type ServerPointer = Arc<Mutex<AbtsractServer<InferRequest, InferReply>>>;
@@ -29,20 +30,6 @@ impl FaceServer {
 
 #[tonic::async_trait]
 impl Detector for FaceServer {
-    async fn infer(&self, request: Request<InferRequest>) -> Result<Response<InferReply>, Status> {
-        let inner_request = request.into_inner();
-
-        let reply = self
-            .inner
-            .lock()
-            .await
-            .infer(inner_request)
-            .await
-            .map_err(|e| Status::aborted(format!("could not run inference: {e}")))?;
-
-        Ok(Response::new(reply))
-    }
-
     async fn run_detection(
         &self,
         request: Request<DetectionRequest>,
@@ -79,7 +66,7 @@ impl Detector for FaceServer {
         })?;
 
         let req = Request::new(params);
-        let resp = self.infer(req).await?.into_inner();
+        let resp = self.squeeze(req).await?.into_inner();
 
         let ptr = wasm.write_message(resp).map_err(|e| {
             Status::aborted(format!("Failed to write infer reply to wasm memory: {e}"))
@@ -94,6 +81,26 @@ impl Detector for FaceServer {
             .call(&cont.name, &param)
             .map_err(|e| Status::aborted(format!("Failed to call WebAssembly function (2): {e}")))?
             .unwrap_finished();
+
+        Ok(Response::new(reply))
+    }
+}
+
+#[tonic::async_trait]
+impl ObjectDetection for FaceServer {
+    async fn squeeze(
+        &self,
+        request: Request<InferRequest>,
+    ) -> Result<Response<InferReply>, Status> {
+        let inner_request = request.into_inner();
+
+        let reply = self
+            .inner
+            .lock()
+            .await
+            .infer(inner_request)
+            .await
+            .map_err(|e| Status::aborted(format!("could not run inference: {e}")))?;
 
         Ok(Response::new(reply))
     }

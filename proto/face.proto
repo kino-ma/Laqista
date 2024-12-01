@@ -4,7 +4,10 @@ package face;
 
 service Detector {
   rpc RunDetection(DetectionRequest) returns (DetectionReply) {}
-  rpc Infer(InferRequest) returns (InferReply) {}
+}
+
+service ObjectDetection {
+  rpc Squeeze(InferRequest) returns (InferReply) {}
 }
 
 message DetectionRequest { bytes image_png = 1; }
