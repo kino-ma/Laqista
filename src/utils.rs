@@ -51,7 +51,7 @@ pub fn get_mac() -> Result<MacAddress, MacAddressError> {
 /// The result is returned in nanoseconds.
 pub fn subtract_window(end: &Timestamp, start: &Timestamp) -> i64 {
     let mut start_i128 = i128::from(start.nanos);
-    start_i128 += (end.seconds << 32) as i128;
+    start_i128 += (start.seconds << 32) as i128;
 
     let mut end_i128 = i128::from(end.nanos);
     end_i128 += (end.seconds << 32) as i128;
