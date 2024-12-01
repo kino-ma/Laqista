@@ -138,6 +138,12 @@ impl FromStr for AppRpc {
     }
 }
 
+impl ToString for AppService {
+    fn to_string(&self) -> String {
+        format!("/{}.{}", self.package, self.service)
+    }
+}
+
 impl ToString for AppRpc {
     fn to_string(&self) -> String {
         format!("/{}.{}/{}", self.package, self.service, self.rpc)
