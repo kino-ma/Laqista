@@ -75,10 +75,10 @@ async fn setup_clients(
         source: "https://github.com/kino-ma/Laqista/releases/download/v0.1.0/face_v0.1.0.tgz"
             .to_owned(),
         rpcs: vec![
-            wasm_service.rpc("Runetection").to_string(),
+            wasm_service.rpc("RunDetection").to_string(),
             onnx_service.rpc("Squeeze").to_string(),
         ],
-        accuracies_percent: HashMap::from([("Infer".to_owned(), 80.3)]),
+        accuracies_percent: HashMap::from([(onnx_service.rpc("Squeeze").to_string(), 80.3)]),
     };
 
     let deployment = client
