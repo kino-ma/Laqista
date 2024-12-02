@@ -14,6 +14,7 @@ use tonic_middleware::MiddlewareFor;
 use crate::deployment::database::{DeploymentDatabase, Target};
 use crate::proto::{scheduler_client::SchedulerClient, JoinRequest};
 use crate::report::MetricsReporter;
+use crate::scheduler::dew::DewScheduler;
 use crate::scheduler::fog::FogScheduler;
 use crate::scheduler::{AuthoritativeScheduler, Cluster};
 use crate::{
@@ -67,7 +68,7 @@ pub enum StateCommand {
 pub enum DaemonState {
     Cloud(GroupInfo),
     Fog(FogScheduler),
-    Dew(String),
+    Dew(DewScheduler),
     Joining(String),
     Authoritative(AuthoritativeScheduler),
     Failed,
@@ -167,11 +168,10 @@ impl ServerRunner {
 
                 self.start_fog(daemon, server, scheduler).await
             }
-            DaemonState::Dew(parent) => {
+            DaemonState::Dew(scheduler) => {
                 println!("Running a new dew server...");
-                println!("parent = {:?}", parent);
 
-                self.start_dew(daemon, server, &parent).await
+                self.start_dew(daemon, server, scheduler).await
             }
             DaemonState::Authoritative(scheduler) => {
                 println!("Running an Authoritative server...");
@@ -289,7 +289,7 @@ impl ServerRunner {
         &self,
         daemon: ServerDaemon,
         server: ServerInfo,
-        parent: &str,
+        scheduler: DewScheduler,
     ) -> Result<DaemonState> {
         println!("Starting dew server...");
 
@@ -297,14 +297,17 @@ impl ServerRunner {
 
         let reporter_token = self.start_reporter(server.clone(), server.clone(), app_rx);
 
-        let grpc_router = self.common_services(daemon, app_tx).await?;
+        let grpc_router = self
+            .common_services(daemon, app_tx)
+            .await?
+            .add_service(SchedulerServer::new(scheduler.clone()));
 
         grpc_router.serve(self.socket).await?;
 
         println!("cancel reporter (running)");
         reporter_token.cancel();
 
-        Ok(DaemonState::Dew(parent.to_owned()))
+        Ok(DaemonState::Dew(scheduler))
     }
 
     fn start_reporter(
@@ -429,13 +432,24 @@ impl ServerRunner {
                 return DaemonState::Fog(scheduler);
             }
             "dew" => {
-                return DaemonState::Dew(
-                    start_command
-                        .bootstrap_addr
-                        .as_ref()
-                        .expect("Bootstrap server address is required on dew layer")
-                        .clone(),
-                )
+                let parent = start_command
+                    .bootstrap_addr
+                    .as_ref()
+                    .expect("Bootstrap server address is required on fog layer")
+                    .clone();
+
+                let mean_scheduler = Box::new(MeanScheduler {});
+                let tx = self.tx.clone();
+
+                let scheduler = DewScheduler::new(
+                    server.clone(),
+                    parent,
+                    mean_scheduler,
+                    tx,
+                    self.database.clone(),
+                );
+
+                return DaemonState::Dew(scheduler);
             }
             layer => {
                 panic!("Unexpected layer specification: {}", layer)

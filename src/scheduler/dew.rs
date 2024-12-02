@@ -32,7 +32,7 @@ pub struct DewScheduler {
 
 #[derive(Clone, Debug)]
 pub struct DewSchedulerRuntime {
-    pub cloud_addr: String,
+    pub parent_addr: String,
     pub stats: ServerStats,
     pub app_stats: HashMap<AppService, AppLatency>,
     pub scheduler: Box<dyn DeploymentScheduler>,
@@ -42,7 +42,7 @@ pub struct DewSchedulerRuntime {
 impl DewScheduler {
     pub fn new(
         server: ServerInfo,
-        cloud_addr: String,
+        parent_addr: String,
         scheduler: Box<dyn DeploymentScheduler>,
         tx: StateSender,
         database: DeploymentDatabase,
@@ -51,7 +51,7 @@ impl DewScheduler {
         let app_stats = HashMap::new();
 
         let runtime = Arc::new(Mutex::new(DewSchedulerRuntime {
-            cloud_addr,
+            parent_addr,
             scheduler,
             database,
             stats,
@@ -179,7 +179,7 @@ impl Scheduler for DewScheduler {
         self.schedule_in_self(req.clone())
             .or_else(|_| async {
                 let mut client = self
-                    .scheduler_client(runtime.cloud_addr)
+                    .scheduler_client(runtime.parent_addr)
                     .await
                     .map_err(<Error as Into<Status>>::into)?;
                 client.lookup(Request::new(req)).await
@@ -194,7 +194,7 @@ impl Scheduler for DewScheduler {
         let runtime = self.runtime.lock().await.clone();
 
         let mut client = self
-            .scheduler_client(runtime.cloud_addr)
+            .scheduler_client(runtime.parent_addr)
             .await
             .map_err(|e| Status::aborted(format!("failed to connect to scheduler: {e}")))?;
 
