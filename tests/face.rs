@@ -106,20 +106,47 @@ async fn schedule_wasm() {
 #[tokio::test]
 #[ignore]
 async fn schedule_wasm_fog() {
-    let fog_addr = "http://127.0.0.1:50052";
+    let cloud_addr = "http://127.0.0.1:50051";
 
-    let mut client = proto::scheduler_client::SchedulerClient::connect(fog_addr.to_owned())
+    let mut client = proto::scheduler_client::SchedulerClient::connect(cloud_addr.to_owned())
         .await
         .expect("failed to connect to the server");
+
+    let wasm_service = AppService::new("face", "Detector");
+    let onnx_service = AppService::new("face", "ObjectDetection");
+
+    let request = DeployRequest {
+        name: "face".to_owned(),
+        source: "https://github.com/kino-ma/Laqista/releases/download/v0.1.0/face_v0.1.0.tgz"
+            .to_owned(),
+        rpcs: vec![
+            wasm_service.rpc("RunDetection").to_string(),
+            onnx_service.rpc("Squeeze").to_string(),
+        ],
+        accuracies_percent: HashMap::from([(onnx_service.rpc("Squeeze").to_string(), 80.3)]),
+    };
+
+    let _deployment = client
+        .deploy(request)
+        .await
+        .expect("failed to deploy")
+        .into_inner();
+
+    let fog_addr = "http://127.0.0.1:50052";
+
+    let client = retry(|| async {
+        proto::scheduler_client::SchedulerClient::connect(fog_addr.to_owned()).await
+    })
+    .await
+    .unwrap();
 
     let request = GetAppsRequest {
         names: vec!["face".to_owned()],
     };
 
-    let deployments = client
-        .get_apps(request)
+    let deployments = retry(|| async { client.clone().get_apps(request.clone()).await })
         .await
-        .expect("failed to deploy")
+        .unwrap()
         .into_inner();
 
     let onnx_service = AppService::new("face", "ObjectDetection");
@@ -129,6 +156,12 @@ async fn schedule_wasm_fog() {
         qos: None,
         service: onnx_service.to_string(),
     };
+
+    let client = retry(|| async {
+        proto::scheduler_client::SchedulerClient::connect(fog_addr.to_owned()).await
+    })
+    .await
+    .unwrap();
 
     let _deploy_resp = retry(|| async { client.clone().lookup(request.clone()).await })
         .await
@@ -192,20 +225,47 @@ async fn schedule_wasm_fog() {
 #[tokio::test]
 #[ignore]
 async fn schedule_wasm_dew() {
-    let dew_addr = "http://127.0.0.1:50053";
+    let cloud_addr = "http://127.0.0.1:50051";
 
-    let mut client = proto::scheduler_client::SchedulerClient::connect(dew_addr.to_owned())
+    let mut client = proto::scheduler_client::SchedulerClient::connect(cloud_addr.to_owned())
         .await
         .expect("failed to connect to the server");
+
+    let wasm_service = AppService::new("face", "Detector");
+    let onnx_service = AppService::new("face", "ObjectDetection");
+
+    let request = DeployRequest {
+        name: "face".to_owned(),
+        source: "https://github.com/kino-ma/Laqista/releases/download/v0.1.0/face_v0.1.0.tgz"
+            .to_owned(),
+        rpcs: vec![
+            wasm_service.rpc("RunDetection").to_string(),
+            onnx_service.rpc("Squeeze").to_string(),
+        ],
+        accuracies_percent: HashMap::from([(onnx_service.rpc("Squeeze").to_string(), 80.3)]),
+    };
+
+    let _deployment = client
+        .deploy(request)
+        .await
+        .expect("failed to deploy")
+        .into_inner();
+
+    let dew_addr = "http://127.0.0.1:50053";
+
+    let client = retry(|| async {
+        proto::scheduler_client::SchedulerClient::connect(dew_addr.to_owned()).await
+    })
+    .await
+    .unwrap();
 
     let request = GetAppsRequest {
         names: vec!["face".to_owned()],
     };
 
-    let deployments = client
-        .get_apps(request)
+    let deployments = retry(|| async { client.clone().get_apps(request.clone()).await })
         .await
-        .expect("failed to deploy")
+        .unwrap()
         .into_inner();
 
     let onnx_service = AppService::new("face", "ObjectDetection");
@@ -215,6 +275,12 @@ async fn schedule_wasm_dew() {
         qos: None,
         service: onnx_service.to_string(),
     };
+
+    let client = retry(|| async {
+        proto::scheduler_client::SchedulerClient::connect(dew_addr.to_owned()).await
+    })
+    .await
+    .unwrap();
 
     let _deploy_resp = retry(|| async { client.clone().lookup(request.clone()).await })
         .await
