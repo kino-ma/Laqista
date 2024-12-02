@@ -26,3 +26,7 @@ criterion = { version = "0.5.1", features = ["html_reports", "async_tokio"] }
 [[bench]]
 name = "wasm"
 harness = false
+
+[[bench]]
+name = "onnx"
+harness = false
