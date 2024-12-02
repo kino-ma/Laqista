@@ -1,28 +1,34 @@
 use std::error::Error;
 
+use bytes::Bytes;
 use prost::Message;
 use wasmer::{imports, Cranelift, Instance, Memory, MemoryType, Module, Store, Value};
 
 use crate::proto::host::{HostCall, InvokeResult, MemorySlice};
 
+#[derive(Clone)]
 pub struct WasmRunner {
-    pub store: Store,
-    pub module: Module,
-    pub memory: Memory,
-    pub instance: Instance,
-
-    pub ptr: WasmPointer,
+    pub serialized_module: Bytes,
 }
 
 impl WasmRunner {
     pub fn compile(wasm: &[u8]) -> Result<Self, Box<dyn Error>> {
         let compiler = Cranelift::default();
+        let store = Store::new(compiler);
 
-        let mut store = Store::new(compiler);
         let module = Module::new(&store, wasm)?;
+        let serialized_module = module.serialize()?;
+
+        Ok(Self { serialized_module })
+    }
+
+    pub fn instantiate(&self) -> Result<WasmInstance, Box<dyn Error>> {
+        let compiler = Cranelift::default();
+        let mut store = Store::new(compiler);
+
+        let module = unsafe { Module::deserialize(&mut store, self.serialized_module.clone())? };
 
         let memory = Memory::new(&mut store, MemoryType::new(21, None, false))?;
-
         let import_object = imports! {
             "env" => {
                 "memory" => memory.clone(),
@@ -31,7 +37,7 @@ impl WasmRunner {
 
         let instance = Instance::new(&mut store, &module, &import_object)?;
 
-        Ok(Self {
+        Ok(WasmInstance {
             store,
             module,
             memory,
@@ -39,7 +45,18 @@ impl WasmRunner {
             ptr: (0, 0).into(),
         })
     }
+}
 
+pub struct WasmInstance {
+    pub store: Store,
+    pub module: Module,
+    pub memory: Memory,
+    pub instance: Instance,
+
+    pub ptr: WasmPointer,
+}
+
+impl WasmInstance {
     pub fn call<M: Message + Default>(
         &mut self,
         name: &str,

@@ -23,7 +23,8 @@ pub struct FaceServer {
 impl FaceServer {
     pub async fn create(onnx: Bytes, wasm: Bytes) -> Result<Self, Box<dyn Error>> {
         let session = Session::from_bytes(&onnx).await?;
-        let server = AbtsractServer::new(session, onnx.clone(), wasm.clone());
+        let module = WasmRunner::compile(&wasm)?;
+        let server = AbtsractServer::new(session, module, onnx.clone(), wasm.clone());
         let ptr = Arc::new(Mutex::new(server));
 
         Ok(Self {
@@ -40,14 +41,13 @@ impl Detector for FaceServer {
         &self,
         request: Request<DetectionRequest>,
     ) -> Result<Response<DetectionReply>, Status> {
-        let wasm_bin = self.inner.lock().await.wasm.clone();
-        // FIXME: It would be better performant if we could instantiate the wasm module only once.
-        //        However, if we reuse the instance for every request, it errors out with message
-        //        saying "failed to allocate memory".
-        //        Instead, we instantiate the module from compiler, for each request.
-        let mut wasm = WasmRunner::compile(&wasm_bin).map_err(|e| {
-            Status::aborted(format!("Failed to compile and setup wasm module: {e}"))
-        })?;
+        let mut wasm = self
+            .inner
+            .lock()
+            .await
+            .get_module()
+            .instantiate()
+            .map_err(|e| Status::aborted(format!("failed to instantiate wasm module: {e}")))?;
 
         let msg = request.into_inner();
         let ptr = wasm.write_message(msg).map_err(|e| {
@@ -101,7 +101,9 @@ impl ObjectDetection for FaceServer {
         let inner_request = request.into_inner();
 
         let session = Session::from_bytes(&self.onnx).await.unwrap();
-        let mut server = AbtsractServer::new(session, self.onnx.clone(), self.wasm.clone());
+        let module = self.inner.lock().await.get_module().clone();
+
+        let mut server = AbtsractServer::new(session, module, self.onnx.clone(), self.wasm.clone());
 
         let reply = server
             .infer(inner_request)
