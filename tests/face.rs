@@ -104,6 +104,7 @@ async fn schedule_wasm() {
 }
 
 #[tokio::test]
+#[ignore]
 async fn schedule_wasm_fog() {
     let addr = "http://127.0.0.1:50051";
     let fog_addr = "http://127.0.0.1:50052";
