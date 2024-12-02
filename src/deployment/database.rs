@@ -69,15 +69,16 @@ impl DeploymentDatabase {
         &mut self,
         deployments: &[DeploymentInfo],
     ) -> Result<(), Box<dyn Error>> {
-        let mut inner = self.inner.lock().await;
+        let apps = self.inner.lock().await.apps.0.clone();
 
         for d in deployments {
-            if inner.apps.0.get(&d.id).is_none() {
+            if apps.get(&d.id).is_none() {
                 self.add_app(d).await?;
             }
-
-            inner.instances.push(d.id);
         }
+
+        let mut ids = deployments.iter().map(|d| d.id).collect();
+        self.inner.lock().await.instances.append(&mut ids);
 
         self.state_tx.send(StateCommand::Keep).await?;
 
