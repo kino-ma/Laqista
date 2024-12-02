@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::{Args, Subcommand};
 
 #[derive(Clone, Subcommand)]
@@ -18,4 +20,7 @@ pub struct StartCommand {
 
     #[arg(short = 'a', long = "layer", default_value = "cloud")]
     pub layer: String,
+
+    #[arg(short = 'd', long = "data-path", default_value = ".laqista")]
+    pub data_path: PathBuf,
 }

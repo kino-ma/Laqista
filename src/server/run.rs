@@ -1,5 +1,4 @@
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use std::pin::pin;
 use std::str::FromStr;
 use std::time::Duration;
@@ -103,6 +102,9 @@ impl ServerRunner {
 
     pub async fn run_start(&mut self, start_command: &StartCommand) -> Result<()> {
         self.socket = Self::get_socket(start_command)?;
+        self.database =
+            DeploymentDatabase::read_dir(start_command.data_path.clone(), self.tx.clone()).unwrap();
+
         let info = self.create_info(start_command)?;
 
         let mut state = self.determine_state(start_command, &info);
@@ -421,12 +423,14 @@ impl ServerRunner {
 
                 let mean_scheduler = Box::new(MeanScheduler {});
                 let tx = self.tx.clone();
-                let database =
-                    DeploymentDatabase::read_dir(PathBuf::from(".laqista-fog"), tx.clone())
-                        .unwrap();
 
-                let scheduler =
-                    FogScheduler::new(server.clone(), cloud, mean_scheduler, tx, database);
+                let scheduler = FogScheduler::new(
+                    server.clone(),
+                    cloud,
+                    mean_scheduler,
+                    tx,
+                    self.database.clone(),
+                );
 
                 return DaemonState::Fog(scheduler);
             }
@@ -439,12 +443,14 @@ impl ServerRunner {
 
                 let mean_scheduler = Box::new(MeanScheduler {});
                 let tx = self.tx.clone();
-                let database =
-                    DeploymentDatabase::read_dir(PathBuf::from(".laqista-dew"), tx.clone())
-                        .unwrap();
 
-                let scheduler =
-                    DewScheduler::new(server.clone(), parent, mean_scheduler, tx, database);
+                let scheduler = DewScheduler::new(
+                    server.clone(),
+                    parent,
+                    mean_scheduler,
+                    tx,
+                    self.database.clone(),
+                );
 
                 return DaemonState::Dew(scheduler);
             }
