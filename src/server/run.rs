@@ -105,6 +105,8 @@ impl ServerRunner {
         let mut state = self.determine_state(start_command, &info);
 
         loop {
+            println!("State: {state:?}");
+
             let daemon = self.create_daemon(info.clone(), state.clone());
             let service_future = self.start_service(daemon, state.clone());
 
@@ -114,8 +116,12 @@ impl ServerRunner {
             // Terminate serving_future by selecting another future
             let state_command = match future::select(pin!(service_future), pin!(rcvd_future)).await
             {
-                future::Either::Left((state, _)) => state?,
+                future::Either::Left((state, _)) => {
+                    println!("Received restart signal from the service");
+                    state?
+                }
                 future::Either::Right((state, _)) => {
+                    println!("Received restart signal from other threads");
                     state.ok_or(Error::Text("received None state from sender".to_owned()))?
                 }
             };
@@ -327,7 +333,9 @@ impl ServerRunner {
 
         #[cfg(feature = "face")]
         let router = if let Some(deployment) = self.database.lookup("face").await {
+            println!("found face from db");
             use face_proto::detector_server::DetectorServer;
+            use face_proto::object_detection_server::ObjectDetectionServer;
             let onnx = self
                 .database
                 .get(&deployment, Target::Onnx)
@@ -340,15 +348,25 @@ impl ServerRunner {
                 .await
                 .map_err(|e| format!("failed to read application binary from database: {e}"))?;
 
-            let inner_server = FaceServer::create(onnx, wasm)
+            let inner_server = FaceServer::create(onnx.clone(), wasm.clone())
                 .await
                 .map_err(|e| Error::AppInstantiation(e.to_string()))?;
             let server = DetectorServer::new(inner_server);
-            router.add_service(MiddlewareFor::new(
+            let router = router.add_service(MiddlewareFor::new(
                 server,
+                MetricsMiddleware { tx: app_tx.clone() },
+            ));
+
+            let inner_server = FaceServer::create(onnx, wasm)
+                .await
+                .map_err(|e| Error::AppInstantiation(e.to_string()))?;
+            let od_server = ObjectDetectionServer::new(inner_server);
+            router.add_service(MiddlewareFor::new(
+                od_server,
                 MetricsMiddleware { tx: app_tx.clone() },
             ))
         } else {
+            println!("not found face from db");
             router
         };
 
