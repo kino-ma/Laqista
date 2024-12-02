@@ -1,7 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use face::proto::{DetectionRequest, InferReply};
 use laqista_core::wasm::WasmRunner;
-use tokio::time::Instant;
 use wasmer::{imports, wat2wasm, Cranelift, Instance, Memory, MemoryType, Module, Store, Value};
 
 static JPEG: &'static [u8] = include_bytes!("../../../data/pelican.jpeg");
@@ -47,13 +46,8 @@ pub fn bench_wasm_module(c: &mut Criterion) {
     });
 
     let runtime = WasmRunner::compile(WASM).unwrap();
-    let serialized = runtime.module.serialize().unwrap();
-    group.bench_function("wasm deserialize", |b| {
-        b.iter(|| {
-            let compiler = Cranelift::default();
-            let mut store = Store::new(compiler);
-            let _ = unsafe { Module::deserialize(&mut store, &*serialized) }.unwrap();
-        })
+    group.bench_function("wasm deserialize (`WasmRunner::instantiate()`)", |b| {
+        b.iter(|| runtime.instantiate().unwrap())
     });
 }
 
@@ -153,14 +147,17 @@ pub fn bench_wasm_memory(c: &mut Criterion) {
 
 fn write(input: &WriteInput) {
     let WriteInput(wasm_bytes, detection_request) = input;
-    let mut runner = WasmRunner::compile(wasm_bytes).unwrap();
+    let mut runner = WasmRunner::compile(wasm_bytes)
+        .unwrap()
+        .instantiate()
+        .unwrap();
 
     runner.write_message(detection_request.clone()).unwrap();
 }
 
 fn read_in_wasm(input: &ReadInput) {
     let ReadInput(detection_request) = input;
-    let mut runner = WasmRunner::compile(&WASM).unwrap();
+    let mut runner = WasmRunner::compile(&WASM).unwrap().instantiate().unwrap();
 
     let ptr = runner.write_message(detection_request.clone()).unwrap();
 
@@ -176,7 +173,7 @@ fn read_in_wasm(input: &ReadInput) {
 
 fn read_image_in_wasm(input: &ReadInput) {
     let ReadInput(detection_request) = input;
-    let mut runner = WasmRunner::compile(&WASM).unwrap();
+    let mut runner = WasmRunner::compile(&WASM).unwrap().instantiate().unwrap();
 
     let ptr = runner.write_message(detection_request.clone()).unwrap();
 
@@ -189,7 +186,7 @@ fn read_image_in_wasm(input: &ReadInput) {
 
 fn main_wasm(input: &ReadInput) {
     let ReadInput(detection_request) = input;
-    let mut runner = WasmRunner::compile(&WASM).unwrap();
+    let mut runner = WasmRunner::compile(&WASM).unwrap().instantiate().unwrap();
 
     let ptr = runner.write_message(detection_request.clone()).unwrap();
 
@@ -202,7 +199,7 @@ fn main_wasm(input: &ReadInput) {
 
 fn get_prob_wasm(input: &ContinuationInput) {
     let ContinuationInput(infer_reply) = input;
-    let mut runner = WasmRunner::compile(&WASM).unwrap();
+    let mut runner = WasmRunner::compile(&WASM).unwrap().instantiate().unwrap();
 
     let ptr = runner.write_message(infer_reply.clone()).unwrap();
 
