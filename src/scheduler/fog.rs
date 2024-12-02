@@ -12,7 +12,7 @@ use crate::{
         scheduler_client::SchedulerClient, scheduler_server::Scheduler,
         server_daemon_client::ServerDaemonClient, DeployRequest, DeployResponse, GetAppsRequest,
         GetAppsResponse, JoinRequest, JoinResponse, LookupRequest, LookupResponse, ReportRequest,
-        ReportResponse, Server, SpawnRequest, SpawnResponse,
+        ReportResponse, Server,
     },
     server::StateSender,
     utils::IdMap,
@@ -61,27 +61,6 @@ impl FogScheduler {
         let tx = Arc::new(Mutex::new(tx));
 
         Self { runtime, tx }
-    }
-
-    pub async fn deploy_in_me(&self, deployment: DeploymentInfo) -> Result<SpawnResponse> {
-        let request = SpawnRequest {
-            deployment: Some(deployment.clone().into()),
-        };
-
-        let this_server = &self.runtime.lock().await.stats.server;
-
-        let mut client = self.client(this_server).await?;
-
-        let request = Request::new(request);
-
-        let response = client.spawn(request).await?;
-        if !response.get_ref().success {
-            return Err("Unsuccessful spawn".into());
-        }
-
-        println!("spawend successfully");
-
-        Ok(response.into_inner())
     }
 
     pub async fn schedule_in_self(
@@ -210,9 +189,33 @@ impl Scheduler for FogScheduler {
 
     async fn get_apps(
         &self,
-        _request: Request<GetAppsRequest>,
+        request: Request<GetAppsRequest>,
     ) -> RpcResult<Response<GetAppsResponse>> {
-        unimplemented!("Fog node does not support get_apps()");
+        let runtime = self.runtime.lock().await.clone();
+
+        let mut client = self
+            .scheduler_client(runtime.cloud_addr)
+            .await
+            .map_err(|e| Status::aborted(format!("failed to connect to scheduler: {e}")))?;
+
+        let resp = client.get_apps(request).await?;
+
+        let deployments: Vec<_> = resp
+            .get_ref()
+            .apps
+            .iter()
+            .map(|app| <DeploymentInfo as TryFrom<_>>::try_from(app.clone()).unwrap())
+            .collect();
+
+        self.runtime
+            .lock()
+            .await
+            .database
+            .add_instances(&deployments)
+            .await
+            .map_err(|e| Status::aborted(format!("failed to add app instances: {e}")))?;
+
+        Ok(resp)
     }
 }
 

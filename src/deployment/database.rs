@@ -65,6 +65,25 @@ impl DeploymentDatabase {
         Self::read_dir(root, tx).unwrap()
     }
 
+    pub async fn add_instances(
+        &mut self,
+        deployments: &[DeploymentInfo],
+    ) -> Result<(), Box<dyn Error>> {
+        let mut inner = self.inner.lock().await;
+
+        for d in deployments {
+            if inner.apps.0.get(&d.id).is_none() {
+                self.add_app(d).await?;
+            }
+
+            inner.instances.push(d.id);
+        }
+
+        self.state_tx.send(StateCommand::Keep).await?;
+
+        Ok(())
+    }
+
     pub async fn add_instance(
         &mut self,
         deployment: &DeploymentInfo,
