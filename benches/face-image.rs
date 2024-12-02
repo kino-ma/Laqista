@@ -8,7 +8,7 @@ use face::proto::object_detection_client::ObjectDetectionClient;
 use face::proto::{DetectionRequest, InferRequest};
 use futures::lock::Mutex;
 use laqista_core::client::retry;
-use laqista_core::AppService;
+use laqista_core::{AppRpc, AppService};
 use tokio::runtime::Runtime;
 use tonic::transport::Channel;
 
@@ -112,10 +112,11 @@ async fn run_scheduled(
     _detector_client: &mut ObjectDetectionClient<Channel>,
     deployment_id: &str,
 ) {
+    let rpc = AppRpc::new("face", "ObjectDetection", "Squeeze");
     let request = LookupRequest {
         deployment_id: deployment_id.to_owned(),
         qos: None,
-        service: "Infer".to_owned(),
+        service: rpc.to_string(),
     };
 
     let resp = client.clone().lookup(request).await.unwrap().into_inner();
@@ -204,10 +205,11 @@ async fn run_wasm_scheduled(
     deployment_id: &str,
     image: &[u8],
 ) {
+    let rpc = AppRpc::new("face", "Detector", "RunDetection");
     let request = LookupRequest {
         deployment_id: deployment_id.to_owned(),
         qos: None,
-        service: "RunDetection".to_owned(),
+        service: rpc.to_string(),
     };
 
     let resp = client.clone().lookup(request).await.unwrap().into_inner();

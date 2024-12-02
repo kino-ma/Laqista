@@ -19,11 +19,6 @@ async fn schedule_wasm() {
         .await
         .expect("failed to connect to the server");
 
-    let mut od_client =
-        face::proto::object_detection_client::ObjectDetectionClient::connect(addr.to_owned())
-            .await
-            .unwrap();
-
     let wasm_service = AppService::new("face", "Detector");
     let onnx_service = AppService::new("face", "ObjectDetection");
 
@@ -32,7 +27,7 @@ async fn schedule_wasm() {
         source: "https://github.com/kino-ma/Laqista/releases/download/v0.1.0/face_v0.1.0.tgz"
             .to_owned(),
         rpcs: vec![
-            wasm_service.rpc("/face.Detector/RunDetection").to_string(),
+            wasm_service.rpc("RunDetection").to_string(),
             onnx_service.rpc("Squeeze").to_string(),
         ],
         accuracies_percent: HashMap::from([(onnx_service.rpc("Squeeze").to_string(), 80.3)]),
@@ -50,7 +45,7 @@ async fn schedule_wasm() {
         service: onnx_service.to_string(),
     };
 
-    let _resp = retry(|| async { client.clone().lookup(request.clone()).await })
+    let deploy_resp = retry(|| async { client.clone().lookup(request.clone()).await })
         .await
         .unwrap()
         .into_inner();
@@ -72,12 +67,23 @@ async fn schedule_wasm() {
     // let mut app_client = app::proto::greeter_client::GreeterClient::connect(addr)
     //     .await
     //     .unwrap();
+    let od_client = retry(|| async {
+        face::proto::object_detection_client::ObjectDetectionClient::connect(addr.to_owned()).await
+    })
+    .await
+    .unwrap();
+
     let request = InferRequest {
         data: input.to_vec(),
     };
 
-    let resp = od_client.squeeze(request).await.unwrap().into_inner();
-    let mut probs: Vec<_> = resp
+    let squeeze_resp = retry(|| async { od_client.clone().squeeze(request.clone()).await })
+        .await
+        .unwrap()
+        .into_inner();
+    dbg!(&squeeze_resp);
+
+    let mut probs: Vec<_> = squeeze_resp
         .squeezenet0_flatten0_reshape0
         .iter()
         .enumerate()
