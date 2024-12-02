@@ -308,9 +308,10 @@ impl Scheduler for AuthoritativeScheduler {
             .scheduler
             .schedule(&service, &app, &stats_map, &apps_map, qos)
             .or_else(|| {
-                println!("WARN: failed to schedule. using random server");
-                todo!("get rpc from database");
-                // runtime.cluster.servers.get(0).map(|s| (s.clone(), ()))
+                println!("WARN: failed to schedule. using random server and rpc");
+                let server = runtime.cluster.servers.get(0)?;
+                let rpc = app.services.get(&service).unwrap().get(0)?;
+                Some((server.clone(), rpc.clone()))
             })
             .ok_or(Status::aborted("Failed to schedule: No server found"))?
             .clone();
