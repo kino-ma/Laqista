@@ -15,16 +15,22 @@ use crate::proto::{
 
 type ServerPointer = Arc<Mutex<AbtsractServer<InferRequest, InferReply>>>;
 pub struct FaceServer {
+    onnx: Bytes,
+    wasm: Bytes,
     inner: ServerPointer,
 }
 
 impl FaceServer {
     pub async fn create(onnx: Bytes, wasm: Bytes) -> Result<Self, Box<dyn Error>> {
         let session = Session::from_bytes(&onnx).await?;
-        let server = AbtsractServer::new(session, onnx, wasm);
+        let server = AbtsractServer::new(session, onnx.clone(), wasm.clone());
         let ptr = Arc::new(Mutex::new(server));
 
-        Ok(Self { inner: ptr })
+        Ok(Self {
+            onnx,
+            wasm,
+            inner: ptr,
+        })
     }
 }
 
@@ -94,10 +100,10 @@ impl ObjectDetection for FaceServer {
     ) -> Result<Response<InferReply>, Status> {
         let inner_request = request.into_inner();
 
-        let reply = self
-            .inner
-            .lock()
-            .await
+        let session = Session::from_bytes(&self.onnx).await.unwrap();
+        let mut server = AbtsractServer::new(session, self.onnx.clone(), self.wasm.clone());
+
+        let reply = server
             .infer(inner_request)
             .await
             .map_err(|e| Status::aborted(format!("could not run inference: {e}")))?;
