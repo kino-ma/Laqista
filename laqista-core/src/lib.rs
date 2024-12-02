@@ -95,7 +95,7 @@ impl FromStr for AppService {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // /package.Service/Rpc => package.Service
-        let s = s.split("/").next().ok_or(())?;
+        let s = s.split("/").nth(1).ok_or(())?;
 
         let mut splitted = s.split(".");
         let package = splitted.next().ok_or(())?;
