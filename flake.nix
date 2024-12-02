@@ -71,6 +71,8 @@
               python311Packages.onnxruntime
               jq
               gnuplot
+              ghz
+              k6
 
               cargo-generate
               wasm-pack
