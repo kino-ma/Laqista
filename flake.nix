@@ -64,6 +64,8 @@
               grpcurl
               pkg-config
               python311
+              poetry
+              python311Packages.cmake
               python311Packages.grpcio-tools
               python311Packages.onnx
               python311Packages.onnxruntime

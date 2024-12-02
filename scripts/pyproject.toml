@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "scripts"
+version = "0.1.0"
+description = ""
+authors = ["kino-ma <ma@kino.ma>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+onnx-simplifier = "^0.4.36"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
