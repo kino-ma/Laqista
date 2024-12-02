@@ -7,6 +7,8 @@ use face::proto::detector_client::DetectorClient;
 use face::proto::object_detection_client::ObjectDetectionClient;
 use face::proto::{DetectionRequest, InferRequest};
 use futures::lock::Mutex;
+use image::imageops::FilterType;
+use image::{GenericImageView, Pixel};
 use laqista_core::client::retry;
 use laqista_core::{AppRpc, AppService};
 use tokio::runtime::Runtime;
@@ -17,6 +19,9 @@ use laqista::proto::{DeployRequest, Deployment, LookupRequest};
 use laqista::*;
 
 static JPEG: &'static [u8] = include_bytes!("../data/pelican.jpeg");
+
+const IMAGE_WIDTH: usize = 224;
+const IMAGE_HEIGHT: usize = 224;
 
 pub fn bench_face_image(c: &mut Criterion) {
     let addr = "http://127.0.0.1:50051";
@@ -33,23 +38,46 @@ pub fn bench_face_image(c: &mut Criterion) {
 
     group.bench_with_input(
         BenchmarkId::new("face image scheduled", "<client>"),
-        &(arc_client, arc_od_client.clone()),
-        |b, (client, od_client)| {
+        &(arc_client.clone(), vec![]),
+        |b, (client, data)| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
                 let mut client = client.lock().await;
-                let mut od_client = od_client.lock().await;
-                run_scheduled(&mut client, &mut od_client, &deployment_id).await
+                run_scheduled(&mut client, data.clone(), &deployment_id).await
             })
         },
     );
 
     group.bench_with_input(
         BenchmarkId::new("face image direct", "<client>"),
-        &arc_od_client,
-        |b, od_client| {
+        &(arc_od_client.clone(), vec![]),
+        |b, (od_client, data)| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
                 let mut od_client = od_client.lock().await;
-                run_direct(&mut od_client).await
+                run_direct(&mut od_client, data.clone()).await
+            })
+        },
+    );
+
+    let data = setup_image();
+
+    group.bench_with_input(
+        BenchmarkId::new("face full image scheduled", "<client>"),
+        &(arc_client, data.clone()),
+        |b, (client, data)| {
+            b.to_async(Runtime::new().unwrap()).iter(|| async {
+                let mut client = client.lock().await;
+                run_scheduled(&mut client, data.clone(), &deployment_id).await
+            })
+        },
+    );
+
+    group.bench_with_input(
+        BenchmarkId::new("face full image direct", "<client>"),
+        &(arc_od_client, data.clone()),
+        |b, (od_client, data)| {
+            b.to_async(Runtime::new().unwrap()).iter(|| async {
+                let mut od_client = od_client.lock().await;
+                run_direct(&mut od_client, data.clone()).await
             })
         },
     );
@@ -107,11 +135,23 @@ async fn setup_clients(
     )
 }
 
-async fn run_scheduled(
-    client: &mut SchedulerClient<Channel>,
-    _detector_client: &mut ObjectDetectionClient<Channel>,
-    deployment_id: &str,
-) {
+fn setup_image() -> Vec<f32> {
+    let img = image::load_from_memory(&JPEG).expect("Failed to load image");
+
+    let img = img.resize_to_fill(IMAGE_WIDTH as _, IMAGE_HEIGHT as _, FilterType::Nearest);
+
+    let array = ndarray::Array::from_shape_fn((1, 3, IMAGE_WIDTH, IMAGE_HEIGHT), |(_, c, j, i)| {
+        let pixel = img.get_pixel(i as u32, j as u32);
+        let channels = pixel.channels();
+
+        // range [0, 255] -> range [0, 1]
+        (channels[c] as f32) / 255.0
+    });
+
+    array.into_raw_vec()
+}
+
+async fn run_scheduled(client: &mut SchedulerClient<Channel>, data: Vec<f32>, deployment_id: &str) {
     let rpc = AppRpc::new("face", "ObjectDetection", "Squeeze");
     let request = LookupRequest {
         deployment_id: deployment_id.to_owned(),
@@ -131,12 +171,12 @@ async fn run_scheduled(
     // let mut app_client = app::proto::greeter_client::GreeterClient::connect(addr)
     //     .await
     //     .unwrap();
-    let request = InferRequest { data: vec![] };
+    let request = InferRequest { data };
     detector_client.squeeze(request).await.unwrap();
 }
 
-async fn run_direct(detector_client: &mut ObjectDetectionClient<Channel>) {
-    let request = InferRequest { data: vec![] };
+async fn run_direct(detector_client: &mut ObjectDetectionClient<Channel>, data: Vec<f32>) {
+    let request = InferRequest { data };
     detector_client.squeeze(request).await.unwrap();
 }
 
