@@ -309,7 +309,8 @@ impl Scheduler for AuthoritativeScheduler {
             .schedule(&service, &app, &stats_map, &apps_map, qos)
             .or_else(|| {
                 println!("WARN: failed to schedule. using random server and rpc");
-                let server = runtime.cluster.servers.get(0)?;
+                let instance = runtime.cluster.instances.0.get(&id)?;
+                let server = instance.servers.get(0)?;
                 let rpc = app.services.get(&service).unwrap().get(0)?;
                 Some((server.clone(), rpc.clone()))
             })
@@ -522,11 +523,13 @@ impl Cluster {
 
             let dur = Duration::from_millis(elapsed as _);
 
+            let service: AppService = rpc.clone().into();
             let info = &info_by_name
-                .get(&rpc.service)
+                .get(&rpc.package)
                 .expect(&format!(
                     "failed to get key '{}' from:\n{:?}",
-                    &rpc.service, info_by_name
+                    service.to_string(),
+                    info_by_name
                 ))
                 .to_owned();
 
