@@ -1,3 +1,4 @@
+pub mod fog;
 pub mod interface;
 pub mod mean;
 pub mod stats;

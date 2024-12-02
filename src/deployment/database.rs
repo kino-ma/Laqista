@@ -127,6 +127,10 @@ impl DeploymentDatabase {
             .collect()
     }
 
+    pub async fn get_by_id(&self, id: &Uuid) -> Option<DeploymentInfo> {
+        Some(self.inner.lock().await.apps.0.get(id)?.info.clone())
+    }
+
     pub async fn lookup(&self, name: &str) -> Option<DeploymentInfo> {
         self.inner
             .lock()
