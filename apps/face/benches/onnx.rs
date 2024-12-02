@@ -26,7 +26,7 @@ pub fn bench_onnx(c: &mut Criterion) {
         &Arc::new(Mutex::new(session)),
         |b, session| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
-                let mut session = session.lock().await;
+                let session = session.lock().await;
                 let resp = session.detect(&data).await.unwrap();
                 let output = InferReply::try_from(resp).unwrap();
                 let mut v = output

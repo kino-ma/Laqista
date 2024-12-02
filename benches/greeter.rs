@@ -87,10 +87,12 @@ async fn run_scheduled(
     app_client: &mut GreeterClient<Channel>,
     deployment_id: &str,
 ) {
+    let service = AppService::new("hello", "Greeter");
+
     let request = LookupRequest {
         deployment_id: deployment_id.to_owned(),
         qos: None,
-        service: "SayHello".to_owned(),
+        service: service.rpc("SayHello").to_string(),
     };
 
     let _resp = client.clone().lookup(request).await.unwrap().into_inner();
