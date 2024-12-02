@@ -23,7 +23,7 @@ impl Session {
         Ok(Self::new(inner))
     }
 
-    pub async fn detect<'a>(&mut self, input: &Inputs<'a>) -> Result<Outputs, Box<dyn Error>> {
+    pub async fn detect<'a>(&self, input: &Inputs<'a>) -> Result<Outputs, Box<dyn Error>> {
         let output = self.inner.run(input).await?;
         Ok(output)
     }

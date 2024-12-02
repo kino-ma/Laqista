@@ -4,7 +4,6 @@ use bytes::Bytes;
 use laqista_core::{
     proto::host::HostCall, server::AbtsractServer, session::Session, wasm::WasmRunner,
 };
-use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
 use wasmer::Value;
 
@@ -13,10 +12,8 @@ use crate::proto::{
     DetectionRequest, InferReply, InferRequest,
 };
 
-type ServerPointer = Arc<Mutex<AbtsractServer<InferRequest, InferReply>>>;
+type ServerPointer = Arc<AbtsractServer<InferRequest, InferReply>>;
 pub struct FaceServer {
-    onnx: Bytes,
-    wasm: Bytes,
     inner: ServerPointer,
 }
 
@@ -25,13 +22,9 @@ impl FaceServer {
         let session = Session::from_bytes(&onnx).await?;
         let module = WasmRunner::compile(&wasm)?;
         let server = AbtsractServer::new(session, module, onnx.clone(), wasm.clone());
-        let ptr = Arc::new(Mutex::new(server));
+        let ptr = Arc::new(server);
 
-        Ok(Self {
-            onnx,
-            wasm,
-            inner: ptr,
-        })
+        Ok(Self { inner: ptr })
     }
 }
 
@@ -43,8 +36,6 @@ impl Detector for FaceServer {
     ) -> Result<Response<DetectionReply>, Status> {
         let mut wasm = self
             .inner
-            .lock()
-            .await
             .get_module()
             .instantiate()
             .map_err(|e| Status::aborted(format!("failed to instantiate wasm module: {e}")))?;
@@ -100,12 +91,8 @@ impl ObjectDetection for FaceServer {
     ) -> Result<Response<InferReply>, Status> {
         let inner_request = request.into_inner();
 
-        let session = Session::from_bytes(&self.onnx).await.unwrap();
-        let module = self.inner.lock().await.get_module().clone();
-
-        let mut server = AbtsractServer::new(session, module, self.onnx.clone(), self.wasm.clone());
-
-        let reply = server
+        let reply = self
+            .inner
             .infer(inner_request)
             .await
             .map_err(|e| Status::aborted(format!("could not run inference: {e}")))?;

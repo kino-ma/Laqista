@@ -1,4 +1,4 @@
-use std::{error::Error, marker::PhantomData};
+use std::{error::Error, marker::PhantomData, sync::Arc};
 
 use bytes::Bytes;
 
@@ -9,7 +9,7 @@ use crate::{
 };
 
 pub struct AbtsractServer<I: AsInputs, O: TryFromOutputs> {
-    session: Session,
+    session: Arc<Session>,
     module: WasmRunner,
     pub onnx: Bytes,
     pub wasm: Bytes,
@@ -20,7 +20,7 @@ pub struct AbtsractServer<I: AsInputs, O: TryFromOutputs> {
 impl<I: AsInputs, O: TryFromOutputs> AbtsractServer<I, O> {
     pub fn new(session: Session, module: WasmRunner, onnx: Bytes, wasm: Bytes) -> Self {
         Self {
-            session,
+            session: Arc::new(session),
             module,
             onnx,
             wasm,
@@ -28,7 +28,7 @@ impl<I: AsInputs, O: TryFromOutputs> AbtsractServer<I, O> {
         }
     }
 
-    pub async fn infer(&mut self, input: I) -> Result<O, Box<dyn Error>> {
+    pub async fn infer(&self, input: I) -> Result<O, Box<dyn Error>> {
         let input = input.as_inputs();
         let output = self.session.detect(&input).await?;
         let reply = O::try_from(output)?;
