@@ -45,7 +45,7 @@ async fn schedule_wasm() {
         service: onnx_service.to_string(),
     };
 
-    let deploy_resp = retry(|| async { client.clone().lookup(request.clone()).await })
+    let _deploy_resp = retry(|| async { client.clone().lookup(request.clone()).await })
         .await
         .unwrap()
         .into_inner();
