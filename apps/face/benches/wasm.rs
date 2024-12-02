@@ -1,6 +1,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use face::proto::{DetectionRequest, InferReply};
 use laqista_core::wasm::WasmRunner;
+use tokio::time::Instant;
 use wasmer::{imports, wat2wasm, Cranelift, Instance, Memory, MemoryType, Module, Store, Value};
 
 static JPEG: &'static [u8] = include_bytes!("../../../data/pelican.jpeg");
@@ -43,6 +44,16 @@ pub fn bench_wasm_module(c: &mut Criterion) {
         .unwrap();
     group.bench_with_input("wasm instantiate runner heavy async", &WASM, |b, i| {
         b.iter(|| t_runtime.block_on(async { tokio_instantiate(i).await }))
+    });
+
+    let runtime = WasmRunner::compile(WASM).unwrap();
+    let serialized = runtime.module.serialize().unwrap();
+    group.bench_function("wasm deserialize", |b| {
+        b.iter(|| {
+            let compiler = Cranelift::default();
+            let mut store = Store::new(compiler);
+            let _ = unsafe { Module::deserialize(&mut store, &*serialized) }.unwrap();
+        })
     });
 }
 
