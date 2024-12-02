@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use face::proto::InferRequest;
 use image::{imageops::FilterType, GenericImageView, Pixel};
 use laqista::proto::{self, DeployRequest, LookupRequest};
-use laqista_core::AppService;
+use laqista_core::{client::retry, AppService};
 
 static JPEG: &'static [u8] = include_bytes!("../data/sized-pelican.jpeg");
 static LABELS: &'static str = include_str!("../data/models/resnet-labels.txt");
@@ -50,7 +50,10 @@ async fn schedule_wasm() {
         service: onnx_service.to_string(),
     };
 
-    let _resp = client.clone().lookup(request).await.unwrap().into_inner();
+    let _resp = retry(|| async { client.clone().lookup(request.clone()).await })
+        .await
+        .unwrap()
+        .into_inner();
 
     let img = image::load_from_memory(&JPEG).expect("Failed to load image");
 
