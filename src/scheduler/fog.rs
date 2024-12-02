@@ -24,7 +24,7 @@ use super::{
     stats::{AppLatency, ServerStats, StatsMap},
 };
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct FogScheduler {
     pub runtime: Arc<Mutex<FogSchedulerRuntime>>,
     pub tx: Arc<Mutex<StateSender>>,
@@ -32,7 +32,7 @@ pub struct FogScheduler {
 
 #[derive(Clone, Debug)]
 pub struct FogSchedulerRuntime {
-    pub cloud_scheduler: ServerInfo,
+    pub cloud_addr: String,
     pub stats: ServerStats,
     pub app_stats: HashMap<AppService, AppLatency>,
     pub scheduler: Box<dyn DeploymentScheduler>,
@@ -42,7 +42,7 @@ pub struct FogSchedulerRuntime {
 impl FogScheduler {
     pub fn new(
         server: ServerInfo,
-        cloud_scheduler: ServerInfo,
+        cloud_addr: String,
         scheduler: Box<dyn DeploymentScheduler>,
         tx: StateSender,
         database: DeploymentDatabase,
@@ -51,7 +51,7 @@ impl FogScheduler {
         let app_stats = HashMap::new();
 
         let runtime = Arc::new(Mutex::new(FogSchedulerRuntime {
-            cloud_scheduler,
+            cloud_addr,
             scheduler,
             database,
             stats,
@@ -141,8 +141,8 @@ impl FogScheduler {
         }))
     }
 
-    pub async fn scheduler_client(&self, server: &ServerInfo) -> Result<SchedulerClient<Channel>> {
-        Ok(SchedulerClient::connect(server.addr.clone()).await?)
+    pub async fn scheduler_client(&self, addr: String) -> Result<SchedulerClient<Channel>> {
+        Ok(SchedulerClient::connect(addr).await?)
     }
 
     pub async fn client(&self, server: &ServerInfo) -> Result<ServerDaemonClient<Channel>> {
@@ -200,7 +200,7 @@ impl Scheduler for FogScheduler {
         self.schedule_in_self(req.clone())
             .or_else(|_| async {
                 let mut client = self
-                    .scheduler_client(&runtime.cloud_scheduler)
+                    .scheduler_client(runtime.cloud_addr)
                     .await
                     .map_err(<Error as Into<Status>>::into)?;
                 client.lookup(Request::new(req)).await

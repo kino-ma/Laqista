@@ -14,6 +14,7 @@ use tonic_middleware::MiddlewareFor;
 use crate::deployment::database::{DeploymentDatabase, Target};
 use crate::proto::{scheduler_client::SchedulerClient, JoinRequest};
 use crate::report::MetricsReporter;
+use crate::scheduler::fog::FogScheduler;
 use crate::scheduler::{AuthoritativeScheduler, Cluster};
 use crate::{
     proto::{scheduler_server::SchedulerServer, server_daemon_server::ServerDaemonServer},
@@ -65,7 +66,7 @@ pub enum StateCommand {
 #[derive(Clone, Debug)]
 pub enum DaemonState {
     Cloud(GroupInfo),
-    Fog(String),
+    Fog(FogScheduler),
     Dew(String),
     Joining(String),
     Authoritative(AuthoritativeScheduler),
@@ -161,11 +162,10 @@ impl ServerRunner {
 
                 self.start_cloud(daemon, server, group).await
             }
-            DaemonState::Fog(cloud) => {
+            DaemonState::Fog(scheduler) => {
                 println!("Running a new fog server...");
-                println!("cloud scheduler = {:?}", cloud);
 
-                self.start_fog(daemon, server, &cloud).await
+                self.start_fog(daemon, server, scheduler).await
             }
             DaemonState::Dew(parent) => {
                 println!("Running a new dew server...");
@@ -264,7 +264,7 @@ impl ServerRunner {
         &self,
         daemon: ServerDaemon,
         server: ServerInfo,
-        cloud: &str,
+        scheduler: FogScheduler,
     ) -> Result<DaemonState> {
         println!("Starting fog server...");
 
@@ -272,14 +272,17 @@ impl ServerRunner {
 
         let reporter_token = self.start_reporter(server.clone(), server.clone(), app_rx);
 
-        let grpc_router = self.common_services(daemon, app_tx).await?;
+        let grpc_router = self
+            .common_services(daemon, app_tx)
+            .await?
+            .add_service(SchedulerServer::new(scheduler.clone()));
 
         grpc_router.serve(self.socket).await?;
 
         println!("cancel reporter (running)");
         reporter_token.cancel();
 
-        Ok(DaemonState::Fog(cloud.to_owned()))
+        Ok(DaemonState::Fog(scheduler))
     }
 
     async fn start_dew(
@@ -406,13 +409,24 @@ impl ServerRunner {
         match start_command.layer.as_ref() {
             "cloud" => (),
             "fog" => {
-                return DaemonState::Fog(
-                    start_command
-                        .bootstrap_addr
-                        .as_ref()
-                        .expect("Bootstrap server address is required on fog layer")
-                        .clone(),
-                )
+                let cloud = start_command
+                    .bootstrap_addr
+                    .as_ref()
+                    .expect("Bootstrap server address is required on fog layer")
+                    .clone();
+
+                let mean_scheduler = Box::new(MeanScheduler {});
+                let tx = self.tx.clone();
+
+                let scheduler = FogScheduler::new(
+                    server.clone(),
+                    cloud,
+                    mean_scheduler,
+                    tx,
+                    self.database.clone(),
+                );
+
+                return DaemonState::Fog(scheduler);
             }
             "dew" => {
                 return DaemonState::Dew(
