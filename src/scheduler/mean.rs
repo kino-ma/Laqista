@@ -102,6 +102,7 @@ impl MeanScheduler {
             .collect::<HashMap<_, _>>();
 
         if available_rpcs.is_empty() {
+            println!("WARN: Available RPCs are empty: {:?}", app.accuracies);
             return None;
         }
 
@@ -128,7 +129,10 @@ impl MeanScheduler {
         let mut target_utilization = 100.0;
         let mut target_satisfies = false;
 
-        let server_latencies = apps_map.0.get(service)?;
+        let server_latencies = apps_map.0.get(service).or_else(|| {
+            println!("WARN: Apps map do not contain service '{:?}'", service);
+            None
+        })?;
 
         for (id, stats) in local_stats.iter() {
             let utilized_rate = get_util(stats);
@@ -137,7 +141,11 @@ impl MeanScheduler {
 
             let latencies = server_latencies
                 .0
-                .get(id)?
+                .get(id)
+                .or_else(|| {
+                    println!("WARN: Server latencies do not contain latency for {:?}", id);
+                    None
+                })?
                 .lookup_service(service)
                 .into_iter()
                 .filter(|(rpc, _)| available_rpcs.keys().find(|k| *k == rpc).is_some());
