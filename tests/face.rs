@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use face::proto::InferRequest;
 use image::{imageops::FilterType, GenericImageView, Pixel};
-use laqista::proto::{self, DeployRequest, LookupRequest};
+use laqista::proto::{self, DeployRequest, GetAppsRequest, LookupRequest};
 use laqista_core::{client::retry, AppService};
 
 static JPEG: &'static [u8] = include_bytes!("../data/sized-pelican.jpeg");
@@ -106,35 +106,26 @@ async fn schedule_wasm() {
 #[tokio::test]
 #[ignore]
 async fn schedule_wasm_fog() {
-    let addr = "http://127.0.0.1:50051";
     let fog_addr = "http://127.0.0.1:50052";
 
-    let mut client = proto::scheduler_client::SchedulerClient::connect(addr.to_owned())
+    let mut client = proto::scheduler_client::SchedulerClient::connect(fog_addr.to_owned())
         .await
         .expect("failed to connect to the server");
 
-    let wasm_service = AppService::new("face", "Detector");
-    let onnx_service = AppService::new("face", "ObjectDetection");
-
-    let request = DeployRequest {
-        name: "face".to_owned(),
-        source: "https://github.com/kino-ma/Laqista/releases/download/v0.1.0/face_v0.1.0.tgz"
-            .to_owned(),
-        rpcs: vec![
-            wasm_service.rpc("RunDetection").to_string(),
-            onnx_service.rpc("Squeeze").to_string(),
-        ],
-        accuracies_percent: HashMap::from([(onnx_service.rpc("Squeeze").to_string(), 80.3)]),
+    let request = GetAppsRequest {
+        names: vec!["face".to_owned()],
     };
 
-    let deployment = client
-        .deploy(request)
+    let deployments = client
+        .get_apps(request)
         .await
         .expect("failed to deploy")
         .into_inner();
 
+    let onnx_service = AppService::new("face", "ObjectDetection");
+
     let request = LookupRequest {
-        deployment_id: deployment.deployment.unwrap().id,
+        deployment_id: deployments.apps[0].id.clone(),
         qos: None,
         service: onnx_service.to_string(),
     };
@@ -201,35 +192,26 @@ async fn schedule_wasm_fog() {
 #[tokio::test]
 #[ignore]
 async fn schedule_wasm_dew() {
-    let addr = "http://127.0.0.1:50051";
     let dew_addr = "http://127.0.0.1:50053";
 
-    let mut client = proto::scheduler_client::SchedulerClient::connect(addr.to_owned())
+    let mut client = proto::scheduler_client::SchedulerClient::connect(dew_addr.to_owned())
         .await
         .expect("failed to connect to the server");
 
-    let wasm_service = AppService::new("face", "Detector");
-    let onnx_service = AppService::new("face", "ObjectDetection");
-
-    let request = DeployRequest {
-        name: "face".to_owned(),
-        source: "https://github.com/kino-ma/Laqista/releases/download/v0.1.0/face_v0.1.0.tgz"
-            .to_owned(),
-        rpcs: vec![
-            wasm_service.rpc("RunDetection").to_string(),
-            onnx_service.rpc("Squeeze").to_string(),
-        ],
-        accuracies_percent: HashMap::from([(onnx_service.rpc("Squeeze").to_string(), 80.3)]),
+    let request = GetAppsRequest {
+        names: vec!["face".to_owned()],
     };
 
-    let deployment = client
-        .deploy(request)
+    let deployments = client
+        .get_apps(request)
         .await
         .expect("failed to deploy")
         .into_inner();
 
+    let onnx_service = AppService::new("face", "ObjectDetection");
+
     let request = LookupRequest {
-        deployment_id: deployment.deployment.unwrap().id,
+        deployment_id: deployments.apps[0].id.clone(),
         qos: None,
         service: onnx_service.to_string(),
     };
