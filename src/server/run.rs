@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::pin::pin;
 use std::str::FromStr;
 use std::time::Duration;
@@ -420,14 +421,12 @@ impl ServerRunner {
 
                 let mean_scheduler = Box::new(MeanScheduler {});
                 let tx = self.tx.clone();
+                let database =
+                    DeploymentDatabase::read_dir(PathBuf::from(".laqista-fog"), tx.clone())
+                        .unwrap();
 
-                let scheduler = FogScheduler::new(
-                    server.clone(),
-                    cloud,
-                    mean_scheduler,
-                    tx,
-                    self.database.clone(),
-                );
+                let scheduler =
+                    FogScheduler::new(server.clone(), cloud, mean_scheduler, tx, database);
 
                 return DaemonState::Fog(scheduler);
             }
@@ -440,14 +439,12 @@ impl ServerRunner {
 
                 let mean_scheduler = Box::new(MeanScheduler {});
                 let tx = self.tx.clone();
+                let database =
+                    DeploymentDatabase::read_dir(PathBuf::from(".laqista-dew"), tx.clone())
+                        .unwrap();
 
-                let scheduler = DewScheduler::new(
-                    server.clone(),
-                    parent,
-                    mean_scheduler,
-                    tx,
-                    self.database.clone(),
-                );
+                let scheduler =
+                    DewScheduler::new(server.clone(), parent, mean_scheduler, tx, database);
 
                 return DaemonState::Dew(scheduler);
             }
