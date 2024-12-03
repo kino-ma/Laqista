@@ -78,31 +78,24 @@ export const options = {
 // about authoring k6 scripts.
 //
 export default function () {
-  // console.log("start");
   schedulerClient.connect("127.0.0.1:50051", { plaintext: true });
-  // console.log("connected");
 
   let lookupReply = schedulerClient.invoke(
     "laqista.Scheduler/Lookup",
     lookupRequest
   );
-  // console.log(lookupReply);
   let url = new URL(lookupReply.message.server.addr);
   let address = url.host;
   appClient.connect(address, { plaintext: true });
-  // console.log("connected 2");
 
   let detectionReply = appClient.invoke(
     "face.Detector/RunDetection",
     runDetectionRequest
   );
-  // console.log("invoked");
 
   check(detectionReply, {
     "status is OK": (r) => r && r.status === StatusOK,
     "label is correct": (r) =>
       r && detectionReply.message.label.includes("spoonbill"),
   });
-  // console.log(detectionReply);
-  // console.log("checked");
 }
