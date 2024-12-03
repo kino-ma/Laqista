@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error};
+use std::{collections::HashMap, error::Error, time::Duration};
 
 use laqista_core::AppRpc;
 use tokio::{select, sync::mpsc, task::JoinHandle};
@@ -53,10 +53,14 @@ impl MetricsReporter {
         loop {
             select! {
                 Some(window) = self.rx.recv() => {
-
-                    self.report(&window.into())
-                        .await
-                        .expect("failed to report metrics");
+                    for _ in 0..3 {
+                        match self.report(&window.clone().into())
+                            .await {
+                                Ok(_) => break,
+                                Err(e) => println!("Error sending metrics: '{e:?}'. Retrying in 200 ms..."),
+                            }
+                            tokio::time::sleep(Duration::from_millis(200)).await;
+                    }
                 }
                 _ = token.cancelled() => {
                     println!("cancelled");
