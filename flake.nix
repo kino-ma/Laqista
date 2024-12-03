@@ -96,7 +96,7 @@
 
           RUST_SRC_PATH = "${pkgs.fenix.complete.rust-src}/lib/rustlib/src/rust/";
           LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
-          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc pkgs.libclang pkgs.vulkan-loader pkgs.openssl ];
+          LD_LIBRARY_PATH = (pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc pkgs.libclang pkgs.vulkan-loader pkgs.openssl ]) + ":/home/kino-ma/lib";
         };
 
         packages = rec {
