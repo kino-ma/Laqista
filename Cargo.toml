@@ -52,6 +52,7 @@ laqista-core = { version = "0.1.0", path = "./laqista-core", features = ["tokio"
 sha2 = "0.10.8"
 hex = "0.4.3"
 tonic-middleware = "0.1.4"
+nvml-wrapper = "0.10.0"
 
 [build-dependencies]
 tonic-build = "0.11"

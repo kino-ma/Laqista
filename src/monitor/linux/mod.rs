@@ -1,4 +1,6 @@
+pub mod nvidia;
 pub mod radeon;
+pub use nvidia::*;
 pub use radeon::*;
 use tokio::{sync::mpsc::Sender, task::JoinHandle};
 

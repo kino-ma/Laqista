@@ -914,6 +914,7 @@ dependencies = [
  "ident_case",
  "proc-macro2",
  "quote",
+ "strsim 0.11.1",
  "syn 2.0.66",
 ]
 
@@ -2025,6 +2026,7 @@ dependencies = [
  "mac_address",
  "ndarray",
  "nom",
+ "nvml-wrapper",
  "plist",
  "prost",
  "prost-types",
@@ -2528,6 +2530,29 @@ checksum = "4161fcb6d602d4d2081af7c3a45852d875a03dd337a6bfdd6e06407b61342a43"
 dependencies = [
  "hermit-abi",
  "libc",
+]
+
+[[package]]
+name = "nvml-wrapper"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c9bff0aa1d48904a1385ea2a8b97576fbdcbc9a3cfccd0d31fe978e1c4038c5"
+dependencies = [
+ "bitflags 2.5.0",
+ "libloading 0.8.4",
+ "nvml-wrapper-sys",
+ "static_assertions",
+ "thiserror",
+ "wrapcenum-derive",
+]
+
+[[package]]
+name = "nvml-wrapper-sys"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "698d45156f28781a4e79652b6ebe2eaa0589057d588d3aec1333f6466f13fcb5"
+dependencies = [
+ "libloading 0.8.4",
 ]
 
 [[package]]
@@ -5151,6 +5176,18 @@ dependencies = [
  "tera",
  "thiserror",
  "wgpu",
+]
+
+[[package]]
+name = "wrapcenum-derive"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a76ff259533532054cfbaefb115c613203c73707017459206380f03b3b3f266e"
+dependencies = [
+ "darling 0.20.10",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.66",
 ]
 
 [[package]]
