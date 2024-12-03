@@ -1,7 +1,9 @@
 use std::time::Duration;
 
 use chrono::{DateTime, TimeDelta, Utc};
-use nvml_wrapper::{struct_wrappers::device::Utilization as GpuUtilization, Device, Nvml};
+use nvml_wrapper::{
+    error::NvmlError, struct_wrappers::device::Utilization as GpuUtilization, Device, Nvml,
+};
 use tokio::{sync::mpsc, time};
 
 use crate::{
@@ -14,9 +16,9 @@ pub struct NvidiaMonitor {
 }
 
 impl NvidiaMonitor {
-    pub fn new() -> Self {
-        let nvml = Nvml::init().expect("failed to initialize NVML wrapper");
-        Self { nvml }
+    pub fn new() -> Result<Self, NvmlError> {
+        let nvml = Nvml::init()?;
+        Ok(Self { nvml })
     }
 
     pub async fn run(&self, tx: mpsc::Sender<MonitorWindow>) -> ! {

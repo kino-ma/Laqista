@@ -26,7 +26,11 @@ impl SendMetrics for MetricsMonitor {
                     let monitor = RadeonMonitor::new();
                     monitor.run(tx).await;
                 }
-                _ => unimplemented!("Unsupported platform"),
+                Nvidia => {
+                    let monitor = NvidiaMonitor::new().unwrap();
+                    monitor.run(tx).await;
+                }
+                Unknown => unimplemented!("Unsupported platform"),
             }
         })
     }
@@ -41,7 +45,12 @@ enum HostSystem {
 
 impl HostSystem {
     pub fn determine() -> Self {
-        //TODO: Deteremine underlying system
-        Self::Radeon
+        match NvidiaMonitor::new() {
+            Ok(_) => Self::Nvidia,
+            Err(e) => {
+                println!("nvml error: {e:?}");
+                Self::Radeon
+            }
+        }
     }
 }
