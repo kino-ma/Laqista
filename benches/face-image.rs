@@ -91,9 +91,11 @@ async fn setup_clients(
     DetectorClient<Channel>,
     Deployment,
 ) {
-    let mut client = proto::scheduler_client::SchedulerClient::connect(addr.to_owned())
-        .await
-        .expect("failed to connect to the server");
+    let mut client = retry(|| async {
+        proto::scheduler_client::SchedulerClient::connect(addr.to_owned()).await
+    })
+    .await
+    .expect("failed to connect to the server");
 
     let wasm_service = AppService::new("face", "Detector");
     let onnx_service = AppService::new("face", "ObjectDetection");
@@ -276,5 +278,42 @@ async fn run_wasm_direct(detector_client: &mut DetectorClient<Channel>, image: &
     };
     detector_client.run_detection(request).await.unwrap();
 }
-criterion_group!(benches, bench_face_image, bench_wasm);
+
+pub fn bench_scheduler(c: &mut Criterion) {
+    let addr = "http://127.0.0.1:50051";
+
+    let runtime = Runtime::new().unwrap();
+    let (client, _, _, deployment) = runtime.block_on(async { setup_clients(addr).await });
+
+    let deployment_id = deployment.id;
+
+    let arc_client = Arc::new(Mutex::new(client));
+
+    let mut group = c.benchmark_group("Face image");
+
+    group.bench_with_input(
+        BenchmarkId::new("scheduler lookup", "<client>"),
+        &arc_client,
+        |b, client| {
+            b.to_async(Runtime::new().unwrap()).iter(|| async {
+                let mut client = client.lock().await;
+                run_lookup(&mut client, &deployment_id).await
+            })
+        },
+    );
+}
+
+async fn run_lookup(client: &mut SchedulerClient<Channel>, deployment_id: &str) {
+    let rpc = AppRpc::new("face", "Detector", "RunDetection");
+
+    let request = LookupRequest {
+        deployment_id: deployment_id.to_owned(),
+        qos: None,
+        service: rpc.to_string(),
+    };
+
+    client.clone().lookup(request).await.unwrap().into_inner();
+}
+
+criterion_group!(benches, bench_face_image, bench_wasm, bench_scheduler);
 criterion_main!(benches);
