@@ -556,8 +556,6 @@ impl Cluster {
     }
 
     pub fn get_instance_server_ids(&self, deployment_id: &Uuid) -> Result<Vec<Uuid>> {
-        println!("instances = {:?}", self.instances.0);
-
         Ok(self
             .instances
             .0

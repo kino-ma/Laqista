@@ -205,7 +205,6 @@ impl MeanScheduler {
                 })
                 .collect::<HashMap<_, _>>()
         } else {
-            println!("no locality");
             stats.0
         }
     }

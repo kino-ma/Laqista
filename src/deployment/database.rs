@@ -251,7 +251,6 @@ impl Target {
     pub fn extension_matches(&self, filename: &OsStr) -> bool {
         let extension = self.to_string();
         let matches = filename.to_str().unwrap().ends_with(&extension);
-        dbg!(self, filename, extension, matches);
         matches
     }
 }
