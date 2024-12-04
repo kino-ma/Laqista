@@ -34,6 +34,7 @@ use hello::proto::greeter_server::GreeterServer;
 use face::proto as face_proto;
 
 pub const DEFAULT_HOST: &'static str = "127.0.0.1:50051";
+pub const DEFAULT_STATS_CHANNELS: usize = 0x1000;
 
 pub struct ServerRunner {
     command: ServerCommand,
@@ -215,7 +216,7 @@ impl ServerRunner {
     ) -> Result<DaemonState> {
         let server = daemon.runtime.lock().await.info.clone();
 
-        let (app_tx, app_rx) = mpsc::channel(1024);
+        let (app_tx, app_rx) = mpsc::channel(DEFAULT_STATS_CHANNELS);
 
         let scheduler_info = scheduler
             .runtime
@@ -248,7 +249,7 @@ impl ServerRunner {
         server: ServerInfo,
         group: GroupInfo,
     ) -> Result<DaemonState> {
-        let (app_tx, app_rx) = mpsc::channel(1024);
+        let (app_tx, app_rx) = mpsc::channel(DEFAULT_STATS_CHANNELS);
 
         let reporter_token =
             self.start_reporter(server.clone(), group.scheduler_info.clone(), app_rx);
@@ -271,7 +272,7 @@ impl ServerRunner {
     ) -> Result<DaemonState> {
         println!("Starting fog server...");
 
-        let (app_tx, app_rx) = mpsc::channel(1024);
+        let (app_tx, app_rx) = mpsc::channel(DEFAULT_STATS_CHANNELS);
 
         let reporter_token = self.start_reporter(server.clone(), server.clone(), app_rx);
 
@@ -296,7 +297,7 @@ impl ServerRunner {
     ) -> Result<DaemonState> {
         println!("Starting dew server...");
 
-        let (app_tx, app_rx) = mpsc::channel(1024);
+        let (app_tx, app_rx) = mpsc::channel(DEFAULT_STATS_CHANNELS);
 
         let reporter_token = self.start_reporter(server.clone(), server.clone(), app_rx);
 
