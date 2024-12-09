@@ -310,7 +310,6 @@ impl Scheduler for AuthoritativeScheduler {
             .scheduler
             .schedule(&service, &app, &stats_map, &apps_map, qos)
             .or_else(|| {
-                println!("WARN: failed to schedule. using random server and rpc");
                 let instance = runtime.cluster.instances.0.get(&id)?;
                 let server = instance.servers.get(0)?;
                 let rpc = app.services.get(&service).unwrap().get(0)?;

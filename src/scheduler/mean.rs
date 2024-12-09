@@ -102,7 +102,6 @@ impl MeanScheduler {
             .collect::<HashMap<_, _>>();
 
         if available_rpcs.is_empty() {
-            println!("WARN: Available RPCs are empty: {:?}", app.accuracies);
             return None;
         }
 
