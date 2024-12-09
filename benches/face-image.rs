@@ -27,9 +27,7 @@ pub fn bench_face_image(c: &mut Criterion) {
     let addr = "http://127.0.0.1:50051";
 
     let runtime = Runtime::new().unwrap();
-    let (client, od_client, _, deployment) = runtime.block_on(async { setup_clients(addr).await });
-
-    let deployment_id = deployment.id;
+    let (client, od_client, _, _) = runtime.block_on(async { setup_clients(addr).await });
 
     let arc_client = Arc::new(Mutex::new(client));
     let arc_od_client = Arc::new(Mutex::new(od_client));
@@ -42,7 +40,7 @@ pub fn bench_face_image(c: &mut Criterion) {
         |b, (client, data)| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
                 let mut client = client.lock().await;
-                run_scheduled(&mut client, data.clone(), &deployment_id).await
+                run_scheduled(&mut client, data.clone()).await
             })
         },
     );
@@ -66,7 +64,7 @@ pub fn bench_face_image(c: &mut Criterion) {
         |b, (client, data)| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
                 let mut client = client.lock().await;
-                run_scheduled(&mut client, data.clone(), &deployment_id).await
+                run_scheduled(&mut client, data.clone()).await
             })
         },
     );
@@ -153,10 +151,10 @@ fn setup_image() -> Vec<f32> {
     array.into_raw_vec()
 }
 
-async fn run_scheduled(client: &mut SchedulerClient<Channel>, data: Vec<f32>, deployment_id: &str) {
+async fn run_scheduled(client: &mut SchedulerClient<Channel>, data: Vec<f32>) {
     let rpc = AppRpc::new("face", "ObjectDetection", "Squeeze");
     let request = LookupRequest {
-        deployment_id: deployment_id.to_owned(),
+        name: "face".to_owned(),
         qos: None,
         service: rpc.to_string(),
     };
@@ -186,10 +184,7 @@ pub fn bench_wasm(c: &mut Criterion) {
     let addr = "http://127.0.0.1:50051";
 
     let runtime = Runtime::new().unwrap();
-    let (client, _, detector_client, deployment) =
-        runtime.block_on(async { setup_clients(addr).await });
-
-    let deployment_id = deployment.id;
+    let (client, _, detector_client, _) = runtime.block_on(async { setup_clients(addr).await });
 
     let arc_client = Arc::new(Mutex::new(client));
     let arc_app_client = Arc::new(Mutex::new(detector_client));
@@ -225,7 +220,7 @@ pub fn bench_wasm(c: &mut Criterion) {
         |b, (client, _)| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
                 let mut client = client.lock().await;
-                run_wasm_scheduled(&mut client, &deployment_id, JPEG).await
+                run_wasm_scheduled(&mut client, JPEG).await
             })
         },
     );
@@ -242,14 +237,10 @@ pub fn bench_wasm(c: &mut Criterion) {
     );
 }
 
-async fn run_wasm_scheduled(
-    client: &mut SchedulerClient<Channel>,
-    deployment_id: &str,
-    image: &[u8],
-) {
+async fn run_wasm_scheduled(client: &mut SchedulerClient<Channel>, image: &[u8]) {
     let rpc = AppRpc::new("face", "Detector", "RunDetection");
     let request = LookupRequest {
-        deployment_id: deployment_id.to_owned(),
+        name: "face".to_owned(),
         qos: None,
         service: rpc.to_string(),
     };
@@ -283,9 +274,7 @@ pub fn bench_scheduler(c: &mut Criterion) {
     let addr = "http://127.0.0.1:50051";
 
     let runtime = Runtime::new().unwrap();
-    let (client, _, _, deployment) = runtime.block_on(async { setup_clients(addr).await });
-
-    let deployment_id = deployment.id;
+    let (client, _, _, _) = runtime.block_on(async { setup_clients(addr).await });
 
     let arc_client = Arc::new(Mutex::new(client));
 
@@ -297,17 +286,17 @@ pub fn bench_scheduler(c: &mut Criterion) {
         |b, client| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
                 let mut client = client.lock().await;
-                run_lookup(&mut client, &deployment_id).await
+                run_lookup(&mut client).await
             })
         },
     );
 }
 
-async fn run_lookup(client: &mut SchedulerClient<Channel>, deployment_id: &str) {
+async fn run_lookup(client: &mut SchedulerClient<Channel>) {
     let rpc = AppRpc::new("face", "Detector", "RunDetection");
 
     let request = LookupRequest {
-        deployment_id: deployment_id.to_owned(),
+        name: "face".to_owned(),
         qos: None,
         service: rpc.to_string(),
     };

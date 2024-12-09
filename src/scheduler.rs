@@ -275,20 +275,18 @@ impl Scheduler for AuthoritativeScheduler {
         let runtime = self.clone_inner().await;
 
         let LookupRequest {
-            deployment_id,
             qos: maybe_qos,
             service,
+            name,
         } = request.into_inner();
 
-        let id = Uuid::parse_str(&deployment_id).map_err(|e| Status::aborted(e.to_string()))?;
         let app = runtime
-            .deployments
-            .0
-            .get(&id)
+            .get_deployment(&name)
             .ok_or(Status::aborted(format!(
-                "Application with that id not found: {}",
-                id
+                "Application with that name not found: {}",
+                name
             )))?;
+        let id = app.id;
 
         let qos: QoSSpec = maybe_qos
             .unwrap_or_default()
@@ -410,6 +408,13 @@ impl SchedulerRuntime {
             .map_err(|e| format!("Failed to save deployment: {e}"))?;
 
         Ok(())
+    }
+
+    pub fn get_deployment(&self, name: &str) -> Option<&DeploymentInfo> {
+        self.deployments
+            .iter()
+            .find(|(_, d)| d.name == name)
+            .map(|(_, d)| d)
     }
 
     pub fn wrap(self) -> Arc<Mutex<Self>> {

@@ -33,14 +33,14 @@ async fn schedule_wasm() {
         accuracies_percent: HashMap::from([(onnx_service.rpc("Squeeze").to_string(), 80.3)]),
     };
 
-    let deployment = client
+    let _deployment = client
         .deploy(request)
         .await
         .expect("failed to deploy")
         .into_inner();
 
     let request = LookupRequest {
-        deployment_id: deployment.deployment.unwrap().id,
+        name: "face".to_owned(),
         qos: None,
         service: onnx_service.to_string(),
     };
@@ -144,7 +144,7 @@ async fn schedule_wasm_fog() {
         names: vec!["face".to_owned()],
     };
 
-    let deployments = retry(|| async { client.clone().get_apps(request.clone()).await })
+    let _deployments = retry(|| async { client.clone().get_apps(request.clone()).await })
         .await
         .unwrap()
         .into_inner();
@@ -152,7 +152,7 @@ async fn schedule_wasm_fog() {
     let onnx_service = AppService::new("face", "ObjectDetection");
 
     let request = LookupRequest {
-        deployment_id: deployments.apps[0].id.clone(),
+        name: "face".to_owned(),
         qos: None,
         service: onnx_service.to_string(),
     };
@@ -263,7 +263,7 @@ async fn schedule_wasm_dew() {
         names: vec!["face".to_owned()],
     };
 
-    let deployments = retry(|| async { client.clone().get_apps(request.clone()).await })
+    let _deployments = retry(|| async { client.clone().get_apps(request.clone()).await })
         .await
         .unwrap()
         .into_inner();
@@ -271,7 +271,7 @@ async fn schedule_wasm_dew() {
     let onnx_service = AppService::new("face", "ObjectDetection");
 
     let request = LookupRequest {
-        deployment_id: deployments.apps[0].id.clone(),
+        name: "face".to_owned(),
         qos: None,
         service: onnx_service.to_string(),
     };

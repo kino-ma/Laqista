@@ -28,14 +28,14 @@ async fn schedule_wasm() {
         accuracies_percent: HashMap::from([(onnx_service.rpc("Squeeze").to_string(), 80.3)]),
     };
 
-    let deployment = client
+    let _deployment = client
         .deploy(request)
         .await
         .expect("failed to deploy")
         .into_inner();
 
     let request = LookupRequest {
-        deployment_id: deployment.deployment.unwrap().id.to_owned(),
+        name: "face".to_owned(),
         qos: None,
         service: wasm_service.rpc("RunDetection").to_string(),
     };

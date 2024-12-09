@@ -19,9 +19,7 @@ pub fn bench_greeter(c: &mut Criterion) {
     let addr = "http://127.0.0.1:50051";
 
     let runtime = Runtime::new().unwrap();
-    let (client, app_client, deployment) = runtime.block_on(async { setup_clients(addr).await });
-
-    let deployment_id = deployment.id;
+    let (client, app_client, _) = runtime.block_on(async { setup_clients(addr).await });
 
     let arc_client = Arc::new(Mutex::new(client));
     let arc_app_client = Arc::new(Mutex::new(app_client));
@@ -35,7 +33,7 @@ pub fn bench_greeter(c: &mut Criterion) {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
                 let mut client = client.lock().await;
                 let mut app_client = app_client.lock().await;
-                run_scheduled(&mut client, &mut app_client, &deployment_id).await
+                run_scheduled(&mut client, &mut app_client).await
             })
         },
     );
@@ -85,12 +83,11 @@ async fn setup_clients(
 async fn run_scheduled(
     client: &mut SchedulerClient<Channel>,
     app_client: &mut GreeterClient<Channel>,
-    deployment_id: &str,
 ) {
     let service = AppService::new("hello", "Greeter");
 
     let request = LookupRequest {
-        deployment_id: deployment_id.to_owned(),
+        name: "hello".to_owned(),
         qos: None,
         service: service.rpc("SayHello").to_string(),
     };

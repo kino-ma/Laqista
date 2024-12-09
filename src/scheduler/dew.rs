@@ -4,7 +4,6 @@ use futures::TryFutureExt;
 use laqista_core::{AppRpc, AppService, DeploymentInfo};
 use tokio::sync::Mutex;
 use tonic::{transport::Channel, Request, Response, Result as RpcResult, Status};
-use uuid::Uuid;
 
 use crate::{
     deployment::database::DeploymentDatabase,
@@ -70,12 +69,11 @@ impl DewScheduler {
         let runtime = self.clone_inner().await;
 
         let LookupRequest {
-            deployment_id,
             qos: maybe_qos,
             service,
+            name,
         } = request;
 
-        let id = Uuid::parse_str(&deployment_id).map_err(|e| Status::aborted(e.to_string()))?;
         let this_server = runtime.stats.server.clone();
 
         let qos: QoSSpec = maybe_qos
@@ -103,7 +101,7 @@ impl DewScheduler {
 
         let app = runtime
             .database
-            .get_by_id(&id)
+            .lookup(&name)
             .await
             .ok_or(Error::NoneError)?;
 
@@ -114,7 +112,7 @@ impl DewScheduler {
 
         Ok(Response::new(LookupResponse {
             success: true,
-            deployment_id: id.to_string(),
+            deployment_id: app.id.to_string(),
             server: Some(target.into()),
             rpc: rpc.to_string(),
         }))
