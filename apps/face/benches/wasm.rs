@@ -181,7 +181,7 @@ fn read_image_in_wasm(input: &ReadInput) {
 
     let exec_state = runner.call::<String>("read_image", params).unwrap();
 
-    exec_state.unwrap_continue();
+    exec_state.unwrap_finished();
 }
 
 fn main_wasm(input: &ReadInput) {
