@@ -512,7 +512,7 @@ impl Cluster {
             .or_insert_with(|| {
                 println!(
                     "Received server stats from {:?} for the first time",
-                    &server
+                    &stats.server
                 );
                 stats
             });
