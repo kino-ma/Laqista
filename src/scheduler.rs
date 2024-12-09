@@ -510,7 +510,13 @@ impl Cluster {
             .0
             .entry(id)
             .and_modify(|s| s.append(stats.stats.clone()))
-            .or_insert(stats);
+            .or_insert_with(|| {
+                println!(
+                    "Received server stats from {:?} for the first time",
+                    &server
+                );
+                stats
+            });
     }
 
     pub fn push_latency(
@@ -519,6 +525,8 @@ impl Cluster {
         info_by_name: HashMap<String, DeploymentInfo>,
         latencies: HashMap<String, u32>,
     ) {
+        let cloned_latencies = latencies.clone();
+
         for (path, elapsed) in latencies {
             let rpc = AppRpc::from_str(&path)
                 .expect(("failed to parse gRPC path".to_owned() + &path).as_str());
@@ -542,11 +550,17 @@ impl Cluster {
                     e.0.entry(server.id)
                         .and_modify(|latency| latency.insert(&rpc, dur));
                 })
-                .or_insert(IdMap(
-                    [(server.id, AppLatency::new(info.clone()))]
-                        .into_iter()
-                        .collect(),
-                ));
+                .or_insert_with(|| {
+                    println!(
+                        "Received app stats from {:?} for the first time: {:?}",
+                        &server, &cloned_latencies
+                    );
+                    IdMap(
+                        [(server.id, AppLatency::new(info.clone()))]
+                            .into_iter()
+                            .collect(),
+                    )
+                });
         }
     }
 
