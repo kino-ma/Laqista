@@ -72,7 +72,8 @@ impl DeploymentScheduler for MeanScheduler {
             None => return false,
         };
 
-        return stat.utilization.as_ref().unwrap().cpu > SCALEOUT_THREASHOLD as _;
+        return stat.utilization.as_ref().unwrap().cpu > SCALEOUT_THREASHOLD as _
+            || stat.utilization.as_ref().unwrap().gpu > SCALEOUT_THREASHOLD as _;
     }
 }
 
@@ -175,7 +176,6 @@ impl MeanScheduler {
         }
 
         if target_rpc.package == "" {
-            println!("No node matched specified qos");
             None
         } else {
             Some((target.server.clone(), target_rpc))
