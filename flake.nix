@@ -7,12 +7,17 @@
       url = "github:nix-community/fenix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    nix-gl = {
+      url = "github:nix-community/nixGL";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs, flake-utils, fenix }:
+  outputs = { self, nixpkgs, flake-utils, fenix, nix-gl }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        overlays = [ fenix.overlays.default ];
+        overlays = [ fenix.overlays.default nix-gl.overlay ];
         pkgs = import nixpkgs {
           inherit system overlays;
           config.permittedInsecurePackages = [ "openssl-1.1.1w" ];
@@ -39,7 +44,7 @@
 
       in
       {
-        devShell = pkgs.mkShell {
+        devShell = pkgs.mkShell rec {
           nativeBuildInputs = with pkgs;
             [
               llvmPackages.libclang.lib
@@ -77,8 +82,29 @@
               cargo-generate
               wasm-pack
               wonnx
+
+              pkgs.nixgl.auto.nixGLDefault
             ]
-            ++ pkgs.lib.optionals (system == "x86_64-linux") [ pkgs.radeontop pkgs.openssl pkgs.vulkan-loader ]
+            ++ pkgs.lib.optionals (system == "x86_64-linux") [
+              pkgs.radeontop
+              pkgs.openssl
+              pkgs.vulkan-loader
+              pkgs.libdrm
+
+              libdrm
+              xorg.libxcb
+              expat
+              zstd
+              xorg.libxshmfence
+              pkgs.stdenv.cc.cc.lib
+              libGLU
+              llvmPackages_12.libllvm
+              mesa
+
+              pciutils
+              vulkan-tools
+              glib
+            ]
             ++ pkgs.lib.optionals (pkgs.stdenv.isDarwin) (with pkgs; with darwin.apple_sdk.frameworks; [
               llvmPackages.libcxxStdenv
               llvmPackages.libcxxClang
@@ -96,7 +122,7 @@
 
           RUST_SRC_PATH = "${pkgs.fenix.complete.rust-src}/lib/rustlib/src/rust/";
           LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
-          LD_LIBRARY_PATH = (pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc pkgs.libclang pkgs.vulkan-loader pkgs.openssl ]) + ":/home/kino-ma/lib";
+          LD_LIBRARY_PATH = (pkgs.lib.makeLibraryPath (nativeBuildInputs ++ [ pkgs.stdenv.cc.cc pkgs.libclang pkgs.vulkan-loader pkgs.openssl ])) + ":/home/kino-ma/lib";
         };
 
         packages = rec {
