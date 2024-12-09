@@ -10,7 +10,8 @@ use crate::{
     proto::{
         scheduler_client::SchedulerClient, scheduler_server::Scheduler,
         server_daemon_client::ServerDaemonClient, DeployRequest, DeployResponse, GetAppsRequest,
-        GetAppsResponse, JoinRequest, JoinResponse, LookupRequest, LookupResponse, ReportRequest,
+        GetAppsResponse, GetStatsRequest, GetStatsResponse, JoinRequest, JoinResponse,
+        LookupRequest, LookupResponse, NodeAppStats, RepeatedWindows, ReportRequest,
         ReportResponse, Server,
     },
     server::StateSender,
@@ -214,6 +215,42 @@ impl Scheduler for FogScheduler {
             .map_err(|e| Status::aborted(format!("failed to add app instances: {e}")))?;
 
         Ok(resp)
+    }
+
+    async fn get_stats(
+        &self,
+        _request: Request<GetStatsRequest>,
+    ) -> RpcResult<Response<GetStatsResponse>> {
+        let runtime = self.runtime.lock().await.clone();
+
+        let server_id = runtime.stats.server.id;
+
+        let windows = RepeatedWindows {
+            windows: runtime.stats.stats,
+        };
+        let server_sttas = HashMap::from([(server_id.to_string(), windows)]);
+
+        let app_stats: HashMap<String, u32> = runtime
+            .app_stats
+            .into_iter()
+            .map(|(_svc, latency)| {
+                latency
+                    .rpcs
+                    .into_iter()
+                    .map(|(rpc, lat)| (rpc.to_string(), lat.average.as_millis() as _))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>()
+            .concat()
+            .into_iter()
+            .collect();
+        let app_latencies = HashMap::from([(server_id.to_string(), NodeAppStats { app_stats })]);
+
+        let resp = GetStatsResponse {
+            server_sttas,
+            app_latencies,
+        };
+        Ok(Response::new(resp))
     }
 }
 

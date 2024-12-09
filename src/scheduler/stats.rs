@@ -4,7 +4,7 @@ use laqista_core::{AppRpc, AppService, DeploymentInfo};
 use prost_types::Timestamp;
 
 use crate::{
-    proto::{MonitorWindow, ResourceUtilization},
+    proto::{MonitorWindow, NodeAppStats, ResourceUtilization},
     utils::{subtract_window, IdMap},
     ServerInfo,
 };
@@ -92,6 +92,32 @@ impl AppsMap {
             .filter_map(|(id, lat)| lat.rpcs.get(rpc).map(|l| (id, l.clone())))
             .collect::<HashMap<_, _>>()
             .into()
+    }
+
+    /// { [app]: { [node_id]: latencies[] } } -> { [node_id]: { [rpc]: latencies } }
+    pub fn into_node_stats(self) -> HashMap<String, NodeAppStats> {
+        let mut out: HashMap<String, NodeAppStats> = HashMap::new();
+
+        for (_svc, node_latencies) in self.0 {
+            for (node_id, latency) in node_latencies.0 {
+                for (rpc, latency) in latency.rpcs {
+                    out.entry(node_id.to_string())
+                        .and_modify(|per_rpc| {
+                            per_rpc
+                                .app_stats
+                                .insert(rpc.to_string(), latency.average.as_millis() as _);
+                        })
+                        .or_insert(NodeAppStats {
+                            app_stats: HashMap::from([(
+                                rpc.to_string(),
+                                latency.average.as_millis() as _,
+                            )]),
+                        });
+                }
+            }
+        }
+
+        out
     }
 }
 

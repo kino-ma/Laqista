@@ -21,8 +21,9 @@ use crate::proto::scheduler_server::Scheduler;
 use crate::proto::server_daemon_client::ServerDaemonClient;
 use crate::proto::{
     ClusterState, DeployRequest, DeployResponse, Deployment, GetAppsRequest, GetAppsResponse,
-    JoinRequest, JoinResponse, LookupRequest, LookupResponse, Nomination, ReportRequest,
-    ReportResponse, Server, SpawnRequest, SpawnResponse,
+    GetStatsRequest, GetStatsResponse, JoinRequest, JoinResponse, LookupRequest, LookupResponse,
+    Nomination, RepeatedWindows, ReportRequest, ReportResponse, Server, SpawnRequest,
+    SpawnResponse,
 };
 use crate::server::{DaemonState, StateSender};
 use crate::utils::IdMap;
@@ -102,7 +103,8 @@ impl AuthoritativeScheduler {
                 .scheduler
                 .least_utilized(&runtime.cluster.server_stats)
         };
-        println!("got target server = {:?}", &target_server);
+
+        println!("Scaling out the application: {deployment:?} to {target_server:?}");
 
         let mut client = self.client(&target_server).await?;
 
@@ -369,6 +371,34 @@ impl Scheduler for AuthoritativeScheduler {
 
         let resp = GetAppsResponse { apps };
 
+        Ok(Response::new(resp))
+    }
+
+    async fn get_stats(
+        &self,
+        _request: Request<GetStatsRequest>,
+    ) -> RpcResult<Response<GetStatsResponse>> {
+        let runtime = self.runtime.lock().await.clone();
+
+        let server_sttas: HashMap<String, RepeatedWindows> = runtime
+            .cluster
+            .server_stats
+            .0
+            .into_iter()
+            .map(|(id, stats)| {
+                let windows = RepeatedWindows {
+                    windows: stats.stats,
+                };
+                (id.to_string(), windows)
+            })
+            .collect();
+
+        let app_latencies = runtime.cluster.app_stats.into_node_stats();
+
+        let resp = GetStatsResponse {
+            server_sttas,
+            app_latencies,
+        };
         Ok(Response::new(resp))
     }
 }

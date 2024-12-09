@@ -67,6 +67,7 @@ service Scheduler {
   rpc Deploy(DeployRequest) returns (DeployResponse);
   rpc Lookup(LookupRequest) returns (LookupResponse);
   rpc GetApps(GetAppsRequest) returns (GetAppsResponse);
+  rpc GetStats(GetStatsRequest) returns (GetStatsResponse);
 }
 
 message NotifyRequest { ClusterState cluster = 1; }
@@ -128,6 +129,14 @@ message DeployResponse {
   bool success = 1;
   Deployment deployment = 2;
 }
+
+message GetStatsRequest {}
+message GetStatsResponse {
+  map<string, RepeatedWindows> server_sttas = 1;
+  map<string, NodeAppStats> app_latencies = 2;
+}
+message RepeatedWindows { repeated MonitorWindow windows = 1; }
+message NodeAppStats { map<string, uint32> app_stats = 1; }
 
 /*
  * Server Daemon services
