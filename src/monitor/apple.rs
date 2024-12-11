@@ -153,7 +153,7 @@ impl ProcessorMetrics {
             .map(|c| c.cpus.iter().map(|cpu| cpu.idle_ratio).sum::<f64>())
             .sum::<f64>();
 
-        total_cores - total_idle_ratio
+        1. - (total_idle_ratio / total_cores)
     }
 }
 
