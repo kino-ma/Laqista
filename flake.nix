@@ -82,8 +82,6 @@
               cargo-generate
               wasm-pack
               wonnx
-
-              pkgs.nixgl.auto.nixGLDefault
             ]
             ++ pkgs.lib.optionals (system == "x86_64-linux") [
               pkgs.radeontop
@@ -104,6 +102,8 @@
               pciutils
               vulkan-tools
               glib
+
+              pkgs.nixgl.auto.nixGLDefault
             ]
             ++ pkgs.lib.optionals (pkgs.stdenv.isDarwin) (with pkgs; with darwin.apple_sdk.frameworks; [
               llvmPackages.libcxxStdenv
