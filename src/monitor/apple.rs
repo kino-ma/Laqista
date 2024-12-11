@@ -34,6 +34,37 @@ pub struct Gpu {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProcessorMetrics {
+    pub clusters: Vec<ClusterMetrics>,
+
+    #[serde(rename = "ane_energy")]
+    pub ane_mj: u16,
+    #[serde(rename = "cpu_energy")]
+    pub cpu_mj: u32,
+    #[serde(rename = "gpu_energy")]
+    pub gpu_mj: u32,
+    #[serde(rename = "combined_power")]
+    pub package_mw: f32,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ClusterMetrics {
+    pub name: String,
+    pub freq_hz: f64,
+    pub dvfm_states: Vec<DvfmState>,
+    pub cpus: Vec<Cpu>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Cpu {
+    #[serde(rename = "cpu")]
+    pub cpu_id: u16,
+    pub freq_hz: f64,
+    pub idle_ratio: f64,
+    pub dvfm_states: Vec<DvfmState>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DvfmState {
     pub freq: u16,
 }
@@ -75,7 +106,7 @@ impl MetricsMonitor {
         vec![
             "sudo",
             "/usr/bin/powermetrics",
-            "--sampler=gpu_power",
+            "--samplers=gpu_power,cpu_power",
             "--sample-rate=1000", // in ms
             // "--sample-count=1",
             "--format=plist",
@@ -86,6 +117,7 @@ impl MetricsMonitor {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PowerMetrics {
     pub gpu: Gpu,
+    pub processor: ProcessorMetrics,
     pub elapsed_ns: i64,
     pub timestamp: Date,
 }
@@ -109,6 +141,29 @@ impl Gpu {
 
     pub fn utilization_ratio(&self) -> f64 {
         1. - self.idle_ratio
+    }
+}
+
+impl ProcessorMetrics {
+    pub fn utilization_ratio(&self) -> f64 {
+        let total_cores = self.clusters.iter().map(|c| c.cpus.len()).sum::<usize>() as f64;
+        let total_idle_ratio = self
+            .clusters
+            .iter()
+            .map(|c| c.cpus.iter().map(|cpu| cpu.idle_ratio).sum::<f64>())
+            .sum::<f64>();
+
+        total_cores - total_idle_ratio
+    }
+}
+
+impl Cpu {
+    pub fn freq_mhz(&self) -> f64 {
+        self.freq_hz / 1e6
+    }
+
+    pub fn active_ratio(&self) -> f64 {
+        1.0 - self.idle_ratio
     }
 }
 
@@ -156,11 +211,15 @@ impl<'a> Iterator for MetricsReader {
         let mut have_seen_idle_ratio = false;
 
         while let Some(line) = self.inner.next() {
-            let line = line.expect("failed to read line");
+            let mut line = line.expect("failed to read line");
 
             if line.starts_with("<key>idle_ratio</key>") {
+                // HACK: powermetrics outputs dpulicated "idle_ratio" as its bug.
+                // We alternately ignore it by renaming the key string.
+                // Once Apple fixes the bug, this program accidentaly starts to be broken.
                 if have_seen_idle_ratio {
-                    continue;
+                    line = line.replace("idle_ratio", "idle_ratio_2");
+                    have_seen_idle_ratio = false;
                 } else {
                     have_seen_idle_ratio = true;
                 }
@@ -194,11 +253,12 @@ impl MetricsWindow {
 
 impl Into<ResourceUtilization> for PowerMetrics {
     fn into(self) -> ResourceUtilization {
+        let cpu = (self.processor.utilization_ratio() * 100.0) as i32;
         let gpu = (self.gpu.utilization_ratio() * 100.0) as i32;
 
         ResourceUtilization {
             gpu,
-            cpu: -1,
+            cpu,
             ram_total: -1,
             ram_used: -1,
             vram_total: -1,
