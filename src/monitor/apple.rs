@@ -209,18 +209,24 @@ impl<'a> Iterator for MetricsReader {
     fn next(&mut self) -> Option<Self::Item> {
         let mut buff = BytesMut::new();
         let mut have_seen_idle_ratio = false;
+        let mut have_seen_gpu = false;
 
         while let Some(line) = self.inner.next() {
-            let mut line = line.expect("failed to read line");
+            let line = line.expect("failed to read line");
 
+            // HACK: powermetrics has a bug to output dpulicated "idle_ratio" for only gpu_power, but not cpu_power.
+            //       And we observed the processor metrics comes before the gpu metrics.
+            //       So we only take idle ratio that has come first, in gpu metrics.
+            //       Once Apple fixes the bug or output order has changed, this program accidentaly starts to be broken.
+            if line.contains("gpu") {
+                have_seen_gpu = true;
+            }
             if line.starts_with("<key>idle_ratio</key>") {
-                // HACK: powermetrics outputs dpulicated "idle_ratio" as its bug.
-                // We alternately ignore it by renaming the key string.
-                // Once Apple fixes the bug, this program accidentaly starts to be broken.
                 if have_seen_idle_ratio {
-                    line = line.replace("idle_ratio", "idle_ratio_2");
-                    have_seen_idle_ratio = false;
-                } else {
+                    continue;
+                }
+
+                if have_seen_gpu {
                     have_seen_idle_ratio = true;
                 }
             }
