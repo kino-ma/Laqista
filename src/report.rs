@@ -161,7 +161,7 @@ impl MetricsReporter {
         };
 
         if changed {
-            println!("Cluster state updated.\n{:?}", &current);
+            println!("Cluster state updated.");
             self.last_cluster_state = current;
         }
 

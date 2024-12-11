@@ -49,6 +49,7 @@ pub struct ServerRunner {
 pub type StateSender = mpsc::Sender<StateCommand>;
 pub type StateReceiver = mpsc::Receiver<StateCommand>;
 
+#[derive(Clone, Debug)]
 pub struct AppMetric {
     pub app: String,
     pub service: String,

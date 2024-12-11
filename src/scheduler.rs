@@ -559,6 +559,7 @@ impl Cluster {
         info_by_name: HashMap<String, DeploymentInfo>,
         latencies: HashMap<String, u32>,
     ) {
+        // dbg!(&info_by_name);
         let cloned_latencies = latencies.clone();
 
         for (path, elapsed) in latencies {
@@ -589,11 +590,9 @@ impl Cluster {
                         "Received app stats from {:?} for the first time: {:?}",
                         &server, &cloned_latencies
                     );
-                    IdMap(
-                        [(server.id, AppLatency::new(info.clone()))]
-                            .into_iter()
-                            .collect(),
-                    )
+                    let mut app_latency = AppLatency::new(info.clone());
+                    app_latency.insert(&rpc, Duration::from_millis(elapsed as _));
+                    IdMap(HashMap::from([(server.id, app_latency)]))
                 });
         }
     }
