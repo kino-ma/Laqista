@@ -360,6 +360,12 @@ impl Scheduler for AuthoritativeScheduler {
             // Because we have Arc<Mutex<_>> inside Self, we can edit the inner data from the clone.
             let this = self.clone();
             tokio::task::spawn(async move {
+                let deployed_servers = &runtime.cluster.instances.0.get(&id).unwrap().servers;
+                let is_full_scale = runtime.cluster.servers.len() == deployed_servers.len();
+                if is_full_scale {
+                    return Ok(());
+                }
+
                 let deployment = this
                     .runtime
                     .lock()
