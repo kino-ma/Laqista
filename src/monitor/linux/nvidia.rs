@@ -132,9 +132,12 @@ impl Into<MonitorWindow> for NvidiaMetrics {
 
 impl Into<ResourceUtilization> for NvidiaMetrics {
     fn into(self) -> ResourceUtilization {
+        let gpu = (100.0 * self.total_utilization_rate()) as i32;
+        let cpu = (100.0 - self.cpu_load.idle * 100.0) as i32;
+        dbg!(gpu, cpu, self.total_utilization_rate(), self.cpu_load);
         ResourceUtilization {
-            gpu: self.total_utilization_rate() as i32,
-            cpu: (1.0 - self.cpu_load.idle * 100.0) as i32,
+            gpu,
+            cpu,
             ram_total: -1,
             ram_used: -1,
             vram_total: -1,
