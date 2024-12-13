@@ -21,6 +21,8 @@
         pkgs = import nixpkgs {
           inherit system overlays;
           config.permittedInsecurePackages = [ "openssl-1.1.1w" ];
+          config.allowUnfree = true;
+          config.allowUnfreePredicate = true;
         };
 
         rust-components = with pkgs.fenix; combine [
