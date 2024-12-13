@@ -13,6 +13,7 @@ use interface::ScheduleResult;
 use laqista_core::{try_collect_accuracies, AppRpc, AppService};
 use stats::{AppLatency, AppsMap};
 use tokio::sync::Mutex;
+use tokio::time;
 use tonic::transport::Channel;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -94,10 +95,6 @@ impl AuthoritativeScheduler {
     }
 
     pub async fn deploy_in_us(&self, deployment: DeploymentInfo) -> Result<SpawnResponse> {
-        let request = SpawnRequest {
-            deployment: Some(deployment.clone().into()),
-        };
-
         let target_server = {
             let runtime = self.runtime.lock().await;
             runtime
@@ -107,11 +104,45 @@ impl AuthoritativeScheduler {
 
         println!("Scaling out the application: {deployment:?} to {target_server:?}");
 
-        let mut client = self.client(&target_server).await?;
+        let mut count = 0;
+        let response = loop {
+            let request = SpawnRequest {
+                deployment: Some(deployment.clone().into()),
+            };
+            let request = Request::new(request);
+            let client_result = self.client(&target_server).await;
+            let mut client = match client_result {
+                Ok(c) => c,
+                Err(e) => {
+                    count += 1;
+                    if count >= 3 {
+                        break Err(e);
+                    } else {
+                        time::sleep(Duration::from_millis(200)).await;
+                        continue;
+                    }
+                }
+            };
 
-        let request = Request::new(request);
+            match client
+                .spawn(request)
+                .await
+                .map_err(<Status as Into<Error>>::into)
+                .into()
+            {
+                Ok(r) => break Ok(r),
+                Err(e) => {
+                    count += 1;
+                    if count >= 3 {
+                        break Err(e);
+                    } else {
+                        time::sleep(Duration::from_millis(200)).await;
+                        continue;
+                    }
+                }
+            }
+        }?;
 
-        let response = client.spawn(request).await?;
         if !response.get_ref().success {
             return Err("Unsuccessful spawn".into());
         }
@@ -342,7 +373,7 @@ impl Scheduler for AuthoritativeScheduler {
                 this.deploy_in_us(deployment)
                     .await
                     .err()
-                    .map(|e| println!("ERR: deploy_in_us failed: {e}"));
+                    .map(|e| println!("ERR: deploy_in_us failed: {e:?}"));
 
                 Ok::<(), ()>(())
             });
