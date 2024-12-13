@@ -10,7 +10,7 @@ use crate::{
 };
 
 use super::{
-    interface::DeploymentScheduler,
+    interface::{DeploymentScheduler, ScheduleResult},
     stats::{AppsMap, ServerStats, StatsMap},
 };
 
@@ -27,7 +27,7 @@ impl DeploymentScheduler for MeanScheduler {
         stats_map: &StatsMap,
         apps_map: &AppsMap,
         qos: QoSSpec,
-    ) -> Option<(ServerInfo, AppRpc)> {
+    ) -> Option<ScheduleResult> {
         self.abstract_schedule(
             |s| self.cpu_utilized_rate(s),
             &rpc.to_owned().into(),
@@ -45,7 +45,7 @@ impl DeploymentScheduler for MeanScheduler {
         stats_map: &StatsMap,
         apps_map: &AppsMap,
         qos: QoSSpec,
-    ) -> Option<(ServerInfo, AppRpc)> {
+    ) -> Option<ScheduleResult> {
         self.abstract_schedule(
             |s| self.gpu_utilized_rate(s),
             &rpc.to_owned().into(),
@@ -65,16 +65,6 @@ impl DeploymentScheduler for MeanScheduler {
         utils.sort_by_key(|t| (t.1 * 100.) as u64);
         utils[0].0.clone()
     }
-
-    fn needs_scale_out(&self, _server: &ServerInfo, stats: &ServerStats) -> bool {
-        let stat = match stats.stats.last() {
-            Some(s) => s,
-            None => return false,
-        };
-
-        return stat.utilization.as_ref().unwrap().cpu > SCALEOUT_THREASHOLD as _
-            || stat.utilization.as_ref().unwrap().gpu > SCALEOUT_THREASHOLD as _;
-    }
 }
 
 impl MeanScheduler {
@@ -89,7 +79,7 @@ impl MeanScheduler {
         stats_map: &StatsMap,
         apps_map: &AppsMap,
         qos: QoSSpec,
-    ) -> Option<(ServerInfo, AppRpc)>
+    ) -> Option<ScheduleResult>
     where
         F: Fn(&ServerStats) -> f64,
     {
@@ -175,11 +165,27 @@ impl MeanScheduler {
             }
         }
 
+        let needs_scale_out = self.is_over_utilized(&target.server, &target) || !target_satisfies;
+
         if target_rpc.package == "" {
             None
         } else {
-            Some((target.server.clone(), target_rpc))
+            Some(ScheduleResult::new(
+                target.server.clone(),
+                target_rpc,
+                needs_scale_out,
+            ))
         }
+    }
+
+    fn is_over_utilized(&self, _server: &ServerInfo, stats: &ServerStats) -> bool {
+        let stat = match stats.stats.last() {
+            Some(s) => s,
+            None => return false,
+        };
+
+        return stat.utilization.as_ref().unwrap().cpu > SCALEOUT_THREASHOLD as _
+            || stat.utilization.as_ref().unwrap().gpu > SCALEOUT_THREASHOLD as _;
     }
 
     fn filter_locality(
@@ -264,13 +270,13 @@ mod test {
             locality: LocalitySpec::None,
         };
 
-        let Some((server, rpc)) = scheduler.schedule(&service, &app, &stats, &apps_map, qos) else {
+        let Some(res) = scheduler.schedule(&service, &app, &stats, &apps_map, qos) else {
             panic!("failed to schedule")
         };
 
         // Should return fastest rpc & host
-        assert_eq!(server.id, Uuid::from_u128(3));
-        assert_eq!(rpc, service.rpc("fifty"));
+        assert_eq!(res.server.id, Uuid::from_u128(3));
+        assert_eq!(res.rpc, service.rpc("fifty"));
     }
 
     #[test]
@@ -286,13 +292,13 @@ mod test {
             locality: LocalitySpec::None,
         };
 
-        let Some((server, rpc)) = scheduler.schedule(&service, &app, &stats, &apps_map, qos) else {
+        let Some(res) = scheduler.schedule(&service, &app, &stats, &apps_map, qos) else {
             panic!("failed to schedule")
         };
 
         // Should return fastest rpc & host
-        assert_eq!(server.id, Uuid::from_u128(3));
-        assert_eq!(rpc, service.rpc("seventy"));
+        assert_eq!(res.server.id, Uuid::from_u128(3));
+        assert_eq!(res.rpc, service.rpc("seventy"));
     }
 
     #[test]
@@ -308,13 +314,13 @@ mod test {
             locality: LocalitySpec::None,
         };
 
-        let Some((server, rpc)) = scheduler.schedule(&service, &app, &stats, &apps_map, qos) else {
+        let Some(res) = scheduler.schedule(&service, &app, &stats, &apps_map, qos) else {
             panic!("failed to schedule")
         };
 
         // Should return fastest rpc & host
-        assert_eq!(server.id, Uuid::from_u128(2));
-        assert_eq!(rpc, service.rpc("fifty"));
+        assert_eq!(res.server.id, Uuid::from_u128(2));
+        assert_eq!(res.rpc, service.rpc("fifty"));
     }
 
     #[test]
@@ -330,13 +336,13 @@ mod test {
             locality: LocalitySpec::None,
         };
 
-        let Some((server, rpc)) = scheduler.schedule(&service, &app, &stats, &apps_map, qos) else {
+        let Some(res) = scheduler.schedule(&service, &app, &stats, &apps_map, qos) else {
             panic!("failed to schedule")
         };
 
         // Should return fastest rpc & host
-        assert_eq!(server.id, Uuid::from_u128(1));
-        assert_eq!(rpc, service.rpc("sixty"));
+        assert_eq!(res.server.id, Uuid::from_u128(1));
+        assert_eq!(res.rpc, service.rpc("sixty"));
     }
 
     fn get_deployment() -> DeploymentInfo {

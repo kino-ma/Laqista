@@ -9,6 +9,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use interface::ScheduleResult;
 use laqista_core::{try_collect_accuracies, AppRpc, AppService};
 use stats::{AppLatency, AppsMap};
 use tokio::sync::Mutex;
@@ -306,45 +307,46 @@ impl Scheduler for AuthoritativeScheduler {
         let service = AppService::from_str(&service)
             .map_err(|_| Status::aborted(format!("failed to parse service path '{service}'")))?;
 
-        let (target, rpc) = runtime
+        let ScheduleResult {
+            server: target,
+            rpc,
+            needs_scale_out,
+        } = runtime
             .scheduler
             .schedule(&service, &app, &stats_map, &apps_map, qos)
             .or_else(|| {
                 let instance = runtime.cluster.instances.0.get(&id)?;
                 let server = instance.servers.get(0)?;
                 let rpc = app.services.get(&service).unwrap().get(0)?;
-                Some((server.clone(), rpc.clone()))
+                let res = ScheduleResult::new(server.clone(), rpc.clone(), true);
+                Some(res)
             })
             .ok_or(Status::aborted("Failed to schedule: No server found"))?
             .clone();
 
-        // Clone self.
-        // Because we have Arc<Mutex<_>> inside Self, we can edit the inner data from the clone.
-        let this = self.clone();
-        let target_moved = target.clone();
-        tokio::task::spawn(async move {
-            let runtime = this.runtime.lock().await;
-
-            let should_scale = {
-                let stats = runtime
-                    .cluster
-                    .server_stats
+        if needs_scale_out {
+            // Clone self.
+            // Because we have Arc<Mutex<_>> inside Self, we can edit the inner data from the clone.
+            let this = self.clone();
+            tokio::task::spawn(async move {
+                let deployment = this
+                    .runtime
+                    .lock()
+                    .await
+                    .deployments
                     .0
-                    .get(&target_moved.id)
-                    .ok_or(())?;
-                runtime.scheduler.needs_scale_out(&target_moved, stats)
-            };
+                    .get(&id)
+                    .ok_or(())?
+                    .clone();
 
-            if should_scale {
-                let deployment = runtime.deployments.0.get(&id).ok_or(())?;
-                this.deploy_in_us(deployment.clone())
+                this.deploy_in_us(deployment)
                     .await
                     .err()
                     .map(|e| println!("ERR: deploy_in_us failed: {e}"));
-            }
 
-            Ok::<(), ()>(())
-        });
+                Ok::<(), ()>(())
+            });
+        }
 
         Ok(Response::new(LookupResponse {
             success: true,

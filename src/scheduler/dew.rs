@@ -20,7 +20,7 @@ use crate::{
 };
 
 use super::{
-    interface::DeploymentScheduler,
+    interface::{DeploymentScheduler, ScheduleResult},
     stats::{AppLatency, ServerStats, StatsMap},
 };
 
@@ -106,7 +106,11 @@ impl DewScheduler {
             .await
             .ok_or(Error::NoneError)?;
 
-        let (target, rpc) = runtime
+        let ScheduleResult {
+            server: target,
+            rpc,
+            needs_scale_out: _,
+        } = runtime
             .scheduler
             .schedule(&service, &app, &stats_map, &apps_map, qos)
             .ok_or(Error::NoneError)?;

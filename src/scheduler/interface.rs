@@ -2,7 +2,7 @@ use laqista_core::{AppRpc, AppService, DeploymentInfo};
 
 use crate::{QoSSpec, ServerInfo};
 
-use super::stats::{AppsMap, ServerStats, StatsMap};
+use super::stats::{AppsMap, StatsMap};
 
 pub trait DeploymentScheduler: SchedulerClone + std::fmt::Debug + Send + Sync {
     fn schedule(
@@ -12,7 +12,7 @@ pub trait DeploymentScheduler: SchedulerClone + std::fmt::Debug + Send + Sync {
         stats: &StatsMap,
         apps_map: &AppsMap,
         qos: QoSSpec,
-    ) -> Option<(ServerInfo, AppRpc)>;
+    ) -> Option<ScheduleResult>;
 
     fn schedule_gpu(
         &self,
@@ -21,10 +21,9 @@ pub trait DeploymentScheduler: SchedulerClone + std::fmt::Debug + Send + Sync {
         stats: &StatsMap,
         apps_map: &AppsMap,
         qos: QoSSpec,
-    ) -> Option<(ServerInfo, AppRpc)>;
+    ) -> Option<ScheduleResult>;
 
     fn least_utilized(&self, stats: &StatsMap) -> ServerInfo;
-    fn needs_scale_out(&self, server: &ServerInfo, stats: &ServerStats) -> bool;
 }
 
 pub trait SchedulerClone {
@@ -43,5 +42,22 @@ where
 impl Clone for Box<dyn DeploymentScheduler> {
     fn clone(&self) -> Self {
         self.clone_box()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ScheduleResult {
+    pub server: ServerInfo,
+    pub rpc: AppRpc,
+    pub needs_scale_out: bool,
+}
+
+impl ScheduleResult {
+    pub fn new(server: ServerInfo, rpc: AppRpc, needs_scale_out: bool) -> Self {
+        ScheduleResult {
+            server,
+            rpc,
+            needs_scale_out,
+        }
     }
 }
