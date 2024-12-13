@@ -134,7 +134,6 @@ impl Into<ResourceUtilization> for NvidiaMetrics {
     fn into(self) -> ResourceUtilization {
         let gpu = (100.0 * self.total_utilization_rate()) as i32;
         let cpu = (100.0 - self.cpu_load.idle * 100.0) as i32;
-        dbg!(gpu, cpu, self.total_utilization_rate(), self.cpu_load);
         ResourceUtilization {
             gpu,
             cpu,
