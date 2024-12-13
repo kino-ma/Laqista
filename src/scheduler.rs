@@ -94,13 +94,33 @@ impl AuthoritativeScheduler {
         self.runtime.lock().await.cluster.servers.push(server);
     }
 
-    pub async fn deploy_in_us(&self, deployment: DeploymentInfo) -> Result<SpawnResponse> {
-        let target_server = {
-            let runtime = self.runtime.lock().await;
-            runtime
-                .scheduler
-                .least_utilized(&runtime.cluster.server_stats)
-        };
+    pub async fn deploy_in_us(&self, deployment: DeploymentInfo) -> Result<Option<SpawnResponse>> {
+        let mut runtime = self.runtime.lock().await;
+
+        let maybe_deployment = &runtime.cluster.instances.0.get(&deployment.id);
+        let is_full_scale = maybe_deployment
+            .map(|d| d.servers.len() == runtime.cluster.servers.len())
+            .unwrap_or_default();
+        if is_full_scale {
+            return Ok(None);
+        }
+
+        // filter out servers that have already deployed the application
+        let server_stats = maybe_deployment
+            .map(|instances| {
+                IdMap(
+                    runtime
+                        .cluster
+                        .server_stats
+                        .0
+                        .iter()
+                        .filter(|(id, _)| instances.servers.iter().find(|s| s.id == **id).is_none())
+                        .map(|(id, stats)| (id.clone(), stats.clone()))
+                        .collect::<HashMap<_, _>>(),
+                )
+            })
+            .unwrap_or(runtime.cluster.server_stats.clone());
+        let target_server = runtime.scheduler.least_utilized(&server_stats);
 
         println!("Scaling out the application: {deployment:?} to {target_server:?}");
 
@@ -149,20 +169,14 @@ impl AuthoritativeScheduler {
 
         println!("spawend successfully");
 
-        // Update deployments information and instances information atomicly
-        {
-            println!("taking lock of runtime");
-            let mut runtime = self.runtime.lock().await;
-            runtime
-                .deployments
-                .0
-                .insert(deployment.id, deployment.clone());
+        runtime
+            .deployments
+            .0
+            .insert(deployment.id, deployment.clone());
 
-            runtime
-                .cluster
-                .insert_instance(deployment, vec![target_server]);
-            println!("freeing runtime");
-        }
+        runtime
+            .cluster
+            .insert_instance(deployment, vec![target_server]);
 
         println!(
             "Successfully spawned app ({:?}) on {:?}",
@@ -170,7 +184,7 @@ impl AuthoritativeScheduler {
             response.get_ref().server,
         );
 
-        Ok(response.into_inner())
+        Ok(Some(response.into_inner()))
     }
 
     pub async fn handle_failed_server<T>(
@@ -296,7 +310,7 @@ impl Scheduler for AuthoritativeScheduler {
 
         let resp = self.deploy_in_us(deployment_info).await;
         let resp = resp.map_err(<Error as Into<Status>>::into)?;
-        success &= resp.success;
+        success &= resp.map(|r| r.success).unwrap_or(false);
         println!("got resp");
 
         Ok(Response::new(DeployResponse {
@@ -360,12 +374,6 @@ impl Scheduler for AuthoritativeScheduler {
             // Because we have Arc<Mutex<_>> inside Self, we can edit the inner data from the clone.
             let this = self.clone();
             tokio::task::spawn(async move {
-                let deployed_servers = &runtime.cluster.instances.0.get(&id).unwrap().servers;
-                let is_full_scale = runtime.cluster.servers.len() == deployed_servers.len();
-                if is_full_scale {
-                    return Ok(());
-                }
-
                 let deployment = this
                     .runtime
                     .lock()

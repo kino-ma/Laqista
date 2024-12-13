@@ -103,6 +103,10 @@ impl DeploymentDatabase {
     }
 
     pub async fn add_app(&self, info: &DeploymentInfo) -> Result<(), Box<dyn Error>> {
+        if self.lookup(&info.name).await.is_some() {
+            return Ok(());
+        }
+
         let bin = download(info.source.clone()).await?;
 
         let saved = self.save(info, bin).await?;
