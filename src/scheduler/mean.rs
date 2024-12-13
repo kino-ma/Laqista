@@ -1,10 +1,11 @@
 use core::f32;
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use laqista_core::{AppRpc, AppService, DeploymentInfo};
 use uuid::Uuid;
 
 use crate::{
+    scheduler::stats::RpcLatency,
     utils::{is_hosts_equal, mul_as_percent},
     LocalitySpec, QoSSpec, ServerInfo,
 };
@@ -129,19 +130,32 @@ impl MeanScheduler {
             let free = 1. - utilized_rate;
             let factor = 1. / if free > 0.0 { free } else { 0.01 };
 
-            let latencies = server_latencies
+            let latencies: Vec<(AppRpc, RpcLatency)> = server_latencies
                 .0
                 .get(server_id)
-                .or_else(|| {
+                .map(|latencies| {
+                    latencies
+                        .lookup_service(service)
+                        .into_iter()
+                        .filter(|(rpc, _)| available_rpcs.keys().find(|k| *k == rpc).is_some())
+                        .map(|(rpc, latencies)| (rpc.to_owned(), latencies.to_owned()))
+                        .collect()
+                })
+                .unwrap_or_else(|| {
                     println!(
                         "WARN: Server latencies do not contain latency for {:?}",
                         server_id
                     );
-                    None
-                })?
-                .lookup_service(service)
-                .into_iter()
-                .filter(|(rpc, _)| available_rpcs.keys().find(|k| *k == rpc).is_some());
+                    available_rpcs
+                        .iter()
+                        .map(|(rpc, _)| {
+                            (
+                                (*rpc).clone(),
+                                RpcLatency::with_first(Duration::from_millis(0)),
+                            )
+                        })
+                        .collect()
+                });
 
             for (rpc, latency) in latencies {
                 // We consider greatest latency will become `free-resource-ratio * average-latency`
