@@ -96,6 +96,8 @@ impl ServerDaemonTrait for ServerDaemon {
         Ok(Response::new(MonitorResponse { windows: vec![] }))
     }
     async fn spawn(&self, request: Request<SpawnRequest>) -> RpcResult<Response<SpawnResponse>> {
+        println!("Spawn() called!");
+
         let deployment = request
             .into_inner()
             .deployment
