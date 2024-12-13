@@ -142,6 +142,7 @@ impl MetricsReporter {
                             StateCommand::Update(state)
                         };
 
+                        println!("MetricsReporter: Sending restart signal (`report()` failed)");
                         self.state_tx.send(state_command).await?;
 
                         Ok(())

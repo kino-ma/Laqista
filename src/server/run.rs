@@ -112,8 +112,6 @@ impl ServerRunner {
         let mut state = self.determine_state(start_command, &info);
 
         loop {
-            println!("State: {state:?}");
-
             let daemon = self.create_daemon(info.clone(), state.clone());
             let service_future = self.start_service(daemon, state.clone());
 

@@ -80,6 +80,7 @@ impl DeploymentDatabase {
         let mut ids = deployments.iter().map(|d| d.id).collect();
         self.inner.lock().await.instances.append(&mut ids);
 
+        println!("DeploymentDatabase: Sending restart signal (multiple instances added)");
         self.state_tx.send(StateCommand::Keep).await?;
 
         Ok(())
@@ -95,6 +96,7 @@ impl DeploymentDatabase {
 
         self.inner.lock().await.instances.push(deployment.id);
 
+        println!("DeploymentDatabase: Sending restart signal (instance added)");
         self.state_tx.send(StateCommand::Keep).await?;
 
         Ok(())
