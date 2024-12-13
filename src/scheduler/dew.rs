@@ -94,7 +94,7 @@ impl DewScheduler {
             .clone();
 
         // 74  | pub struct AppsMap(pub HashMap<AppService, IdMap<AppLatency>>);
-        let apps_map = super::stats::AppsMap(HashMap::from([(
+        let apps_map = super::stats::AppsMap::new(HashMap::from([(
             service.clone(),
             /* HashMap<AppService, AppLatency> */
             IdMap(HashMap::from([(this_server.id, app_stats)])),

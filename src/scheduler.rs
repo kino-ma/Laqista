@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use interface::ScheduleResult;
 use laqista_core::{try_collect_accuracies, AppRpc, AppService};
-use stats::{AppLatency, AppsMap};
+use stats::AppsMap;
 use tokio::sync::Mutex;
 use tokio::time;
 use tonic::transport::Channel;
@@ -516,7 +516,7 @@ impl Cluster {
         let servers = vec![scheduler.clone()];
         let instances = AppInstanceMap::new();
         let server_stats = StatsMap::new();
-        let app_stats = AppsMap::new();
+        let app_stats = AppsMap::default();
 
         Self {
             group,
@@ -532,7 +532,7 @@ impl Cluster {
         let servers = vec![group.scheduler_info.clone()];
         let instances = AppInstanceMap::new();
         let server_stats = StatsMap::new();
-        let app_stats = AppsMap::new();
+        let app_stats = AppsMap::default();
 
         Self {
             group,
@@ -606,9 +606,6 @@ impl Cluster {
         info_by_name: HashMap<String, DeploymentInfo>,
         latencies: HashMap<String, u32>,
     ) {
-        // dbg!(&info_by_name);
-        let cloned_latencies = latencies.clone();
-
         for (path, elapsed) in latencies {
             let rpc = AppRpc::from_str(&path)
                 .expect(("failed to parse gRPC path".to_owned() + &path).as_str());
@@ -625,22 +622,7 @@ impl Cluster {
                 ))
                 .to_owned();
 
-            self.app_stats
-                .0
-                .entry(rpc.to_owned().into())
-                .and_modify(|e| {
-                    e.0.entry(server.id)
-                        .and_modify(|latency| latency.insert(&rpc, dur));
-                })
-                .or_insert_with(|| {
-                    println!(
-                        "Received app stats from {:?} for the first time: {:?}",
-                        &server, &cloned_latencies
-                    );
-                    let mut app_latency = AppLatency::new(info.clone());
-                    app_latency.insert(&rpc, Duration::from_millis(elapsed as _));
-                    IdMap(HashMap::from([(server.id, app_latency)]))
-                });
+            self.app_stats.insert(server, info, &rpc, dur);
         }
     }
 
@@ -707,7 +689,7 @@ impl TryFrom<ClusterState> for Cluster {
             .map(IdMap)?;
 
         let server_stats = IdMap::new();
-        let app_stats = AppsMap::new();
+        let app_stats = AppsMap::default();
 
         Ok(Self {
             group,

@@ -119,21 +119,24 @@ impl MeanScheduler {
         let mut target_utilization = 100.0;
         let mut target_satisfies = false;
 
-        let server_latencies = apps_map.0.get(service).or_else(|| {
+        let server_latencies = apps_map.get(service).or_else(|| {
             println!("WARN: Apps map do not contain service '{:?}'", service);
             None
         })?;
 
-        for (id, stats) in local_stats.iter() {
+        for (server_id, stats) in local_stats.iter() {
             let utilized_rate = get_util(stats);
             let free = 1. - utilized_rate;
             let factor = 1. / if free > 0.0 { free } else { 0.01 };
 
             let latencies = server_latencies
                 .0
-                .get(id)
+                .get(server_id)
                 .or_else(|| {
-                    println!("WARN: Server latencies do not contain latency for {:?}", id);
+                    println!(
+                        "WARN: Server latencies do not contain latency for {:?}",
+                        server_id
+                    );
                     None
                 })?
                 .lookup_service(service)
@@ -444,6 +447,6 @@ mod test {
         ]);
         let map = HashMap::from([(service, IdMap(latency_map))]);
 
-        AppsMap(map)
+        AppsMap::new(map)
     }
 }

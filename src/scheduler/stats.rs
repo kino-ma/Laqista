@@ -70,12 +70,36 @@ impl<'a> Iterator for Windows<'a> {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct AppsMap(pub HashMap<AppService, IdMap<AppLatency>>);
+#[derive(Clone, Debug, Default)]
+pub struct AppsMap(HashMap<AppService, IdMap<AppLatency>>);
 
 impl AppsMap {
-    pub fn new() -> Self {
-        Self(HashMap::new())
+    pub fn new(map: HashMap<AppService, IdMap<AppLatency>>) -> Self {
+        Self(map)
+    }
+
+    pub fn get(&self, service: &AppService) -> Option<&IdMap<AppLatency>> {
+        self.0.get(service)
+    }
+
+    pub fn insert(
+        &mut self,
+        server: &ServerInfo,
+        deployment: &DeploymentInfo,
+        rpc: &AppRpc,
+        elapsed: Duration,
+    ) {
+        self.0
+            .entry(rpc.clone().into())
+            .and_modify(|e| {
+                e.0.entry(server.id)
+                    .and_modify(|latency| latency.insert(&rpc, elapsed));
+            })
+            .or_insert_with(|| {
+                let mut app_latency = AppLatency::new(deployment.clone());
+                app_latency.insert(&rpc, elapsed);
+                IdMap(HashMap::from([(server.id, app_latency)]))
+            });
     }
 
     /// `AppsMap::filter_by_rpc()` filters latency history by rpc name.
