@@ -4,6 +4,7 @@ use chrono::{DateTime, TimeDelta, Utc};
 use nvml_wrapper::{
     error::NvmlError, struct_wrappers::device::Utilization as GpuUtilization, Device, Nvml,
 };
+use systemstat::{CPULoad, Platform, System};
 use tokio::{sync::mpsc, time};
 
 use crate::{
@@ -13,12 +14,14 @@ use crate::{
 
 pub struct NvidiaMonitor {
     nvml: Nvml,
+    sys: System,
 }
 
 impl NvidiaMonitor {
     pub fn new() -> Result<Self, NvmlError> {
         let nvml = Nvml::init()?;
-        Ok(Self { nvml })
+        let sys = System::new();
+        Ok(Self { nvml, sys })
     }
 
     pub async fn run(&self, tx: mpsc::Sender<MonitorWindow>) -> ! {
@@ -39,6 +42,24 @@ impl NvidiaMonitor {
         loop {
             let timestamp = Utc::now();
 
+            let cpu_measurement = match self.sys.cpu_load_aggregate() {
+                Ok(m) => m,
+                Err(e) => {
+                    println!("WARN: failed to start measuring CPU utilization: {e:?}");
+                    continue;
+                }
+            };
+
+            time::sleep(Duration::from_secs(1)).await;
+
+            let cpu_load = match cpu_measurement.done() {
+                Ok(load) => load,
+                Err(e) => {
+                    println!("WARN: failed to aggregate CPU utilization: {e:?}");
+                    continue;
+                }
+            };
+
             let utils = devices
                 .iter()
                 .filter_map(|d| {
@@ -48,13 +69,15 @@ impl NvidiaMonitor {
                 })
                 .collect::<Vec<_>>();
 
-            let metrics = NvidiaMetrics { timestamp, utils };
+            let metrics = NvidiaMetrics {
+                timestamp,
+                utils,
+                cpu_load,
+            };
 
             tx.send(metrics.into())
                 .await
                 .unwrap_or_else(|e| println!("WARN: falied to send metrics: {e:?}"));
-
-            time::sleep(Duration::from_secs(1)).await;
         }
     }
 }
@@ -63,6 +86,7 @@ impl NvidiaMonitor {
 pub struct NvidiaMetrics {
     pub timestamp: DateTime<Utc>,
     pub utils: Vec<GpuUtilization>,
+    pub cpu_load: CPULoad,
 }
 
 impl NvidiaMetrics {
@@ -110,7 +134,7 @@ impl Into<ResourceUtilization> for NvidiaMetrics {
     fn into(self) -> ResourceUtilization {
         ResourceUtilization {
             gpu: self.total_utilization_rate() as i32,
-            cpu: -1,
+            cpu: (1.0 - self.cpu_load.idle * 100.0) as i32,
             ram_total: -1,
             ram_used: -1,
             vram_total: -1,
