@@ -2,6 +2,8 @@ import { URL } from "https://jslib.k6.io/url/1.0.0/index.js";
 import { Client, StatusOK } from "k6/net/grpc";
 import { check } from "k6";
 
+const SCHEDULER = "133.27.186.106:50051";
+
 // Just for deployment
 const schedulerClient = new Client();
 schedulerClient.load(["definitions"], "../../proto/laqista.proto");
@@ -9,16 +11,8 @@ schedulerClient.load(["definitions"], "../../proto/laqista.proto");
 const appClient = new Client();
 appClient.load(["definitions"], "../../proto/face.proto");
 
-const deployRequest = {
-  name: "face",
-  source:
-    "https://github.com/kino-ma/Laqista/releases/download/v0.1.0/face_v0.1.0.tgz",
-  rpcs: ["/face.Detector/RunDetection", "/face.ObjectDetection/Squeeze"],
-  accuracies_percent: { "/face.ObjectDetection/Squeeze": 80.3 },
-};
-
 const lookupRequest = {
-  deployment_id: "0975def6-2786-4bc5-9b39-8e9441e6b96f",
+  name: "face",
   qos: {},
   service: "/face.Detector",
 };
@@ -78,12 +72,15 @@ export const options = {
 // about authoring k6 scripts.
 //
 export default function () {
-  schedulerClient.connect("127.0.0.1:50051", { plaintext: true });
+  schedulerClient.connect(SCHEDULER, { plaintext: true });
 
   let lookupReply = schedulerClient.invoke(
     "laqista.Scheduler/Lookup",
     lookupRequest
   );
+  if (typeof lookupReply.message.server?.addr === "undefined") {
+    console.log({ lookupReply });
+  }
   let url = new URL(lookupReply.message.server.addr);
   let address = url.host;
   appClient.connect(address, { plaintext: true });
