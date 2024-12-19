@@ -120,10 +120,7 @@ impl MeanScheduler {
         let mut target_utilization = 100.0;
         let mut target_satisfies = false;
 
-        let server_latencies = apps_map.get(service).or_else(|| {
-            println!("WARN: Apps map do not contain service '{:?}'", service);
-            None
-        })?;
+        let server_latencies = apps_map.get(service).or_else(|| None)?;
 
         for (server_id, stats) in local_stats.iter() {
             let utilized_rate = get_util(stats);
@@ -142,10 +139,6 @@ impl MeanScheduler {
                         .collect()
                 })
                 .unwrap_or_else(|| {
-                    println!(
-                        "WARN: Server latencies do not contain latency for {:?}",
-                        server_id
-                    );
                     available_rpcs
                         .iter()
                         .map(|(rpc, _)| {
