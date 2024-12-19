@@ -8,6 +8,7 @@ use bytes::BytesMut;
 use chrono::{DateTime, TimeDelta, Utc};
 use plist::Date;
 use serde::{Deserialize, Serialize};
+use systemstat::{CPULoad, Platform, System};
 use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
@@ -24,6 +25,7 @@ pub struct MetricsWindow {
     start: DateTime<Utc>,
     end: DateTime<Utc>,
     metrics: PowerMetrics,
+    cpu_load: CPULoad,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -122,6 +124,23 @@ pub struct PowerMetrics {
     pub timestamp: Date,
 }
 
+impl PowerMetrics {
+    pub fn to_window(self, cpu_load: CPULoad) -> MetricsWindow {
+        let st: SystemTime = self.timestamp.into();
+        let end: DateTime<Utc> = st.into();
+
+        let duration = TimeDelta::nanoseconds(self.elapsed_ns);
+        let start = end - duration;
+
+        MetricsWindow {
+            start,
+            end,
+            metrics: self,
+            cpu_load,
+        }
+    }
+}
+
 impl Gpu {
     pub fn max_frequency(&self) -> u16 {
         self.dvfm_states
@@ -145,7 +164,7 @@ impl Gpu {
 }
 
 impl ProcessorMetrics {
-    pub fn utilization_ratio(&self) -> f64 {
+    pub fn _utilization_ratio(&self) -> f64 {
         let total_cores = self.clusters.iter().map(|c| c.cpus.len()).sum::<usize>() as f64;
         let total_idle_ratio = self
             .clusters
@@ -167,39 +186,25 @@ impl Cpu {
     }
 }
 
-impl Into<MetricsWindow> for PowerMetrics {
-    fn into(self) -> MetricsWindow {
-        let st: SystemTime = self.timestamp.into();
-        let end: DateTime<Utc> = st.into();
-
-        let duration = TimeDelta::nanoseconds(self.elapsed_ns);
-        let start = end - duration;
-
-        MetricsWindow {
-            start,
-            end,
-            metrics: self,
-        }
-    }
-}
-
 type StdoutLines = Lines<BufReader<ChildStdout>>;
 pub struct MetricsReader {
     inner: StdoutLines,
+    sys: System,
 }
 
 impl MetricsReader {
     pub fn new(lines: StdoutLines) -> Self {
-        Self { inner: lines }
+        let sys = System::new();
+        Self { inner: lines, sys }
     }
 
-    fn parse(&self, mut buff: &[u8]) -> Result<MetricsWindow, plist::Error> {
+    fn parse(&self, mut buff: &[u8], cpu_load: CPULoad) -> Result<MetricsWindow, plist::Error> {
         if buff[0] == b'\0' {
             buff = &buff[1..];
         }
         let metrics: PowerMetrics = plist::from_bytes(buff)?;
 
-        Ok(metrics.into())
+        Ok(metrics.to_window(cpu_load))
     }
 }
 
@@ -210,6 +215,13 @@ impl<'a> Iterator for MetricsReader {
         let mut buff = BytesMut::new();
         let mut have_seen_idle_ratio = false;
         let mut have_seen_gpu = false;
+        let cpu_measurement = match self.sys.cpu_load_aggregate() {
+            Ok(m) => m,
+            Err(e) => {
+                println!("WARN: failed to start measuring CPU utilization: {e:?}");
+                return None;
+            }
+        };
 
         while let Some(line) = self.inner.next() {
             let line = line.expect("failed to read line");
@@ -234,12 +246,19 @@ impl<'a> Iterator for MetricsReader {
             buff.extend(line.as_bytes());
 
             if line == "</plist>" {
-                let parsed = self.parse(&buff);
+                let cpu_load = match cpu_measurement.done() {
+                    Ok(load) => load,
+                    Err(e) => {
+                        println!("WARN: failed to aggregate CPU utilization: {e:?}");
+                        return None;
+                    }
+                };
+
+                let parsed = self.parse(&buff, cpu_load);
                 if let Err(e) = &parsed {
                     println!("WARN: failed to parse plist: {}", e);
                     println!("last data = '{}'", line);
                 }
-
                 return parsed.ok();
             }
         }
@@ -257,10 +276,10 @@ impl MetricsWindow {
     }
 }
 
-impl Into<ResourceUtilization> for PowerMetrics {
+impl Into<ResourceUtilization> for MetricsWindow {
     fn into(self) -> ResourceUtilization {
-        let cpu = (self.processor.utilization_ratio() * 100.0) as i32;
-        let gpu = (self.gpu.utilization_ratio() * 100.0) as i32;
+        let cpu = (100.0 - self.cpu_load.idle * 100.0) as i32;
+        let gpu = (self.metrics.gpu.utilization_ratio() * 100.0) as i32;
 
         ResourceUtilization {
             gpu,
@@ -276,7 +295,7 @@ impl Into<ResourceUtilization> for PowerMetrics {
 impl Into<MonitorWindow> for MetricsWindow {
     fn into(self) -> MonitorWindow {
         let window = Some(self.time_window());
-        let utilization = Some(self.metrics.into());
+        let utilization = Some(self.clone().into());
 
         MonitorWindow {
             window,
