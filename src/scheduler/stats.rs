@@ -93,7 +93,12 @@ impl AppsMap {
             .entry(rpc.clone().into())
             .and_modify(|e| {
                 e.0.entry(server.id)
-                    .and_modify(|latency| latency.insert(&rpc, elapsed));
+                    .and_modify(|latency| latency.insert(&rpc, elapsed))
+                    .or_insert_with(|| {
+                        let mut latency = AppLatency::new(deployment.clone());
+                        latency.insert(rpc, elapsed);
+                        latency
+                    });
             })
             .or_insert_with(|| {
                 let mut app_latency = AppLatency::new(deployment.clone());
@@ -187,7 +192,7 @@ impl RpcLatency {
     }
     pub fn insert(&mut self, elapsed: Duration) {
         let len = self.latencies.len() as _;
-        self.average = (self.average * len + elapsed) / len;
+        self.average = (self.average * len + elapsed) / (len + 1);
 
         self.latencies.push(elapsed);
     }
