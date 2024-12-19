@@ -29,8 +29,8 @@ impl DeploymentScheduler for MeanScheduler {
         apps_map: &AppsMap,
         qos: QoSSpec,
     ) -> Option<ScheduleResult> {
-        self.abstract_schedule(
-            |s| self.cpu_utilized_rate(s),
+        abstract_schedule(
+            |s| cpu_utilized_rate(s),
             &rpc.to_owned().into(),
             app,
             stats_map,
@@ -47,8 +47,8 @@ impl DeploymentScheduler for MeanScheduler {
         apps_map: &AppsMap,
         qos: QoSSpec,
     ) -> Option<ScheduleResult> {
-        self.abstract_schedule(
-            |s| self.gpu_utilized_rate(s),
+        abstract_schedule(
+            |s| gpu_utilized_rate(s),
             &rpc.to_owned().into(),
             app,
             stats_map,
@@ -61,197 +61,190 @@ impl DeploymentScheduler for MeanScheduler {
         let mut utils = stats_map
             .0
             .values()
-            .map(|s| (s.server.clone(), self.cpu_utilized_rate(s)))
+            .map(|s| (s.server.clone(), cpu_utilized_rate(s)))
             .collect::<Vec<_>>();
         utils.sort_by_key(|t| (t.1 * 100.) as u64);
         utils[0].0.clone()
     }
 }
 
-impl MeanScheduler {
-    /// `MeanSchedule::abstract_schedule()` defines abstract scheduling algorithm common for both cpu and gpu.
-    /// It returns the least utilized node while satisfying QoS specifications.
-    /// If no node can satisfy the requirement, it returns the node whose estimated latency is shortest.
-    fn abstract_schedule<F>(
-        &self,
-        get_util: F,
-        service: &AppService,
-        app: &DeploymentInfo,
-        stats_map: &StatsMap,
-        apps_map: &AppsMap,
-        qos: QoSSpec,
-    ) -> Option<ScheduleResult>
-    where
-        F: Fn(&ServerStats) -> f64,
-    {
-        let required_accuracy = qos.accuracy.unwrap_or(f32::MIN);
-        let required_latency = qos.latency.unwrap_or(u32::MAX);
+/// `abstract_schedule()` defines abstract scheduling algorithm common for both cpu and gpu.
+/// It returns the least utilized node while satisfying QoS specifications.
+/// If no node can satisfy the requirement, it returns the node whose estimated latency is shortest.
+fn abstract_schedule<F>(
+    get_util: F,
+    service: &AppService,
+    app: &DeploymentInfo,
+    stats_map: &StatsMap,
+    apps_map: &AppsMap,
+    qos: QoSSpec,
+) -> Option<ScheduleResult>
+where
+    F: Fn(&ServerStats) -> f64,
+{
+    let required_accuracy = qos.accuracy.unwrap_or(f32::MIN);
+    let required_latency = qos.latency.unwrap_or(u32::MAX);
 
-        let available_rpcs = app
-            .accuracies
-            .iter()
-            .filter(|(_, acc)| **acc > required_accuracy)
-            .collect::<HashMap<_, _>>();
+    let available_rpcs = app
+        .accuracies
+        .iter()
+        .filter(|(_, acc)| **acc > required_accuracy)
+        .collect::<HashMap<_, _>>();
 
-        if available_rpcs.is_empty() {
-            return None;
-        }
+    if available_rpcs.is_empty() {
+        return None;
+    }
 
-        let local_stats = self.filter_locality(stats_map.clone(), &qos.locality);
+    let local_stats = filter_locality(stats_map.clone(), &qos.locality);
 
-        if local_stats.is_empty() {
-            println!(
-                "WARN: No servers matched locality specification: {:?}",
-                qos.locality
-            );
-            return None;
-        }
+    if local_stats.is_empty() {
+        println!(
+            "WARN: No servers matched locality specification: {:?}",
+            qos.locality
+        );
+        return None;
+    }
 
-        let mut target = local_stats
-            .iter()
-            .next()
-            .or_else(|| {
-                println!("WARN: stats are empty");
-                None
-            })?
-            .1;
-        let mut target_rpc = AppRpc::new("", "", "");
-        let mut target_latency = f64::MAX;
-        let mut target_utilization = 100.0;
-        let mut target_satisfies = false;
+    let mut target = local_stats
+        .iter()
+        .next()
+        .or_else(|| {
+            println!("WARN: stats are empty");
+            None
+        })?
+        .1;
+    let mut target_rpc = AppRpc::new("", "", "");
+    let mut target_latency = f64::MAX;
+    let mut target_utilization = 100.0;
+    let mut target_satisfies = false;
 
-        let server_latencies = apps_map.get(service).or_else(|| None)?;
+    let server_latencies = apps_map.get(service).or_else(|| None)?;
 
-        for (server_id, stats) in local_stats.iter() {
-            let utilized_rate = get_util(stats);
-            let free = 1. - utilized_rate;
-            let factor = 1. / if free > 0.0 { free } else { 0.01 };
+    for (server_id, stats) in local_stats.iter() {
+        let utilized_rate = get_util(stats);
+        let free = 1. - utilized_rate;
+        let factor = 1. / if free > 0.0 { free } else { 0.01 };
 
-            let latencies: Vec<(AppRpc, RpcLatency)> = server_latencies
-                .0
-                .get(server_id)
-                .map(|latencies| {
-                    latencies
-                        .lookup_service(service)
-                        .into_iter()
-                        .filter(|(rpc, _)| available_rpcs.keys().find(|k| *k == rpc).is_some())
-                        .map(|(rpc, latencies)| (rpc.to_owned(), latencies.to_owned()))
-                        .collect()
-                })
-                .unwrap_or_else(|| {
-                    available_rpcs
-                        .iter()
-                        .map(|(rpc, _)| {
-                            (
-                                (*rpc).clone(),
-                                RpcLatency::with_first(Duration::from_millis(0)),
-                            )
-                        })
-                        .collect()
-                });
+        let latencies: Vec<(AppRpc, RpcLatency)> = server_latencies
+            .0
+            .get(server_id)
+            .map(|latencies| {
+                latencies
+                    .lookup_service(service)
+                    .into_iter()
+                    .filter(|(rpc, _)| available_rpcs.keys().find(|k| *k == rpc).is_some())
+                    .map(|(rpc, latencies)| (rpc.to_owned(), latencies.to_owned()))
+                    .collect()
+            })
+            .unwrap_or_else(|| {
+                available_rpcs
+                    .iter()
+                    .map(|(rpc, _)| {
+                        (
+                            (*rpc).clone(),
+                            RpcLatency::with_first(Duration::from_millis(0)),
+                        )
+                    })
+                    .collect()
+            });
 
-            for (rpc, latency) in latencies {
-                // We consider greatest latency will become `free-resource-ratio * average-latency`
-                let estimated_latency = factor * (latency.average.as_millis() as f64);
+        for (rpc, latency) in latencies {
+            // We consider greatest latency will become `free-resource-ratio * average-latency`
+            let estimated_latency = factor * (latency.average.as_millis() as f64);
 
-                let satisfies = estimated_latency <= required_latency as f64;
-                let faster = estimated_latency <= target_latency;
-                let less_utilized = utilized_rate < target_utilization;
-                let both_free = utilized_rate <= 0.3 && target_utilization <= 0.3;
+            let satisfies = estimated_latency <= required_latency as f64;
+            let faster = estimated_latency <= target_latency;
+            let less_utilized = utilized_rate < target_utilization;
+            let both_free = utilized_rate <= 0.3 && target_utilization <= 0.3;
 
-                // Select target if either:
-                //   - No target has satisfied and faster
-                //   - Satisfies the rquirements and less utilized
-                if !target_satisfies && (satisfies || faster)
-                    || satisfies && less_utilized
-                    || (satisfies && both_free && faster)
-                {
-                    target = stats;
-                    target_rpc = rpc.clone();
-                    target_latency = estimated_latency;
-                    target_utilization = utilized_rate;
-                    target_satisfies = satisfies;
-                }
+            // Select target if either:
+            //   - No target has satisfied and faster
+            //   - Satisfies the rquirements and less utilized
+            if !target_satisfies && (satisfies || faster)
+                || satisfies && less_utilized
+                || (satisfies && both_free && faster)
+            {
+                target = stats;
+                target_rpc = rpc.clone();
+                target_latency = estimated_latency;
+                target_utilization = utilized_rate;
+                target_satisfies = satisfies;
             }
         }
-
-        let needs_scale_out = self.is_over_utilized(&target.server, &target) || !target_satisfies;
-
-        if target_rpc.package == "" {
-            None
-        } else {
-            Some(ScheduleResult::new(
-                target.server.clone(),
-                target_rpc,
-                needs_scale_out,
-            ))
-        }
     }
 
-    fn is_over_utilized(&self, _server: &ServerInfo, stats: &ServerStats) -> bool {
-        let stat = match stats.stats.last() {
-            Some(s) => s,
-            None => return false,
-        };
+    let needs_scale_out = is_over_utilized(&target) || !target_satisfies;
 
-        return stat.utilization.as_ref().unwrap().cpu > SCALEOUT_THREASHOLD as _
-            || stat.utilization.as_ref().unwrap().gpu > SCALEOUT_THREASHOLD as _;
+    if target_rpc.package == "" {
+        None
+    } else {
+        Some(ScheduleResult::new(
+            target.server.clone(),
+            target_rpc,
+            needs_scale_out,
+        ))
+    }
+}
+
+fn is_over_utilized(stats: &ServerStats) -> bool {
+    let stat = match stats.stats.last() {
+        Some(s) => s,
+        None => return false,
+    };
+
+    return stat.utilization.as_ref().unwrap().cpu > SCALEOUT_THREASHOLD as _
+        || stat.utilization.as_ref().unwrap().gpu > SCALEOUT_THREASHOLD as _;
+}
+
+fn gpu_utilized_rate(stats: &ServerStats) -> f64 {
+    let total: f64 = stats.windows().map(|w| w.nanos as f64).sum();
+
+    if total <= 0. {
+        return 0.;
     }
 
-    fn filter_locality(
-        &self,
-        stats: StatsMap,
-        locality: &LocalitySpec,
-    ) -> HashMap<Uuid, ServerStats> {
-        use LocalitySpec::*;
+    let utilized: f64 = stats
+        .windows()
+        .map(|w| mul_as_percent(w.nanos, w.utilization.gpu as _) as f64)
+        .sum();
 
-        if locality.is_some() {
-            stats
-                .0
-                .into_iter()
-                .filter(|(id, stats)| match locality {
-                    NodeId(spec_id) => id == spec_id,
-                    NodeHost(host) => is_hosts_equal(&host, &stats.server.addr),
-                    _ => {
-                        unimplemented!(
-                            "Scheduling with locality other than node id/host is not supproted"
-                        )
-                    }
-                })
-                .collect::<HashMap<_, _>>()
-        } else {
-            stats.0
-        }
+    utilized / total
+}
+
+fn cpu_utilized_rate(stats: &ServerStats) -> f64 {
+    let total: f64 = stats.windows().map(|w| w.nanos as f64).sum();
+
+    if total <= 0. {
+        return 0.;
     }
 
-    fn gpu_utilized_rate(&self, stats: &ServerStats) -> f64 {
-        let total: f64 = stats.windows().map(|w| w.nanos as f64).sum();
+    let utilized: f64 = stats
+        .windows()
+        .map(|w| mul_as_percent(w.nanos, w.utilization.cpu as _) as f64)
+        .sum();
 
-        if total <= 0. {
-            return 0.;
-        }
+    utilized / total
+}
 
-        let utilized: f64 = stats
-            .windows()
-            .map(|w| mul_as_percent(w.nanos, w.utilization.gpu as _) as f64)
-            .sum();
+fn filter_locality(stats: StatsMap, locality: &LocalitySpec) -> HashMap<Uuid, ServerStats> {
+    use LocalitySpec::*;
 
-        utilized / total
-    }
-
-    fn cpu_utilized_rate(&self, stats: &ServerStats) -> f64 {
-        let total: f64 = stats.windows().map(|w| w.nanos as f64).sum();
-
-        if total <= 0. {
-            return 0.;
-        }
-
-        let utilized: f64 = stats
-            .windows()
-            .map(|w| mul_as_percent(w.nanos, w.utilization.cpu as _) as f64)
-            .sum();
-
-        utilized / total
+    if locality.is_some() {
+        stats
+            .0
+            .into_iter()
+            .filter(|(id, stats)| match locality {
+                NodeId(spec_id) => id == spec_id,
+                NodeHost(host) => is_hosts_equal(&host, &stats.server.addr),
+                _ => {
+                    unimplemented!(
+                        "Scheduling with locality other than node id/host is not supproted"
+                    )
+                }
+            })
+            .collect::<HashMap<_, _>>()
+    } else {
+        stats.0
     }
 }
 

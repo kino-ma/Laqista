@@ -16,7 +16,7 @@ use crate::proto::{scheduler_client::SchedulerClient, JoinRequest};
 use crate::report::MetricsReporter;
 use crate::scheduler::dew::DewScheduler;
 use crate::scheduler::fog::FogScheduler;
-use crate::scheduler::round::RoundRobbinScheduler;
+// use crate::scheduler::round::RoundRobbinScheduler;
 use crate::scheduler::{AuthoritativeScheduler, Cluster};
 use crate::{
     proto::{scheduler_server::SchedulerServer, server_daemon_server::ServerDaemonServer},
@@ -136,11 +136,12 @@ impl ServerRunner {
                 StateCommand::Keep => state,
                 StateCommand::Update(new) => new,
                 StateCommand::BecomeScheduler(cluster) => {
-                    // let mean_scheduler = MeanScheduler {};
-                    let round_robbin_scheduler = RoundRobbinScheduler::new();
+                    let mean_scheduler = MeanScheduler {};
+                    // let round_robbin_scheduler = RoundRobbinScheduler::new();
                     let scheduler = AuthoritativeScheduler::new(
                         cluster,
-                        Box::new(round_robbin_scheduler),
+                        Box::new(mean_scheduler),
+                        // Box::new(round_robbin_scheduler),
                         self.tx.clone(),
                         self.database.clone(),
                     );
@@ -465,12 +466,13 @@ impl ServerRunner {
         match maybe_bootstrap_addr {
             Some(bootstrap_addr) => DaemonState::Joining(bootstrap_addr.to_owned()),
             None => {
-                // let mean_scheduler = Box::new(MeanScheduler {});
-                let round_robbin_scheduler = Box::new(RoundRobbinScheduler::new());
+                let mean_scheduler = Box::new(MeanScheduler {});
+                // let round_robbin_scheduler = Box::new(RoundRobbinScheduler::new());
                 let tx = self.tx.clone();
                 let scheduler = AuthoritativeScheduler::from_server(
                     server,
-                    round_robbin_scheduler,
+                    mean_scheduler,
+                    // round_robbin_scheduler,
                     tx,
                     self.database.clone(),
                 );
