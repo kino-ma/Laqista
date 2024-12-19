@@ -4,6 +4,7 @@ use std::{
 };
 
 use chrono::{DateTime, TimeDelta, Utc};
+use systemstat::{CPULoad, Platform, System};
 use tokio::sync::mpsc;
 
 use crate::{
@@ -54,6 +55,12 @@ impl RadeonMonitor {
 
 #[derive(Clone, Debug)]
 pub struct RadeonMetrics {
+    cpu_load: CPULoad,
+    gpu: RadeonGpuMetrics,
+}
+
+#[derive(Clone, Debug)]
+pub struct RadeonGpuMetrics {
     pub timestamp: DateTime<Utc>,
     pub gpu: f64,
     pub ee: f64,
@@ -72,7 +79,7 @@ pub struct RadeonMetrics {
 
 impl RadeonMetrics {
     pub fn time_window(&self) -> TimeWindow {
-        let start = self.timestamp;
+        let start = self.gpu.timestamp;
         let end = start + TimeDelta::seconds(1);
 
         let start = datetime_to_prost(start);
@@ -100,13 +107,16 @@ impl Into<MonitorWindow> for RadeonMetrics {
 type StdoutLines = Lines<BufReader<ChildStdout>>;
 struct MetricsReader {
     inner: StdoutLines,
+    sys: System,
     seen_header: bool,
 }
 
 impl MetricsReader {
     pub fn new(lines: StdoutLines) -> Self {
+        let sys = System::new();
         Self {
             inner: lines,
+            sys,
             seen_header: false,
         }
     }
@@ -138,20 +148,41 @@ impl MetricsReader {
 impl Iterator for MetricsReader {
     type Item = RadeonMetrics;
     fn next(&mut self) -> Option<Self::Item> {
+        let cpu_measurement = match self.sys.cpu_load_aggregate() {
+            Ok(m) => m,
+            Err(e) => {
+                println!("WARN: failed to start measuring CPU utilization: {e:?}");
+                return None;
+            }
+        };
+
         let line = self.next_inner()?;
         let (_, metrics) = metrics_line(&line)
             .map_err(|e| println!("ERR: MetricsReader.next(): failed to parse: {e}"))
             .ok()?;
 
-        Some(metrics)
+        let cpu_load = match cpu_measurement.done() {
+            Ok(load) => load,
+            Err(e) => {
+                println!("WARN: failed to aggregate CPU utilization: {e:?}");
+                return None;
+            }
+        };
+
+        Some(RadeonMetrics {
+            cpu_load,
+            gpu: metrics,
+        })
     }
 }
 
 impl Into<ResourceUtilization> for RadeonMetrics {
     fn into(self) -> ResourceUtilization {
+        let gpu = (self.gpu.gpu * 100.) as _;
+        let cpu = (100.0 - self.cpu_load.idle * 100.0) as i32;
         ResourceUtilization {
-            gpu: (self.gpu * 100.) as _,
-            cpu: -1,
+            cpu,
+            gpu,
             ram_total: -1,
             ram_used: -1,
             vram_total: -1,

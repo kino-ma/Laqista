@@ -10,7 +10,7 @@ use nom::{
     Err as NomErr, IResult,
 };
 
-use super::radeon::RadeonMetrics;
+use super::radeon::RadeonGpuMetrics;
 
 #[allow(unused)]
 #[derive(Debug)]
@@ -89,7 +89,7 @@ pub fn header_line(input: &str) -> Result<&str, &str> {
     nextline(input)
 }
 
-pub fn metrics_line(input: &str) -> Result<&str, RadeonMetrics> {
+pub fn metrics_line(input: &str) -> Result<&str, RadeonGpuMetrics> {
     let (input, ts) = timestamp(input)?;
     let (input, _colon) = tag(": ")(input)?;
     let (input, map) = utilization_map(input)?;
@@ -252,8 +252,8 @@ macro_rules! get_key {
 fn radeon_from_map(
     map: HashMap<String, ResourceUtilization>,
     timestamp: DateTime<Utc>,
-) -> Result<&'static str, RadeonMetrics> {
-    let out = RadeonMetrics {
+) -> Result<&'static str, RadeonGpuMetrics> {
+    let out = RadeonGpuMetrics {
         timestamp,
         gpu: get_key!(map, "gpu"),
         ee: get_key!(map, "ee"),
