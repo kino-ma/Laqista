@@ -261,7 +261,7 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_schedule_qos() {
+    fn return_fastest_unless_free() {
         let scheduler = MeanScheduler {};
         let app = get_deployment();
         let service = AppService::new("laqista", "Scheduler");
@@ -277,13 +277,12 @@ mod test {
             panic!("failed to schedule")
         };
 
-        // Should return fastest rpc & host
         assert_eq!(res.server.id, Uuid::from_u128(3));
         assert_eq!(res.rpc, service.rpc("fifty"));
     }
 
     #[test]
-    fn test_schedule_qos_accurate() {
+    fn satisfy_accuracy_requirement() {
         let scheduler = MeanScheduler {};
         let app = get_deployment();
         let service = AppService::new("laqista", "Scheduler");
@@ -299,13 +298,19 @@ mod test {
             panic!("failed to schedule")
         };
 
-        // Should return fastest rpc & host
         assert_eq!(res.server.id, Uuid::from_u128(3));
         assert_eq!(res.rpc, service.rpc("seventy"));
     }
 
+    /// Estimated times:
+    ///
+    /// - A: 1.0 / (1.0-0.4) * 50  ->  66.6
+    /// - B: 1.0 / (1.0-0.1) * 100 -> 111.1
+    /// - C: 1.0 / (1.0-0.7) * 40  -> 133.3
+    ///
+    /// Because no latency QoS specified, most free one, B should be chosen.
     #[test]
-    fn test_schedule_qos_util() {
+    fn return_most_free() {
         let scheduler = MeanScheduler {};
         let app = get_deployment();
         let service = AppService::new("laqista", "Scheduler");
@@ -321,13 +326,19 @@ mod test {
             panic!("failed to schedule")
         };
 
-        // Should return fastest rpc & host
         assert_eq!(res.server.id, Uuid::from_u128(2));
         assert_eq!(res.rpc, service.rpc("fifty"));
     }
 
+    /// Estimated times:
+    ///
+    /// - A: 1.0 / (1.0-0.4) * 60  ->  80.0
+    /// - B: 1.0 / (1.0-0.1) * 120 -> 133.3
+    /// - C: 1.0 / (1.0-0.7) * 48  -> 160.0
+    ///
+    /// With latency req. 100 and accuarcy req. 55%, only A and "sixty" can be chosen.
     #[test]
-    fn test_schedule_qos_latency_and_util() {
+    fn satisfy_latency_and_accuracy() {
         let scheduler = MeanScheduler {};
         let app = get_deployment();
         let service = AppService::new("laqista", "Scheduler");
