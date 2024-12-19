@@ -121,13 +121,15 @@ impl DeploymentDatabase {
         info: &DeploymentInfo,
         target: Target,
     ) -> Result<Bytes, Box<dyn Error>> {
-        let inner = self.inner.lock().await;
-
-        let app = inner
+        let app = self
+            .inner
+            .lock()
+            .await
             .apps
             .0
             .get(&info.id)
-            .ok_or(format!("Application not found: {info:?}"))?;
+            .ok_or(format!("Application not found: {info:?}"))?
+            .clone();
 
         let latest_deployment = app
             .deployments
