@@ -2,6 +2,7 @@ pub mod dew;
 pub mod fog;
 pub mod interface;
 pub mod mean;
+pub mod round;
 pub mod stats;
 
 use std::collections::HashMap;
