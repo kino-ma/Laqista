@@ -137,7 +137,7 @@ impl ServerRunner {
                 StateCommand::Keep => state,
                 StateCommand::Update(new) => new,
                 StateCommand::BecomeScheduler(cluster) => {
-                    let mean_scheduler = MeanScheduler {};
+                    let mean_scheduler = MeanScheduler::new();
                     let scheduler = AuthoritativeScheduler::new(
                         cluster,
                         Box::new(mean_scheduler),
@@ -436,7 +436,7 @@ impl ServerRunner {
                     .expect("Bootstrap server address is required on fog layer")
                     .clone();
 
-                let mean_scheduler = Box::new(MeanScheduler {});
+                let mean_scheduler = Box::new(MeanScheduler::new());
                 let tx = self.tx.clone();
 
                 let scheduler = FogScheduler::new(
@@ -456,7 +456,7 @@ impl ServerRunner {
                     .expect("Bootstrap server address is required on fog layer")
                     .clone();
 
-                let mean_scheduler = Box::new(MeanScheduler {});
+                let mean_scheduler = Box::new(MeanScheduler::new());
                 let tx = self.tx.clone();
 
                 let scheduler = DewScheduler::new(
@@ -480,7 +480,7 @@ impl ServerRunner {
             None => {
                 let inner_scheduler: Box<dyn DeploymentScheduler> =
                     match start_command.scheduler.as_str() {
-                        "mean" => Box::new(MeanScheduler {}),
+                        "mean" => Box::new(MeanScheduler::new()),
                         "round" => Box::new(RoundRobbinScheduler::new()),
                         otherwise => unimplemented!("Unknown scheduler algorithm: {otherwise}"),
                     };

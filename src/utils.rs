@@ -1,6 +1,7 @@
 use std::{
     collections::{hash_map::Iter, HashMap},
     fmt::Debug,
+    time::Duration,
 };
 
 use chrono::{DateTime, Timelike, Utc};
@@ -112,6 +113,11 @@ pub fn is_hosts_equal(a: &str, b: &str) -> bool {
     };
 
     a_url.host_str() == b_url.host_str() && a_url.port() == b_url.port()
+}
+
+pub fn elapsed_from(t: &DateTime<Utc>) -> Duration {
+    let delta = Utc::now() - t;
+    Duration::from_millis(delta.num_milliseconds() as _)
 }
 
 #[cfg(test)]

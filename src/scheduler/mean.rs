@@ -1,13 +1,15 @@
 use core::f32;
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
+use chrono::{DateTime, Utc};
 use laqista_core::{AppRpc, AppService, DeploymentInfo};
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::{
     proto::MonitorWindow,
     scheduler::stats::RpcLatency,
-    utils::{is_hosts_equal, IdMap},
+    utils::{elapsed_from, is_hosts_equal, IdMap},
     LocalitySpec, QoSSpec, ServerInfo,
 };
 
@@ -16,10 +18,147 @@ use super::{
     stats::{AppLatency, AppsMap, ServerStats, StatsMap},
 };
 
-#[derive(Clone, Debug)]
-pub struct MeanScheduler {}
+#[derive(Clone, Debug, Default)]
+pub struct MeanScheduler {
+    history: HistoryLock,
+}
+type HistoryLock = Arc<Mutex<History>>;
+type History = HashMap<AppRpc, (DateTime<Utc>, Uuid)>;
 
 const SCALEOUT_THREASHOLD: usize = 70;
+
+impl MeanScheduler {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn insert_history(&self, rpc: AppRpc, server_id: Uuid) {
+        match self.history.try_lock() {
+            Ok(mut history) => {
+                history.insert(rpc, (Utc::now(), server_id));
+            }
+            Err(_) => (),
+        }
+    }
+
+    fn clone_history(&self) -> History {
+        match self.history.try_lock() {
+            Ok(history) => history.clone(),
+            Err(_) => History::default(),
+        }
+    }
+
+    /// `abstract_schedule()` defines abstract scheduling algorithm common for both cpu and gpu.
+    /// It returns the least utilized node while satisfying QoS specifications.
+    /// If no node can satisfy the requirement, it returns the node whose estimated latency is shortest.
+    fn abstract_schedule<F>(
+        &self,
+        get_util: F,
+        service: &AppService,
+        app: &DeploymentInfo,
+        stats_map: &StatsMap,
+        apps_map: &AppsMap,
+        qos: QoSSpec,
+    ) -> Option<ScheduleResult>
+    where
+        F: Fn(&ServerStats) -> f64,
+    {
+        let history = self.clone_history();
+
+        let required_accuracy = qos.accuracy.unwrap_or(f32::MIN);
+        let required_latency = qos.latency.unwrap_or(u32::MAX);
+
+        let available_rpcs = filter_rpcs_by_accuracy(app, required_accuracy);
+
+        if available_rpcs.is_empty() {
+            return None;
+        }
+
+        let local_stats = filter_locality(stats_map.clone(), &qos.locality);
+
+        if local_stats.is_empty() {
+            println!(
+                "WARN: No servers matched locality specification: {:?}",
+                qos.locality
+            );
+            return None;
+        }
+
+        let mut target = local_stats
+            .iter()
+            .next()
+            .or_else(|| {
+                println!("WARN: stats are empty");
+                None
+            })?
+            .1;
+        let mut target_rpc = AppRpc::new("", "", "");
+        let mut target_latency = f64::MAX;
+        let mut target_utilization = 100.0;
+        let mut target_satisfies = false;
+
+        let server_latencies = apps_map.get(service).or_else(|| None)?;
+
+        for (server_id, stats) in local_stats.iter() {
+            let utilized_rate = get_util(stats);
+            let free = 1. - utilized_rate;
+            let factor = 1. / if free > 0.0 { free } else { 0.01 };
+
+            let latencies =
+                get_rpc_latencies_or_default(server_id, server_latencies, &available_rpcs);
+
+            for (rpc, latency) in latencies {
+                let (last_call, last_target) = history
+                    .get(&rpc)
+                    .map(|t| t.clone())
+                    .unwrap_or((Utc::now(), Uuid::max()));
+
+                let time_left = if server_id == &last_target {
+                    let elapsed = elapsed_from(&last_call);
+                    latency.average.saturating_sub(elapsed)
+                } else {
+                    Duration::from_millis(0)
+                };
+
+                // We consider greatest latency will become `free-resource-ratio * average-latency`
+                let estimated_latency =
+                    factor * (latency.average.as_millis() as f64) + time_left.as_millis() as f64;
+
+                let satisfies = estimated_latency <= required_latency as f64;
+                let faster = estimated_latency <= target_latency;
+                let less_utilized = utilized_rate < target_utilization;
+                let both_free = utilized_rate <= 0.3 && target_utilization <= 0.3;
+
+                // Select target if either:
+                //   - No target has satisfied and faster
+                //   - Satisfies the rquirements and less utilized
+                if !target_satisfies && (satisfies || faster)
+                    || satisfies && less_utilized
+                    || (satisfies && both_free && faster)
+                {
+                    target = stats;
+                    target_rpc = rpc.clone();
+                    target_latency = estimated_latency;
+                    target_utilization = utilized_rate;
+                    target_satisfies = satisfies;
+                }
+            }
+        }
+
+        let needs_scale_out = is_over_utilized(&target) || !target_satisfies;
+
+        if target_rpc.package == "" {
+            None
+        } else {
+            self.insert_history(target_rpc.clone(), target.server.id);
+            Some(ScheduleResult::new(
+                target.server.clone(),
+                target_rpc,
+                needs_scale_out,
+            ))
+        }
+    }
+}
 
 impl DeploymentScheduler for MeanScheduler {
     fn schedule(
@@ -30,7 +169,7 @@ impl DeploymentScheduler for MeanScheduler {
         apps_map: &AppsMap,
         qos: QoSSpec,
     ) -> Option<ScheduleResult> {
-        abstract_schedule(
+        self.abstract_schedule(
             |s| cpu_utilized_rate(s),
             &rpc.to_owned().into(),
             app,
@@ -48,7 +187,7 @@ impl DeploymentScheduler for MeanScheduler {
         apps_map: &AppsMap,
         qos: QoSSpec,
     ) -> Option<ScheduleResult> {
-        abstract_schedule(
+        self.abstract_schedule(
             |s| gpu_utilized_rate(s),
             &rpc.to_owned().into(),
             app,
@@ -66,99 +205,6 @@ impl DeploymentScheduler for MeanScheduler {
             .collect::<Vec<_>>();
         utils.sort_by_key(|t| (t.1 * 100.) as u64);
         utils[0].0.clone()
-    }
-}
-
-/// `abstract_schedule()` defines abstract scheduling algorithm common for both cpu and gpu.
-/// It returns the least utilized node while satisfying QoS specifications.
-/// If no node can satisfy the requirement, it returns the node whose estimated latency is shortest.
-fn abstract_schedule<F>(
-    get_util: F,
-    service: &AppService,
-    app: &DeploymentInfo,
-    stats_map: &StatsMap,
-    apps_map: &AppsMap,
-    qos: QoSSpec,
-) -> Option<ScheduleResult>
-where
-    F: Fn(&ServerStats) -> f64,
-{
-    let required_accuracy = qos.accuracy.unwrap_or(f32::MIN);
-    let required_latency = qos.latency.unwrap_or(u32::MAX);
-
-    let available_rpcs = filter_rpcs_by_accuracy(app, required_accuracy);
-
-    if available_rpcs.is_empty() {
-        return None;
-    }
-
-    let local_stats = filter_locality(stats_map.clone(), &qos.locality);
-
-    if local_stats.is_empty() {
-        println!(
-            "WARN: No servers matched locality specification: {:?}",
-            qos.locality
-        );
-        return None;
-    }
-
-    let mut target = local_stats
-        .iter()
-        .next()
-        .or_else(|| {
-            println!("WARN: stats are empty");
-            None
-        })?
-        .1;
-    let mut target_rpc = AppRpc::new("", "", "");
-    let mut target_latency = f64::MAX;
-    let mut target_utilization = 100.0;
-    let mut target_satisfies = false;
-
-    let server_latencies = apps_map.get(service).or_else(|| None)?;
-
-    for (server_id, stats) in local_stats.iter() {
-        let utilized_rate = get_util(stats);
-        let free = 1. - utilized_rate;
-        let factor = 1. / if free > 0.0 { free } else { 0.01 };
-
-        let latencies = get_rpc_latencies_or_default(server_id, server_latencies, &available_rpcs);
-
-        for (rpc, latency) in latencies {
-            // We consider greatest latency will become `free-resource-ratio * average-latency`
-            let estimated_latency = factor * (latency.average.as_millis() as f64);
-
-            let satisfies = estimated_latency <= required_latency as f64;
-            let faster = estimated_latency <= target_latency;
-            let less_utilized = utilized_rate < target_utilization;
-            let both_free = utilized_rate <= 0.3 && target_utilization <= 0.3;
-
-            // Select target if either:
-            //   - No target has satisfied and faster
-            //   - Satisfies the rquirements and less utilized
-            if !target_satisfies && (satisfies || faster)
-                || satisfies && less_utilized
-                || (satisfies && both_free && faster)
-            {
-                target = stats;
-                target_rpc = rpc.clone();
-                target_latency = estimated_latency;
-                target_utilization = utilized_rate;
-                target_satisfies = satisfies;
-            }
-        }
-    }
-
-    let needs_scale_out = is_over_utilized(&target) || !target_satisfies;
-
-    if target_rpc.package == "" {
-        None
-    } else {
-        Some(ScheduleResult::new(
-            target.server.clone(),
-            target_rpc,
-            needs_scale_out,
-        ))
     }
 }
 
@@ -232,11 +278,13 @@ fn get_rpc_latencies_or_default(
     latencies: &IdMap<AppLatency>,
     rpcs: &[AppRpc],
 ) -> Vec<(AppRpc, RpcLatency)> {
+    assert!(rpcs.len() > 0);
     latencies
         .0
         .get(server_id)
         .map(|latencies| latencies.clone_by_rpcs(&rpcs))
         .unwrap_or_else(|| {
+            println!("or else");
             rpcs.iter()
                 .map(|rpc| {
                     (
@@ -262,7 +310,7 @@ mod test {
 
     #[test]
     fn return_fastest_unless_free() {
-        let scheduler = MeanScheduler {};
+        let scheduler = MeanScheduler::new();
         let app = get_deployment();
         let service = AppService::new("laqista", "Scheduler");
         let stats = get_stats_map(None);
@@ -283,7 +331,7 @@ mod test {
 
     #[test]
     fn satisfy_accuracy_requirement() {
-        let scheduler = MeanScheduler {};
+        let scheduler = MeanScheduler::new();
         let app = get_deployment();
         let service = AppService::new("laqista", "Scheduler");
         let stats = get_stats_map(None);
@@ -311,7 +359,7 @@ mod test {
     /// Because no latency QoS specified, most free one, B should be chosen.
     #[test]
     fn return_most_free() {
-        let scheduler = MeanScheduler {};
+        let scheduler = MeanScheduler::new();
         let app = get_deployment();
         let service = AppService::new("laqista", "Scheduler");
         let stats = get_stats_map(Some((40., 10., 70.)));
@@ -339,7 +387,7 @@ mod test {
     /// With latency req. 100 and accuarcy req. 55%, only A and "sixty" can be chosen.
     #[test]
     fn satisfy_latency_and_accuracy() {
-        let scheduler = MeanScheduler {};
+        let scheduler = MeanScheduler::new();
         let app = get_deployment();
         let service = AppService::new("laqista", "Scheduler");
         let stats = get_stats_map(Some((40., 10., 70.)));
