@@ -125,13 +125,94 @@ impl AuthoritativeScheduler {
 
         println!("Scaling out the application: {deployment:?} to {target_server:?}");
 
+        let response = self.deploy_to(&target_server, deployment.clone()).await?;
+
+        if !response.success {
+            return Err("Unsuccessful spawn".into());
+        }
+
+        println!("spawend successfully");
+
+        runtime
+            .deployments
+            .0
+            .insert(deployment.clone().id, deployment.clone());
+
+        runtime
+            .cluster
+            .insert_instance(deployment.clone(), vec![target_server.clone()]);
+
+        println!(
+            "Successfully spawned app ({:?}) on {:?}",
+            &deployment.name, &target_server.addr
+        );
+
+        Ok(Some(response))
+    }
+
+    pub async fn deploy_initial_apps(&self, names: &[String]) -> Result<()> {
+        let deployments = self
+            .runtime
+            .lock()
+            .await
+            .deployments
+            .0
+            .values()
+            .map(|d| d.to_owned())
+            .collect::<Vec<_>>();
+
+        for name in names {
+            let deployment = deployments
+                .iter()
+                .find(|d| d.name == *name)
+                .ok_or(Error::NoneError)?;
+
+            self.deploy_to_all(deployment.clone()).await?;
+        }
+
+        Ok(())
+    }
+
+    pub async fn deploy_to_all(&self, deployment: DeploymentInfo) -> Result<()> {
+        let mut runtime = self.runtime.lock().await;
+
+        let target_servers = runtime.cluster.get_instance_servers(&deployment.id)?;
+
+        for server in target_servers {
+            let response = self.deploy_to(&server, deployment.clone()).await?;
+
+            if !response.success {
+                println!("Unsuccessful spawn on {server:?}");
+                continue;
+            }
+
+            runtime
+                .deployments
+                .0
+                .insert(deployment.clone().id, deployment.clone());
+
+            runtime
+                .cluster
+                .insert_instance(deployment.clone(), vec![server.clone()]);
+        }
+
+        println!("spawend to all servers");
+
+        Ok(())
+    }
+
+    pub async fn deploy_to(
+        &self,
+        server: &ServerInfo,
+        deployment: DeploymentInfo,
+    ) -> Result<SpawnResponse> {
         let mut count = 0;
-        let response = loop {
+        loop {
             let request = SpawnRequest {
                 deployment: Some(deployment.clone().into()),
             };
             let request = Request::new(request);
-            let client_result = self.client(&target_server).await;
+            let client_result = self.client(&server).await;
             let mut client = match client_result {
                 Ok(c) => c,
                 Err(e) => {
@@ -151,7 +232,7 @@ impl AuthoritativeScheduler {
                 .map_err(<Status as Into<Error>>::into)
                 .into()
             {
-                Ok(r) => break Ok(r),
+                Ok(r) => break Ok(r.into_inner()),
                 Err(e) => {
                     count += 1;
                     if count >= 3 {
@@ -162,30 +243,7 @@ impl AuthoritativeScheduler {
                     }
                 }
             }
-        }?;
-
-        if !response.get_ref().success {
-            return Err("Unsuccessful spawn".into());
         }
-
-        println!("spawend successfully");
-
-        runtime
-            .deployments
-            .0
-            .insert(deployment.id, deployment.clone());
-
-        runtime
-            .cluster
-            .insert_instance(deployment, vec![target_server]);
-
-        println!(
-            "Successfully spawned app ({:?}) on {:?}",
-            response.get_ref().deployment,
-            response.get_ref().server,
-        );
-
-        Ok(Some(response.into_inner()))
     }
 
     pub async fn handle_failed_server<T>(
@@ -630,6 +688,16 @@ impl Cluster {
     pub fn remove_server(&mut self, id: &Uuid) -> Option<ServerInfo> {
         let index = self.servers.iter().position(|s| &s.id == id)?;
         Some(self.servers.remove(index))
+    }
+
+    pub fn get_instance_servers(&self, deployment_id: &Uuid) -> Result<Vec<ServerInfo>> {
+        Ok(self
+            .instances
+            .0
+            .get(deployment_id)
+            .ok_or("Deployment not found".to_string())?
+            .servers
+            .clone())
     }
 
     pub fn get_instance_server_ids(&self, deployment_id: &Uuid) -> Result<Vec<Uuid>> {

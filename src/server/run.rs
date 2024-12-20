@@ -180,7 +180,7 @@ impl ServerRunner {
             }
             DaemonState::Authoritative(scheduler) => {
                 println!("Running an Authoritative server...");
-                self.start_authoritative(daemon, scheduler).await
+                self.start_authoritative(daemon, scheduler, &vec![]).await
             }
             DaemonState::Failed => {
                 panic!("invalid state: {:?}", state)
@@ -214,6 +214,7 @@ impl ServerRunner {
         &self,
         daemon: ServerDaemon,
         scheduler: AuthoritativeScheduler,
+        initial_app_names: &[String],
     ) -> Result<DaemonState> {
         let server = daemon.runtime.lock().await.info.clone();
 
@@ -234,6 +235,16 @@ impl ServerRunner {
             .common_services(daemon, app_tx)
             .await?
             .add_service(SchedulerServer::new(scheduler.clone()));
+
+        let names = initial_app_names.to_owned();
+        let cloned_scheduler = scheduler.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            match cloned_scheduler.deploy_initial_apps(&names).await {
+                Ok(()) => (),
+                Err(e) => println!("WARN: failed to deplay initial apps: {e:?}"),
+            };
+        });
 
         println!("Listening on {}...", self.socket);
         grpc_server.serve(self.socket).await?;

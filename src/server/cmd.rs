@@ -26,4 +26,7 @@ pub struct StartCommand {
 
     #[arg(long = "scheduler", default_value = "mean")]
     pub scheduler: String,
+
+    #[arg(long = "initial-apps")]
+    pub initial_apps: Vec<String>,
 }
