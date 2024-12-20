@@ -84,11 +84,7 @@ where
     let required_accuracy = qos.accuracy.unwrap_or(f32::MIN);
     let required_latency = qos.latency.unwrap_or(u32::MAX);
 
-    let available_rpcs = app
-        .accuracies
-        .iter()
-        .filter(|(_, acc)| **acc > required_accuracy)
-        .collect::<HashMap<_, _>>();
+    let available_rpcs = filter_rpcs_by_accuracy(app, required_accuracy);
 
     if available_rpcs.is_empty() {
         return None;
@@ -127,18 +123,11 @@ where
         let latencies: Vec<(AppRpc, RpcLatency)> = server_latencies
             .0
             .get(server_id)
-            .map(|latencies| {
-                latencies
-                    .lookup_service(service)
-                    .into_iter()
-                    .filter(|(rpc, _)| available_rpcs.keys().find(|k| *k == rpc).is_some())
-                    .map(|(rpc, latencies)| (rpc.to_owned(), latencies.to_owned()))
-                    .collect()
-            })
+            .map(|latencies| latencies.clone_by_rpcs(service, &available_rpcs))
             .unwrap_or_else(|| {
                 available_rpcs
                     .iter()
-                    .map(|(rpc, _)| {
+                    .map(|rpc| {
                         (
                             (*rpc).clone(),
                             RpcLatency::with_first(Duration::from_millis(0)),
@@ -217,6 +206,15 @@ fn cpu_utilized_rate(stats: &ServerStats) -> f64 {
     };
 
     utilization.cpu as f64 / 100.0
+}
+
+fn filter_rpcs_by_accuracy(deployment: &DeploymentInfo, required_accuracy: f32) -> Vec<AppRpc> {
+    deployment
+        .accuracies
+        .iter()
+        .filter(|(_, acc)| **acc > required_accuracy)
+        .map(|(rpc, _)| rpc.to_owned())
+        .collect()
 }
 
 fn filter_locality(stats: StatsMap, locality: &LocalitySpec) -> HashMap<Uuid, ServerStats> {

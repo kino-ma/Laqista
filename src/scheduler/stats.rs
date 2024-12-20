@@ -175,6 +175,18 @@ impl AppLatency {
             .filter(|(rpc, _)| service.contains(rpc))
             .collect()
     }
+
+    pub fn clone_by_rpcs(
+        &self,
+        service: &AppService,
+        rpcs: &[AppRpc],
+    ) -> Vec<(AppRpc, RpcLatency)> {
+        self.lookup_service(service)
+            .into_iter()
+            .filter(|(rpc, _)| rpcs.contains(rpc))
+            .map(|(rpc, latencies)| (rpc.to_owned(), latencies.to_owned()))
+            .collect()
+    }
 }
 
 #[derive(Clone, Debug, Default)]
