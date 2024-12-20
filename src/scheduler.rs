@@ -40,6 +40,7 @@ use self::stats::{ServerStats, StatsMap};
 
 #[derive(Debug)]
 pub struct AuthoritativeScheduler {
+    pub initial_apps: Vec<String>,
     pub runtime: Arc<Mutex<SchedulerRuntime>>,
     pub tx: Arc<Mutex<StateSender>>,
 }
@@ -67,6 +68,7 @@ impl AuthoritativeScheduler {
         scheduler: Box<dyn DeploymentScheduler>,
         tx: StateSender,
         database: DeploymentDatabase,
+        initial_apps: Vec<String>,
     ) -> Self {
         let runtime = Arc::new(Mutex::new(SchedulerRuntime {
             cluster,
@@ -77,7 +79,11 @@ impl AuthoritativeScheduler {
 
         let tx = Arc::new(Mutex::new(tx));
 
-        Self { runtime, tx }
+        Self {
+            runtime,
+            tx,
+            initial_apps,
+        }
     }
 
     pub fn from_server(
@@ -85,10 +91,11 @@ impl AuthoritativeScheduler {
         scheduler: Box<dyn DeploymentScheduler>,
         tx: StateSender,
         database: DeploymentDatabase,
+        initial_apps: Vec<String>,
     ) -> Self {
         let cluster = Cluster::new(server);
 
-        Self::new(cluster, scheduler, tx, database)
+        Self::new(cluster, scheduler, tx, database, initial_apps)
     }
 
     pub async fn push_server(&self, server: ServerInfo) {
@@ -151,15 +158,7 @@ impl AuthoritativeScheduler {
     }
 
     pub async fn deploy_initial_apps(&self, names: &[String]) -> Result<()> {
-        let deployments = self
-            .runtime
-            .lock()
-            .await
-            .deployments
-            .0
-            .values()
-            .map(|d| d.to_owned())
-            .collect::<Vec<_>>();
+        let deployments = self.runtime.lock().await.clone_deployments();
 
         for name in names {
             let deployment = deployments
@@ -197,6 +196,28 @@ impl AuthoritativeScheduler {
         }
 
         println!("spawend to all servers");
+
+        Ok(())
+    }
+
+    pub async fn deploy_initial_apps_to(&self, server: &ServerInfo) -> Result<()> {
+        let all_deployments = self.runtime.lock().await.clone_deployments();
+        let initial_deployments = all_deployments
+            .into_iter()
+            .filter(|d| self.initial_apps.contains(&d.name))
+            .collect();
+
+        self.deploy_to_batch(server, initial_deployments).await
+    }
+
+    pub async fn deploy_to_batch(
+        &self,
+        server: &ServerInfo,
+        deployments: Vec<DeploymentInfo>,
+    ) -> Result<()> {
+        for deployment in deployments {
+            self.deploy_to(server, deployment).await?;
+        }
 
         Ok(())
     }
@@ -300,9 +321,18 @@ impl Scheduler for AuthoritativeScheduler {
             .try_into()
             .map_err(<Error as Into<Status>>::into)?;
 
-        self.push_server(server).await;
+        self.push_server(server.clone()).await;
 
         let group = Some(self.runtime.lock().await.cluster.group.clone().into());
+
+        let this = self.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            match this.deploy_initial_apps_to(&server).await {
+                Ok(()) => (),
+                Err(e) => println!("WARN: failed to deploy initial apps to joined server: {e:?}"),
+            };
+        });
 
         Ok(Response::new(JoinResponse {
             success: true,
@@ -511,11 +541,13 @@ impl Scheduler for AuthoritativeScheduler {
 
 impl Clone for AuthoritativeScheduler {
     fn clone(&self) -> Self {
+        let initial_apps = self.initial_apps.clone();
         let runtime = self.runtime.clone();
         let tx = self.tx.clone();
 
         Self {
-            runtime: runtime,
+            initial_apps,
+            runtime,
             tx,
         }
     }
@@ -559,6 +591,10 @@ impl SchedulerRuntime {
 
     pub async fn clone_inner(arc: &Arc<Mutex<Self>>) -> Self {
         arc.lock().await.clone()
+    }
+
+    pub fn clone_deployments(&self) -> Vec<DeploymentInfo> {
+        self.deployments.0.values().map(|d| d.to_owned()).collect()
     }
 
     pub fn clone_from(&mut self, other: Self) {

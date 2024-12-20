@@ -143,6 +143,7 @@ impl ServerRunner {
                         Box::new(mean_scheduler),
                         self.tx.clone(),
                         self.database.clone(),
+                        vec![],
                     );
                     DaemonState::Authoritative(scheduler)
                 }
@@ -488,6 +489,7 @@ impl ServerRunner {
                     inner_scheduler,
                     tx,
                     self.database.clone(),
+                    start_command.initial_apps.clone(),
                 );
                 DaemonState::Authoritative(scheduler)
             }
