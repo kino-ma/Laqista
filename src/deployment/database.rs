@@ -134,7 +134,7 @@ impl DeploymentDatabase {
         let latest_deployment = app
             .deployments
             .last()
-            .ok_or(format!("Deployment not found for app: {info:?}"))?;
+            .ok_or(format!("get: Deployment not found for app: {info:?}"))?;
 
         let subdir_name = latest_deployment.dir_name();
         let dir = app_dir(&self.root, info).join(subdir_name);

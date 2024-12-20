@@ -215,8 +215,13 @@ impl AuthoritativeScheduler {
         server: &ServerInfo,
         deployments: Vec<DeploymentInfo>,
     ) -> Result<()> {
+        let mut runtime = self.runtime.lock().await;
         for deployment in deployments {
-            self.deploy_to(server, deployment).await?;
+            self.deploy_to(server, deployment.clone()).await?;
+
+            runtime
+                .cluster
+                .insert_instance(deployment.clone(), vec![server.clone()]);
         }
 
         Ok(())
@@ -734,7 +739,7 @@ impl Cluster {
             .instances
             .0
             .get(deployment_id)
-            .ok_or("Deployment not found".to_string())?
+            .ok_or("get_instance_servers: Deployment not found".to_string())?
             .servers
             .clone())
     }
@@ -744,7 +749,7 @@ impl Cluster {
             .instances
             .0
             .get(deployment_id)
-            .ok_or("Deployment not found".to_string())?
+            .ok_or("get_instance_server_ids: Deployment not found".to_string())?
             .servers
             .iter()
             .map(|s| s.id)
