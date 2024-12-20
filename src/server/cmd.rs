@@ -23,4 +23,7 @@ pub struct StartCommand {
 
     #[arg(short = 'd', long = "data-path", default_value = ".laqista")]
     pub data_path: PathBuf,
+
+    #[arg(long = "scheduler", default_value = "mean")]
+    pub scheduler: String,
 }
