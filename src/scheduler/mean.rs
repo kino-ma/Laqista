@@ -5,9 +5,8 @@ use laqista_core::{AppRpc, AppService, DeploymentInfo};
 use uuid::Uuid;
 
 use crate::{
-    scheduler::stats::RpcLatency,
-    utils::{is_hosts_equal, mul_as_percent},
-    LocalitySpec, QoSSpec, ServerInfo,
+    proto::MonitorWindow, scheduler::stats::RpcLatency, utils::is_hosts_equal, LocalitySpec,
+    QoSSpec, ServerInfo,
 };
 
 use super::{
@@ -197,33 +196,27 @@ fn is_over_utilized(stats: &ServerStats) -> bool {
 }
 
 fn gpu_utilized_rate(stats: &ServerStats) -> f64 {
-    let total: f64 = stats.windows().map(|w| w.nanos as f64).sum();
+    let Some(MonitorWindow {
+        utilization: Some(utilization),
+        ..
+    }) = stats.stats.last()
+    else {
+        return 0.0;
+    };
 
-    if total <= 0. {
-        return 0.;
-    }
-
-    let utilized: f64 = stats
-        .windows()
-        .map(|w| mul_as_percent(w.nanos, w.utilization.gpu as _) as f64)
-        .sum();
-
-    utilized / total
+    utilization.gpu as f64 / 100.0
 }
 
 fn cpu_utilized_rate(stats: &ServerStats) -> f64 {
-    let total: f64 = stats.windows().map(|w| w.nanos as f64).sum();
+    let Some(MonitorWindow {
+        utilization: Some(utilization),
+        ..
+    }) = stats.stats.last()
+    else {
+        return 0.0;
+    };
 
-    if total <= 0. {
-        return 0.;
-    }
-
-    let utilized: f64 = stats
-        .windows()
-        .map(|w| mul_as_percent(w.nanos, w.utilization.cpu as _) as f64)
-        .sum();
-
-    utilized / total
+    utilization.cpu as f64 / 100.0
 }
 
 fn filter_locality(stats: StatsMap, locality: &LocalitySpec) -> HashMap<Uuid, ServerStats> {

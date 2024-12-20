@@ -59,13 +59,6 @@ pub fn subtract_window(end: &Timestamp, start: &Timestamp) -> i64 {
     (end_i128 - start_i128) as i64
 }
 
-pub fn mul_as_percent(x: i64, percent: i64) -> i64 {
-    let x = x as f64;
-    let y = percent as f64 / 100.;
-
-    (x * y) as i64
-}
-
 pub fn datetime_to_prost(dt: DateTime<Utc>) -> Timestamp {
     Timestamp {
         seconds: dt.second() as _,
