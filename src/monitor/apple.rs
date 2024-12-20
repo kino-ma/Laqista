@@ -8,7 +8,7 @@ use bytes::BytesMut;
 use chrono::{DateTime, TimeDelta, Utc};
 use plist::Date;
 use serde::{Deserialize, Serialize};
-use systemstat::{CPULoad, Platform, System};
+use sysinfo::{CpuRefreshKind, RefreshKind, System};
 use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
@@ -25,7 +25,7 @@ pub struct MetricsWindow {
     start: DateTime<Utc>,
     end: DateTime<Utc>,
     metrics: PowerMetrics,
-    cpu_load: CPULoad,
+    cpu_percent: f64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -125,7 +125,7 @@ pub struct PowerMetrics {
 }
 
 impl PowerMetrics {
-    pub fn to_window(self, cpu_load: CPULoad) -> MetricsWindow {
+    pub fn to_window(self, cpu_percent: f64) -> MetricsWindow {
         let st: SystemTime = self.timestamp.into();
         let end: DateTime<Utc> = st.into();
 
@@ -136,7 +136,7 @@ impl PowerMetrics {
             start,
             end,
             metrics: self,
-            cpu_load,
+            cpu_percent,
         }
     }
 }
@@ -194,17 +194,25 @@ pub struct MetricsReader {
 
 impl MetricsReader {
     pub fn new(lines: StdoutLines) -> Self {
-        let sys = System::new();
+        let sys = System::new_with_specifics(
+            RefreshKind::nothing().with_cpu(CpuRefreshKind::everything()),
+        );
         Self { inner: lines, sys }
     }
 
-    fn parse(&self, mut buff: &[u8], cpu_load: CPULoad) -> Result<MetricsWindow, plist::Error> {
+    fn parse(&self, mut buff: &[u8], cpu_percent: f64) -> Result<MetricsWindow, plist::Error> {
         if buff[0] == b'\0' {
             buff = &buff[1..];
         }
         let metrics: PowerMetrics = plist::from_bytes(buff)?;
 
-        Ok(metrics.to_window(cpu_load))
+        Ok(metrics.to_window(cpu_percent))
+    }
+
+    fn collect_cpu_usage(&mut self) -> f64 {
+        self.sys.refresh_cpu_all();
+        let cpus = self.sys.cpus();
+        cpus.iter().map(|cpu| cpu.cpu_usage() as f64).sum::<f64>() / cpus.len() as f64
     }
 }
 
@@ -215,13 +223,6 @@ impl<'a> Iterator for MetricsReader {
         let mut buff = BytesMut::new();
         let mut have_seen_idle_ratio = false;
         let mut have_seen_gpu = false;
-        let cpu_measurement = match self.sys.cpu_load_aggregate() {
-            Ok(m) => m,
-            Err(e) => {
-                println!("WARN: failed to start measuring CPU utilization: {e:?}");
-                return None;
-            }
-        };
 
         while let Some(line) = self.inner.next() {
             let line = line.expect("failed to read line");
@@ -246,15 +247,9 @@ impl<'a> Iterator for MetricsReader {
             buff.extend(line.as_bytes());
 
             if line == "</plist>" {
-                let cpu_load = match cpu_measurement.done() {
-                    Ok(load) => load,
-                    Err(e) => {
-                        println!("WARN: failed to aggregate CPU utilization: {e:?}");
-                        return None;
-                    }
-                };
+                let cpu_percent = self.collect_cpu_usage();
 
-                let parsed = self.parse(&buff, cpu_load);
+                let parsed = self.parse(&buff, cpu_percent);
                 if let Err(e) = &parsed {
                     println!("WARN: failed to parse plist: {}", e);
                     println!("last data = '{}'", line);
@@ -278,7 +273,7 @@ impl MetricsWindow {
 
 impl Into<ResourceUtilization> for MetricsWindow {
     fn into(self) -> ResourceUtilization {
-        let cpu = (100.0 - self.cpu_load.idle * 100.0) as i32;
+        let cpu = self.cpu_percent as i32;
         let gpu = (self.metrics.gpu.utilization_ratio() * 100.0) as i32;
 
         ResourceUtilization {
