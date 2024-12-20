@@ -5,13 +5,15 @@ use laqista_core::{AppRpc, AppService, DeploymentInfo};
 use uuid::Uuid;
 
 use crate::{
-    proto::MonitorWindow, scheduler::stats::RpcLatency, utils::is_hosts_equal, LocalitySpec,
-    QoSSpec, ServerInfo,
+    proto::MonitorWindow,
+    scheduler::stats::RpcLatency,
+    utils::{is_hosts_equal, IdMap},
+    LocalitySpec, QoSSpec, ServerInfo,
 };
 
 use super::{
     interface::{DeploymentScheduler, ScheduleResult},
-    stats::{AppsMap, ServerStats, StatsMap},
+    stats::{AppLatency, AppsMap, ServerStats, StatsMap},
 };
 
 #[derive(Clone, Debug)]
@@ -120,21 +122,7 @@ where
         let free = 1. - utilized_rate;
         let factor = 1. / if free > 0.0 { free } else { 0.01 };
 
-        let latencies: Vec<(AppRpc, RpcLatency)> = server_latencies
-            .0
-            .get(server_id)
-            .map(|latencies| latencies.clone_by_rpcs(service, &available_rpcs))
-            .unwrap_or_else(|| {
-                available_rpcs
-                    .iter()
-                    .map(|rpc| {
-                        (
-                            (*rpc).clone(),
-                            RpcLatency::with_first(Duration::from_millis(0)),
-                        )
-                    })
-                    .collect()
-            });
+        let latencies = get_rpc_latencies_or_default(server_id, server_latencies, &available_rpcs);
 
         for (rpc, latency) in latencies {
             // We consider greatest latency will become `free-resource-ratio * average-latency`
@@ -237,6 +225,27 @@ fn filter_locality(stats: StatsMap, locality: &LocalitySpec) -> HashMap<Uuid, Se
     } else {
         stats.0
     }
+}
+
+fn get_rpc_latencies_or_default(
+    server_id: &Uuid,
+    latencies: &IdMap<AppLatency>,
+    rpcs: &[AppRpc],
+) -> Vec<(AppRpc, RpcLatency)> {
+    latencies
+        .0
+        .get(server_id)
+        .map(|latencies| latencies.clone_by_rpcs(&rpcs))
+        .unwrap_or_else(|| {
+            rpcs.iter()
+                .map(|rpc| {
+                    (
+                        (*rpc).clone(),
+                        RpcLatency::with_first(Duration::from_millis(0)),
+                    )
+                })
+                .collect()
+        })
 }
 
 #[cfg(test)]
