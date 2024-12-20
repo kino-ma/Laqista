@@ -111,7 +111,7 @@ impl ServerRunner {
 
         let info = self.create_info(start_command)?;
 
-        let mut state = self.determine_state(start_command, &info);
+        let mut state = self.determine_state(start_command, &info).await;
 
         loop {
             let daemon = self.create_daemon(info.clone(), state.clone());
@@ -144,7 +144,8 @@ impl ServerRunner {
                         self.tx.clone(),
                         self.database.clone(),
                         vec![],
-                    );
+                    )
+                    .await;
                     DaemonState::Authoritative(scheduler)
                 }
             };
@@ -421,7 +422,7 @@ impl ServerRunner {
             .map_err(|e| format!("failed to parse listen address: {e}"))?)
     }
 
-    pub fn determine_state(
+    pub async fn determine_state(
         &self,
         start_command: &StartCommand,
         server: &ServerInfo,
@@ -490,7 +491,8 @@ impl ServerRunner {
                     tx,
                     self.database.clone(),
                     start_command.initial_apps.clone(),
-                );
+                )
+                .await;
                 DaemonState::Authoritative(scheduler)
             }
         }

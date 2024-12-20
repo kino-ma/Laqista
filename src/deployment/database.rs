@@ -191,6 +191,20 @@ impl DeploymentDatabase {
 
         Ok(saved)
     }
+
+    pub async fn as_id_map(&self) -> IdMap<DeploymentInfo> {
+        IdMap(
+            self.inner
+                .lock()
+                .await
+                .apps
+                .0
+                .clone()
+                .into_iter()
+                .map(|(id, saved)| (id, saved.info))
+                .collect(),
+        )
+    }
 }
 
 impl Inner {

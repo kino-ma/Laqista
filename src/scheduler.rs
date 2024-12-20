@@ -63,7 +63,7 @@ pub struct Cluster {
 }
 
 impl AuthoritativeScheduler {
-    pub fn new(
+    pub async fn new(
         cluster: Cluster,
         scheduler: Box<dyn DeploymentScheduler>,
         tx: StateSender,
@@ -73,7 +73,7 @@ impl AuthoritativeScheduler {
         let runtime = Arc::new(Mutex::new(SchedulerRuntime {
             cluster,
             scheduler,
-            deployments: IdMap::new(),
+            deployments: database.as_id_map().await,
             database,
         }));
 
@@ -86,7 +86,7 @@ impl AuthoritativeScheduler {
         }
     }
 
-    pub fn from_server(
+    pub async fn from_server(
         server: &ServerInfo,
         scheduler: Box<dyn DeploymentScheduler>,
         tx: StateSender,
@@ -95,7 +95,7 @@ impl AuthoritativeScheduler {
     ) -> Self {
         let cluster = Cluster::new(server);
 
-        Self::new(cluster, scheduler, tx, database, initial_apps)
+        Self::new(cluster, scheduler, tx, database, initial_apps).await
     }
 
     pub async fn push_server(&self, server: ServerInfo) {
@@ -238,7 +238,7 @@ impl AuthoritativeScheduler {
                 Ok(c) => c,
                 Err(e) => {
                     count += 1;
-                    if count >= 3 {
+                    if count >= 5 {
                         break Err(e);
                     } else {
                         time::sleep(Duration::from_millis(200)).await;
@@ -256,7 +256,7 @@ impl AuthoritativeScheduler {
                 Ok(r) => break Ok(r.into_inner()),
                 Err(e) => {
                     count += 1;
-                    if count >= 3 {
+                    if count >= 5 {
                         break Err(e);
                     } else {
                         time::sleep(Duration::from_millis(200)).await;
@@ -329,7 +329,10 @@ impl Scheduler for AuthoritativeScheduler {
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(200)).await;
             match this.deploy_initial_apps_to(&server).await {
-                Ok(()) => (),
+                Ok(()) => println!(
+                    "Deployed initial apps ({:?}) to {:?}",
+                    this.initial_apps, &server
+                ),
                 Err(e) => println!("WARN: failed to deploy initial apps to joined server: {e:?}"),
             };
         });
