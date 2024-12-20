@@ -30,7 +30,10 @@ async fn schedule_wasm() {
             wasm_service.rpc("RunDetection").to_string(),
             onnx_service.rpc("Squeeze").to_string(),
         ],
-        accuracies_percent: HashMap::from([(onnx_service.rpc("Squeeze").to_string(), 80.3)]),
+        accuracies_percent: HashMap::from([
+            (onnx_service.rpc("Squeeze").to_string(), 80.3),
+            (wasm_service.rpc("RunDetection").to_string(), 80.3),
+        ]),
     };
 
     let _deployment = client
@@ -123,7 +126,10 @@ async fn schedule_wasm_fog() {
             wasm_service.rpc("RunDetection").to_string(),
             onnx_service.rpc("Squeeze").to_string(),
         ],
-        accuracies_percent: HashMap::from([(onnx_service.rpc("Squeeze").to_string(), 80.3)]),
+        accuracies_percent: HashMap::from([
+            (onnx_service.rpc("Squeeze").to_string(), 80.3),
+            (wasm_service.rpc("RunDetection").to_string(), 80.3),
+        ]),
     };
 
     let _deployment = client
@@ -242,7 +248,10 @@ async fn schedule_wasm_dew() {
             wasm_service.rpc("RunDetection").to_string(),
             onnx_service.rpc("Squeeze").to_string(),
         ],
-        accuracies_percent: HashMap::from([(onnx_service.rpc("Squeeze").to_string(), 80.3)]),
+        accuracies_percent: HashMap::from([
+            (onnx_service.rpc("Squeeze").to_string(), 80.3),
+            (wasm_service.rpc("RunDetection").to_string(), 80.3),
+        ]),
     };
 
     let _deployment = client

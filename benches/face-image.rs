@@ -106,7 +106,10 @@ async fn setup_clients(
             wasm_service.rpc("RunDetection").to_string(),
             onnx_service.rpc("Squeeze").to_string(),
         ],
-        accuracies_percent: HashMap::from([(onnx_service.rpc("Squeeze").to_string(), 80.3)]),
+        accuracies_percent: HashMap::from([
+            (onnx_service.rpc("Squeeze").to_string(), 80.3),
+            (wasm_service.rpc("RunDetection").to_string(), 80.3),
+        ]),
     };
 
     let deployment = client
