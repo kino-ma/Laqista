@@ -12,6 +12,7 @@ use sysinfo::{CpuRefreshKind, RefreshKind, System};
 use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
+    monitor::common::collect_cpu_usage,
     proto::{MonitorWindow, ResourceUtilization, TimeWindow},
     utils::datetime_to_prost,
 };
