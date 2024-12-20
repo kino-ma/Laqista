@@ -4,27 +4,30 @@ use chrono::{DateTime, TimeDelta, Utc};
 use nvml_wrapper::{
     error::NvmlError, struct_wrappers::device::Utilization as GpuUtilization, Device, Nvml,
 };
-use systemstat::{CPULoad, Platform, System};
+use sysinfo::{CpuRefreshKind, RefreshKind, System};
 use tokio::{sync::mpsc, time};
 
 use crate::{
+    monitor::common::collect_cpu_usage,
     proto::{MonitorWindow, ResourceUtilization, TimeWindow},
     utils::datetime_to_prost,
 };
 
 pub struct NvidiaMonitor {
     nvml: Nvml,
-    sys: System,
 }
 
 impl NvidiaMonitor {
     pub fn new() -> Result<Self, NvmlError> {
         let nvml = Nvml::init()?;
-        let sys = System::new();
-        Ok(Self { nvml, sys })
+        Ok(Self { nvml })
     }
 
     pub async fn run(&self, tx: mpsc::Sender<MonitorWindow>) -> ! {
+        let mut sys = System::new_with_specifics(
+            RefreshKind::nothing().with_cpu(CpuRefreshKind::everything()),
+        );
+
         let count = self
             .nvml
             .device_count()
@@ -42,23 +45,9 @@ impl NvidiaMonitor {
         loop {
             let timestamp = Utc::now();
 
-            let cpu_measurement = match self.sys.cpu_load_aggregate() {
-                Ok(m) => m,
-                Err(e) => {
-                    println!("WARN: failed to start measuring CPU utilization: {e:?}");
-                    continue;
-                }
-            };
-
             time::sleep(Duration::from_secs(1)).await;
 
-            let cpu_load = match cpu_measurement.done() {
-                Ok(load) => load,
-                Err(e) => {
-                    println!("WARN: failed to aggregate CPU utilization: {e:?}");
-                    continue;
-                }
-            };
+            let cpu_percent = collect_cpu_usage(&mut sys);
 
             let utils = devices
                 .iter()
@@ -72,7 +61,7 @@ impl NvidiaMonitor {
             let metrics = NvidiaMetrics {
                 timestamp,
                 utils,
-                cpu_load,
+                cpu_percent,
             };
 
             tx.send(metrics.into())
@@ -86,7 +75,7 @@ impl NvidiaMonitor {
 pub struct NvidiaMetrics {
     pub timestamp: DateTime<Utc>,
     pub utils: Vec<GpuUtilization>,
-    pub cpu_load: CPULoad,
+    pub cpu_percent: f64,
 }
 
 impl NvidiaMetrics {
@@ -133,7 +122,7 @@ impl Into<MonitorWindow> for NvidiaMetrics {
 impl Into<ResourceUtilization> for NvidiaMetrics {
     fn into(self) -> ResourceUtilization {
         let gpu = (100.0 * self.total_utilization_rate()) as i32;
-        let cpu = (100.0 - self.cpu_load.idle * 100.0) as i32;
+        let cpu = self.cpu_percent as i32;
         ResourceUtilization {
             gpu,
             cpu,

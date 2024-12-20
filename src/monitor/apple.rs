@@ -208,12 +208,6 @@ impl MetricsReader {
 
         Ok(metrics.to_window(cpu_percent))
     }
-
-    fn collect_cpu_usage(&mut self) -> f64 {
-        self.sys.refresh_cpu_all();
-        let cpus = self.sys.cpus();
-        cpus.iter().map(|cpu| cpu.cpu_usage() as f64).sum::<f64>() / cpus.len() as f64
-    }
 }
 
 impl<'a> Iterator for MetricsReader {
@@ -247,7 +241,7 @@ impl<'a> Iterator for MetricsReader {
             buff.extend(line.as_bytes());
 
             if line == "</plist>" {
-                let cpu_percent = self.collect_cpu_usage();
+                let cpu_percent = collect_cpu_usage(&mut self.sys);
 
                 let parsed = self.parse(&buff, cpu_percent);
                 if let Err(e) = &parsed {

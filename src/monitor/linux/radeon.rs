@@ -4,10 +4,11 @@ use std::{
 };
 
 use chrono::{DateTime, TimeDelta, Utc};
-use systemstat::{CPULoad, Platform, System};
+use sysinfo::System;
 use tokio::sync::mpsc;
 
 use crate::{
+    monitor::common::collect_cpu_usage,
     proto::{MonitorWindow, ResourceUtilization, TimeWindow},
     utils::datetime_to_prost,
 };
@@ -55,7 +56,7 @@ impl RadeonMonitor {
 
 #[derive(Clone, Debug)]
 pub struct RadeonMetrics {
-    cpu_load: CPULoad,
+    cpu_percent: f64,
     gpu: RadeonGpuMetrics,
 }
 
@@ -148,29 +149,15 @@ impl MetricsReader {
 impl Iterator for MetricsReader {
     type Item = RadeonMetrics;
     fn next(&mut self) -> Option<Self::Item> {
-        let cpu_measurement = match self.sys.cpu_load_aggregate() {
-            Ok(m) => m,
-            Err(e) => {
-                println!("WARN: failed to start measuring CPU utilization: {e:?}");
-                return None;
-            }
-        };
-
         let line = self.next_inner()?;
         let (_, metrics) = metrics_line(&line)
             .map_err(|e| println!("ERR: MetricsReader.next(): failed to parse: {e}"))
             .ok()?;
 
-        let cpu_load = match cpu_measurement.done() {
-            Ok(load) => load,
-            Err(e) => {
-                println!("WARN: failed to aggregate CPU utilization: {e:?}");
-                return None;
-            }
-        };
+        let cpu_percent = collect_cpu_usage(&mut self.sys);
 
         Some(RadeonMetrics {
-            cpu_load,
+            cpu_percent,
             gpu: metrics,
         })
     }
@@ -179,7 +166,7 @@ impl Iterator for MetricsReader {
 impl Into<ResourceUtilization> for RadeonMetrics {
     fn into(self) -> ResourceUtilization {
         let gpu = (self.gpu.gpu * 100.) as _;
-        let cpu = (100.0 - self.cpu_load.idle * 100.0) as i32;
+        let cpu = self.cpu_percent as _;
         ResourceUtilization {
             cpu,
             gpu,
