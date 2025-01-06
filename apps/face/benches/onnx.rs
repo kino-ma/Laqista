@@ -22,11 +22,21 @@ pub fn bench_onnx(c: &mut Criterion) {
     let mut group = c.benchmark_group("Onnx inference");
 
     group.bench_with_input(
-        BenchmarkId::new("onnx inference", "pelican"),
+        BenchmarkId::new("onnx inference only inference", "pelican"),
         &Arc::new(Mutex::new(session)),
         |b, session| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
                 let session = session.lock().await;
+                session.detect(&data).await.unwrap();
+            })
+        },
+    );
+
+    group.bench_function(
+        BenchmarkId::new("onnx inference end to end", "pelican"),
+        |b| {
+            b.to_async(Runtime::new().unwrap()).iter(|| async {
+                let session = Session::from_bytes(ONNX).await.unwrap();
                 let resp = session.detect(&data).await.unwrap();
                 let output = InferReply::try_from(resp).unwrap();
                 let mut v = output
