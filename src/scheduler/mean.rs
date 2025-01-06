@@ -284,7 +284,6 @@ fn get_rpc_latencies_or_default(
         .get(server_id)
         .map(|latencies| latencies.clone_by_rpcs(&rpcs))
         .unwrap_or_else(|| {
-            println!("or else");
             rpcs.iter()
                 .map(|rpc| {
                     (
