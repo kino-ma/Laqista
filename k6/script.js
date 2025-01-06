@@ -1,8 +1,15 @@
 import { URL } from "https://jslib.k6.io/url/1.0.0/index.js";
+import { Counter } from "k6/metrics";
 import { Client, StatusOK } from "k6/net/grpc";
 import { check } from "k6";
 
 const SCHEDULER = "133.27.186.106:50051";
+const SCHEDULER_URL = "http://133.27.186.106:50051";
+
+const NAN1 = "http://133.27.171.130:50051";
+const NAN2 = "http://133.27.171.130:50052";
+const NAN3 = "http://133.27.171.130:50053";
+const NAN4 = "http://133.27.171.58:50051";
 
 // Just for deployment
 const schedulerClient = new Client();
@@ -13,17 +20,29 @@ appClient.load(["definitions"], "../../proto/face.proto");
 
 const lookupRequest = {
   name: "face",
-  qos: {},
+  qos: {
+    latency_ms: 100,
+  },
   service: "/face.Detector",
 };
 
 const runDetectionRequest = JSON.parse(open("../data/run_detection.json"));
 
+const schedulerCounter = new Counter("scheduler_counter");
+const otherCounter = new Counter("other_counter");
+const counters = {
+  [SCHEDULER_URL]: new Counter("scheduler_counter"),
+  [NAN1]: new Counter("nan1_counter"),
+  [NAN2]: new Counter("nan2_counter"),
+  [NAN3]: new Counter("nan3_counter"),
+  [NAN4]: new Counter("nan4_counter"),
+}
+
 export const options = {
   // A number specifying the number of VUs to run concurrently.
-  vus: 30,
+  vus: 100,
   // A string specifying the total duration of the test run.
-  duration: "30s",
+  duration: "20s",
 
   // The following section contains configuration options for execution of this
   // test script in Grafana Cloud.
@@ -78,12 +97,18 @@ export default function () {
     "laqista.Scheduler/Lookup",
     lookupRequest
   );
+
   if (typeof lookupReply.message.server?.addr === "undefined") {
     console.log({ lookupReply });
+    fail(`Lookup failed: ${lookupReply}`);
+    return
   }
+
   let url = new URL(lookupReply.message.server.addr);
   let address = url.host;
   appClient.connect(address, { plaintext: true });
+
+  counters[lookupReply.message.server.addr].add(1);
 
   let detectionReply = appClient.invoke(
     "face.Detector/RunDetection",
