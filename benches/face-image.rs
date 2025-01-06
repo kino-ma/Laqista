@@ -33,6 +33,7 @@ pub fn bench_face_image(c: &mut Criterion) {
     let arc_od_client = Arc::new(Mutex::new(od_client));
 
     let mut group = c.benchmark_group("Face image");
+    group.sample_size(10000);
 
     group.bench_with_input(
         BenchmarkId::new("face image scheduled", "<client>"),
