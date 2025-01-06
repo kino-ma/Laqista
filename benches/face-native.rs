@@ -97,14 +97,14 @@ async fn setup_clients(
     .await
     .expect("failed to connect to the server");
 
-    let wasm_service = AppService::new("face", "Detector");
+    let native_service = AppService::new("native", "NativeDetector");
 
     let request = DeployRequest {
         name: "native".to_owned(),
         source: "https://github.com/kino-ma/Laqista/releases/download/v0.1.0/face_v0.1.0.tgz"
             .to_owned(),
-        rpcs: vec![wasm_service.rpc("RunDetection").to_string()],
-        accuracies_percent: HashMap::from([(wasm_service.rpc("RunDetection").to_string(), 80.3)]),
+        rpcs: vec![native_service.rpc("RunDetection").to_string()],
+        accuracies_percent: HashMap::from([(native_service.rpc("RunDetection").to_string(), 80.3)]),
     };
 
     let deployment = client
