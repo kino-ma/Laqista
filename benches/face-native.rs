@@ -26,7 +26,7 @@ pub fn bench_native(c: &mut Criterion) {
     let arc_client = Arc::new(Mutex::new(client));
     let arc_app_client = Arc::new(Mutex::new(detector_client));
 
-    let mut group = c.benchmark_group("Face wasm");
+    let mut group = c.benchmark_group("Face native");
 
     group.bench_with_input(
         BenchmarkId::new("face native scheduled full image", "<client>"),
@@ -40,7 +40,7 @@ pub fn bench_native(c: &mut Criterion) {
     );
 
     group.bench_with_input(
-        BenchmarkId::new("face wasm direct full image", "<client>"),
+        BenchmarkId::new("face native direct full image", "<client>"),
         &arc_app_client,
         |b, app_client| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
