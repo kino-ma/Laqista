@@ -61,6 +61,18 @@ pub fn bench_face_image(c: &mut Criterion) {
     let data = setup_image();
 
     group.bench_with_input(
+        BenchmarkId::new("face full image scheduled", "<client>"),
+        &(arc_client.clone(), arc_od_client.clone(), data.clone()),
+        |b, (client, od_client, data)| {
+            b.to_async(Runtime::new().unwrap()).iter(|| async {
+                let mut client = client.lock().await;
+                let mut od_client = od_client.lock().await;
+                run_scheduled(&mut client, &mut od_client, data.clone()).await
+            })
+        },
+    );
+
+    group.bench_with_input(
         BenchmarkId::new("face full image direct", "<client>"),
         &(arc_client.clone(), arc_od_client.clone(), data.clone()),
         |b, (client, od_client, data)| {
@@ -73,13 +85,25 @@ pub fn bench_face_image(c: &mut Criterion) {
     );
 
     group.bench_with_input(
-        BenchmarkId::new("face full image scheduled", "<client>"),
+        BenchmarkId::new("face full image scheduled again", "<client>"),
         &(arc_client.clone(), arc_od_client.clone(), data.clone()),
         |b, (client, od_client, data)| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
                 let mut client = client.lock().await;
                 let mut od_client = od_client.lock().await;
                 run_scheduled(&mut client, &mut od_client, data.clone()).await
+            })
+        },
+    );
+
+    group.bench_with_input(
+        BenchmarkId::new("face full image direct again", "<client>"),
+        &(arc_client.clone(), arc_od_client.clone(), data.clone()),
+        |b, (client, od_client, data)| {
+            b.to_async(Runtime::new().unwrap()).iter(|| async {
+                let mut client = client.lock().await;
+                let mut od_client = od_client.lock().await;
+                run_direct(&mut client, &mut od_client, data.clone()).await
             })
         },
     );
@@ -206,6 +230,7 @@ async fn run_direct(
     })
     .await
     .unwrap();
+
     let request = InferRequest { data };
     detector_client.squeeze(request).await.unwrap();
 }
