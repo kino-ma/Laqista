@@ -4,7 +4,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use face::proto::{InferReply, InferRequest};
 use image::{imageops::FilterType, GenericImageView, Pixel};
 use laqista_core::{session::Session, tensor::AsInputs};
-use tokio::{runtime::Runtime, sync::Mutex};
+use tokio::runtime::Runtime;
 
 static JPEG: &'static [u8] = include_bytes!("../../../data/pelican.jpeg");
 static ONNX: &'static [u8] = include_bytes!("../../../data/models/opt-squeeze.onnx");
@@ -23,10 +23,9 @@ pub fn bench_onnx(c: &mut Criterion) {
 
     group.bench_with_input(
         BenchmarkId::new("onnx inference only inference", "pelican"),
-        &Arc::new(Mutex::new(session)),
+        &Arc::new(session),
         |b, session| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
-                let session = session.lock().await;
                 session.detect(&data).await.unwrap();
             })
         },
