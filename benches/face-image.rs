@@ -191,6 +191,21 @@ async fn run_direct(
     detector_client: &mut ObjectDetectionClient<Channel>,
     data: Vec<f32>,
 ) {
+    let rpc = AppRpc::new("face", "ObjectDetection", "Squeeze");
+    let request = LookupRequest {
+        name: "face".to_owned(),
+        qos: None,
+        service: rpc.to_string(),
+    };
+
+    let resp = client.clone().lookup(request).await.unwrap().into_inner();
+    let addr = resp.server.unwrap().addr;
+
+    let mut detector_client = retry(|| async {
+        face::proto::object_detection_client::ObjectDetectionClient::connect(addr.to_owned()).await
+    })
+    .await
+    .unwrap();
     let request = InferRequest { data };
     detector_client.squeeze(request).await.unwrap();
 }
