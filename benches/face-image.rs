@@ -59,23 +59,23 @@ pub fn bench_face_image(c: &mut Criterion) {
     let data = setup_image();
 
     group.bench_with_input(
-        BenchmarkId::new("face full image scheduled", "<client>"),
-        &(arc_client, data.clone()),
-        |b, (client, data)| {
-            b.to_async(Runtime::new().unwrap()).iter(|| async {
-                let mut client = client.lock().await;
-                run_scheduled(&mut client, data.clone()).await
-            })
-        },
-    );
-
-    group.bench_with_input(
         BenchmarkId::new("face full image direct", "<client>"),
         &(arc_od_client, data.clone()),
         |b, (od_client, data)| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
                 let mut od_client = od_client.lock().await;
                 run_direct(&mut od_client, data.clone()).await
+            })
+        },
+    );
+
+    group.bench_with_input(
+        BenchmarkId::new("face full image scheduled", "<client>"),
+        &(arc_client, data.clone()),
+        |b, (client, data)| {
+            b.to_async(Runtime::new().unwrap()).iter(|| async {
+                let mut client = client.lock().await;
+                run_scheduled(&mut client, data.clone()).await
             })
         },
     );
