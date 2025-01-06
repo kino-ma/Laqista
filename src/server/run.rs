@@ -3,7 +3,7 @@ use std::pin::pin;
 use std::str::FromStr;
 use std::time::Duration;
 
-use face::server::FaceServer;
+use face::server::{FaceServer, NativeFaceServer};
 use futures::future;
 use local_ip_address::local_ip;
 use tokio::sync::{mpsc, Mutex};
@@ -391,6 +391,24 @@ impl ServerRunner {
             ))
         } else {
             println!("not found face from db");
+            router
+        };
+
+        #[cfg(feature = "native")]
+        let router = if let Some(_deployment) = self.database.lookup("native").await {
+            println!("found native from db");
+            use face_proto::detector_server::DetectorServer;
+
+            let inner_server = NativeFaceServer::create()
+                .await
+                .map_err(|e| Error::AppInstantiation(e.to_string()))?;
+            let server = DetectorServer::new(inner_server);
+            router.add_service(MiddlewareFor::new(
+                server,
+                MetricsMiddleware { tx: app_tx.clone() },
+            ))
+        } else {
+            println!("not found native from db");
             router
         };
 
