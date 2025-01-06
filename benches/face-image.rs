@@ -36,22 +36,24 @@ pub fn bench_face_image(c: &mut Criterion) {
 
     group.bench_with_input(
         BenchmarkId::new("face image scheduled", "<client>"),
-        &(arc_client.clone(), vec![]),
-        |b, (client, data)| {
+        &(arc_client.clone(), arc_od_client.clone(), vec![]),
+        |b, (client, od_client, data)| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
                 let mut client = client.lock().await;
-                run_scheduled(&mut client, data.clone()).await
+                let mut od_client = od_client.lock().await;
+                run_scheduled(&mut client, &mut od_client, data.clone()).await
             })
         },
     );
 
     group.bench_with_input(
         BenchmarkId::new("face image direct", "<client>"),
-        &(arc_od_client.clone(), vec![]),
-        |b, (od_client, data)| {
+        &(arc_client.clone(), arc_od_client.clone(), vec![]),
+        |b, (client, od_client, data)| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
+                let mut client = client.lock().await;
                 let mut od_client = od_client.lock().await;
-                run_direct(&mut od_client, data.clone()).await
+                run_direct(&mut client, &mut od_client, data.clone()).await
             })
         },
     );
@@ -60,22 +62,24 @@ pub fn bench_face_image(c: &mut Criterion) {
 
     group.bench_with_input(
         BenchmarkId::new("face full image direct", "<client>"),
-        &(arc_od_client, data.clone()),
-        |b, (od_client, data)| {
+        &(arc_client.clone(), arc_od_client.clone(), data.clone()),
+        |b, (client, od_client, data)| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
+                let mut client = client.lock().await;
                 let mut od_client = od_client.lock().await;
-                run_direct(&mut od_client, data.clone()).await
+                run_direct(&mut client, &mut od_client, data.clone()).await
             })
         },
     );
 
     group.bench_with_input(
         BenchmarkId::new("face full image scheduled", "<client>"),
-        &(arc_client, data.clone()),
-        |b, (client, data)| {
+        &(arc_client.clone(), arc_od_client.clone(), data.clone()),
+        |b, (client, od_client, data)| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
                 let mut client = client.lock().await;
-                run_scheduled(&mut client, data.clone()).await
+                let mut od_client = od_client.lock().await;
+                run_scheduled(&mut client, &mut od_client, data.clone()).await
             })
         },
     );
@@ -154,7 +158,11 @@ fn setup_image() -> Vec<f32> {
     array.into_raw_vec()
 }
 
-async fn run_scheduled(client: &mut SchedulerClient<Channel>, data: Vec<f32>) {
+async fn run_scheduled(
+    client: &mut SchedulerClient<Channel>,
+    detector_client: &mut ObjectDetectionClient<Channel>,
+    data: Vec<f32>,
+) {
     let rpc = AppRpc::new("face", "ObjectDetection", "Squeeze");
     let request = LookupRequest {
         name: "face".to_owned(),
@@ -178,7 +186,11 @@ async fn run_scheduled(client: &mut SchedulerClient<Channel>, data: Vec<f32>) {
     detector_client.squeeze(request).await.unwrap();
 }
 
-async fn run_direct(detector_client: &mut ObjectDetectionClient<Channel>, data: Vec<f32>) {
+async fn run_direct(
+    client: &mut SchedulerClient<Channel>,
+    detector_client: &mut ObjectDetectionClient<Channel>,
+    data: Vec<f32>,
+) {
     let request = InferRequest { data };
     detector_client.squeeze(request).await.unwrap();
 }
