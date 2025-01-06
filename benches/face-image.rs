@@ -197,11 +197,10 @@ async fn run_scheduled(
     let resp = client.clone().lookup(request).await.unwrap().into_inner();
     let addr = resp.server.unwrap().addr;
 
-    let mut detector_client = retry(|| async {
-        face::proto::object_detection_client::ObjectDetectionClient::connect(addr.to_owned()).await
-    })
-    .await
-    .unwrap();
+    let mut detector_client =
+        face::proto::object_detection_client::ObjectDetectionClient::connect(addr.to_owned())
+            .await
+            .unwrap();
 
     // let mut app_client = app::proto::greeter_client::GreeterClient::connect(addr)
     //     .await
