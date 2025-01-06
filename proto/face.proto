@@ -5,6 +5,11 @@ package face;
 service Detector {
   rpc RunDetection(DetectionRequest) returns (DetectionReply) {}
 }
+// We need separate service for native, because tonic may overwrite existing
+// service
+service NativeDetector {
+  rpc RunDetection(DetectionRequest) returns (DetectionReply) {}
+}
 
 service ObjectDetection {
   rpc Squeeze(InferRequest) returns (InferReply) {}

@@ -1,24 +1,17 @@
 use std::{error::Error, sync::Arc};
 
 use image::{imageops::FilterType, GenericImageView, Pixel};
-use laqista_core::{
-    session::Session,
-    tensor::{AsInputs, Inputs},
-};
+use laqista_core::{session::Session, tensor::Inputs};
 use tonic::{Request, Response, Status};
 use wonnx::utils::{InputTensor, OutputTensor};
 
-use crate::proto::{
-    detector_server::Detector, object_detection_server::ObjectDetection, DetectionReply,
-    DetectionRequest, InferReply, InferRequest,
-};
+use crate::proto::{native_detector_server::NativeDetector, DetectionReply, DetectionRequest};
 
 static LABELS: &'static str = include_str!("../../../../data/models/resnet-labels.txt");
 const IMAGE_WIDTH: usize = 224;
 const IMAGE_HEIGHT: usize = 224;
 
-static WASM: &'static [u8] =
-    include_bytes!("../../../../target/wasm32-unknown-unknown/release/face_wasm.wasm");
+static ONNX: &'static [u8] = include_bytes!("../../../../data/models/opt-squeeze.onnx");
 
 pub struct NativeFaceServer {
     session: Arc<Session>,
@@ -27,7 +20,7 @@ pub struct NativeFaceServer {
 
 impl NativeFaceServer {
     pub async fn create() -> Result<Self, Box<dyn Error>> {
-        let session = Arc::new(Session::from_bytes(WASM).await?);
+        let session = Arc::new(Session::from_bytes(ONNX).await?);
         let labels = LABELS.lines().map(|l| l.to_owned()).collect();
 
         Ok(Self { session, labels })
@@ -35,7 +28,7 @@ impl NativeFaceServer {
 }
 
 #[tonic::async_trait]
-impl Detector for NativeFaceServer {
+impl NativeDetector for NativeFaceServer {
     async fn run_detection(
         &self,
         request: Request<DetectionRequest>,
@@ -80,28 +73,6 @@ impl Detector for NativeFaceServer {
             label,
             probability: probability.to_owned(),
         };
-        Ok(Response::new(reply))
-    }
-}
-
-#[tonic::async_trait]
-impl ObjectDetection for NativeFaceServer {
-    async fn squeeze(
-        &self,
-        request: Request<InferRequest>,
-    ) -> Result<Response<InferReply>, Status> {
-        let inner_request = request.into_inner();
-
-        let output = self
-            .session
-            .detect(&inner_request.as_inputs())
-            .await
-            .map_err(|e| Status::aborted(format!("could not run inference: {e}")))?;
-
-        let reply = output
-            .try_into()
-            .map_err(|e| Status::aborted(format!("could convert inference output: {e}")))?;
-
         Ok(Response::new(reply))
     }
 }

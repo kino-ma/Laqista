@@ -15,8 +15,9 @@ package.version = "0.1.0"
 opt-level = 0
 
 [features]
-default = ["face"]
+default = ["face", "native"]
 face = ["dep:face"]
+native = ["dep:face"]
 
 [dependencies]
 axum = "0.6.9"
