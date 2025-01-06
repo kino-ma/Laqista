@@ -17,6 +17,7 @@ use tonic::transport::Channel;
 use laqista::proto::scheduler_client::SchedulerClient;
 use laqista::proto::{DeployRequest, Deployment, LookupRequest};
 use laqista::*;
+use tonic::IntoRequest;
 
 static JPEG: &'static [u8] = include_bytes!("../data/pelican.jpeg");
 
@@ -268,10 +269,8 @@ pub fn bench_wasm(c: &mut Criterion) {
         BenchmarkId::new("face wasm direct full image", "<client>"),
         &arc_app_client,
         |b, app_client| {
-            b.to_async(Runtime::new().unwrap()).iter(|| async {
-                let mut app_client = app_client.lock().await;
-                run_wasm_direct(&mut app_client, JPEG).await
-            })
+            b.to_async(Runtime::new().unwrap())
+                .iter(|| async { run_wasm_direct(addr, JPEG).await })
         },
     );
 }
@@ -287,11 +286,9 @@ async fn run_wasm_scheduled(client: &mut SchedulerClient<Channel>, image: &[u8])
     let resp = client.clone().lookup(request).await.unwrap().into_inner();
     let addr = resp.server.unwrap().addr;
 
-    let mut detector_client = retry(|| async {
-        face::proto::detector_client::DetectorClient::connect(addr.clone()).await
-    })
-    .await
-    .unwrap();
+    let mut detector_client = face::proto::detector_client::DetectorClient::connect(addr.clone())
+        .await
+        .unwrap();
 
     // let mut app_client = app::proto::greeter_client::GreeterClient::connect(addr)
     //     .await
@@ -302,7 +299,11 @@ async fn run_wasm_scheduled(client: &mut SchedulerClient<Channel>, image: &[u8])
     detector_client.run_detection(request).await.unwrap();
 }
 
-async fn run_wasm_direct(detector_client: &mut DetectorClient<Channel>, image: &[u8]) {
+async fn run_wasm_direct(addr: &'static str, image: &[u8]) {
+    let mut detector_client = face::proto::detector_client::DetectorClient::connect(addr)
+        .await
+        .unwrap();
+
     let request = DetectionRequest {
         image_png: image.to_vec(),
     };
@@ -329,6 +330,17 @@ pub fn bench_scheduler(c: &mut Criterion) {
             })
         },
     );
+
+    group.bench_with_input(
+        BenchmarkId::new("scheduler lookup and connect to server", "<client>"),
+        &arc_client,
+        |b, client| {
+            b.to_async(Runtime::new().unwrap()).iter(|| async {
+                let mut client = client.lock().await;
+                run_lookup_connect(&mut client).await
+            })
+        },
+    );
 }
 
 async fn run_lookup(client: &mut SchedulerClient<Channel>) {
@@ -341,6 +353,25 @@ async fn run_lookup(client: &mut SchedulerClient<Channel>) {
     };
 
     client.clone().lookup(request).await.unwrap().into_inner();
+}
+
+async fn run_lookup_connect(client: &mut SchedulerClient<Channel>) {
+    let rpc = AppRpc::new("face", "Detector", "RunDetection");
+
+    let request = LookupRequest {
+        name: "face".to_owned(),
+        qos: None,
+        service: rpc.to_string(),
+    };
+
+    let lookup_reply = client.clone().lookup(request).await.unwrap().into_inner();
+
+    let client =
+        face::proto::detector_client::DetectorClient::connect(lookup_reply.server.unwrap().addr)
+            .await
+            .unwrap();
+
+    client.into_request().into_inner();
 }
 
 criterion_group!(benches, bench_face_image, bench_wasm, bench_scheduler);
