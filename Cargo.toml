@@ -72,5 +72,9 @@ harness = false
 name = "face-image"
 harness = false
 
+[[bench]]
+name = "face-native"
+harness = false
+
 [patch.crates-io]
 v_frame = { git = "https://github.com/kino-ma/v_frame.git", branch = "feature-wasm" }
