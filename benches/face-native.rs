@@ -122,39 +122,5 @@ async fn setup_clients(
     (client, detector_client, deployment.deployment.unwrap())
 }
 
-pub fn bench_scheduler(c: &mut Criterion) {
-    let addr = "http://127.0.0.1:50051";
-
-    let runtime = Runtime::new().unwrap();
-    let (client, _, _) = runtime.block_on(async { setup_clients(addr).await });
-
-    let arc_client = Arc::new(Mutex::new(client));
-
-    let mut group = c.benchmark_group("Face image");
-
-    group.bench_with_input(
-        BenchmarkId::new("scheduler lookup", "<client>"),
-        &arc_client,
-        |b, client| {
-            b.to_async(Runtime::new().unwrap()).iter(|| async {
-                let mut client = client.lock().await;
-                run_lookup(&mut client).await
-            })
-        },
-    );
-}
-
-async fn run_lookup(client: &mut SchedulerClient<Channel>) {
-    let rpc = AppRpc::new("face", "Detector", "RunDetection");
-
-    let request = LookupRequest {
-        name: "face".to_owned(),
-        qos: None,
-        service: rpc.to_string(),
-    };
-
-    client.clone().lookup(request).await.unwrap().into_inner();
-}
-
-criterion_group!(benches, bench_native, bench_native, bench_scheduler);
+criterion_group!(benches, bench_native);
 criterion_main!(benches);
