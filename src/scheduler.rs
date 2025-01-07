@@ -272,6 +272,18 @@ impl AuthoritativeScheduler {
         }
     }
 
+    async fn duplicate_name(&self, name: &str) -> bool {
+        self.runtime
+            .lock()
+            .await
+            .cluster
+            .instances
+            .0
+            .iter()
+            .find(|(_id, instance)| instance.deployment.name != name)
+            .is_some()
+    }
+
     pub async fn handle_failed_server<T>(
         &self,
         result: Result<T>,
@@ -388,6 +400,13 @@ impl Scheduler for AuthoritativeScheduler {
             accuracies_percent,
             rpcs,
         } = request.into_inner();
+
+        if self.duplicate_name(&name).await {
+            return Ok(Response::new(DeployResponse {
+                success: true,
+                deployment: None,
+            }));
+        }
 
         let accuracies = try_collect_accuracies(accuracies_percent)
             .ok_or(Status::aborted("failed to parse rpc path"))?;
