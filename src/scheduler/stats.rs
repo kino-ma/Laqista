@@ -170,6 +170,7 @@ impl AppLatency {
     }
 
     pub fn lookup_service(&self, service: &AppService) -> HashMap<&AppRpc, &RpcLatency> {
+        // dbg!(&self.rpcs, service);
         self.rpcs
             .iter()
             .filter(|(rpc, _)| service.contains(rpc))
@@ -179,9 +180,9 @@ impl AppLatency {
     /// clone_by_rpcs extracts latencies filtered by a specific service.
     /// We assume all `rpcs` belong to the same service.
     pub fn clone_by_rpcs(&self, rpcs: &[AppRpc]) -> Vec<(AppRpc, RpcLatency)> {
-        let Some(rpc) = rpcs.get(0) else {
-            return vec![];
-        };
+        assert!(rpcs.len() > 0);
+        let rpc = &rpcs[0];
+
         let service = rpc.clone().into();
         self.lookup_service(&service)
             .into_iter()

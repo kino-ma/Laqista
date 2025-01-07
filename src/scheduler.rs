@@ -243,7 +243,7 @@ impl AuthoritativeScheduler {
                 Ok(c) => c,
                 Err(e) => {
                     count += 1;
-                    if count >= 5 {
+                    if count >= 20 {
                         break Err(e);
                     } else {
                         time::sleep(Duration::from_millis(200)).await;
@@ -261,7 +261,7 @@ impl AuthoritativeScheduler {
                 Ok(r) => break Ok(r.into_inner()),
                 Err(e) => {
                     count += 1;
-                    if count >= 5 {
+                    if count >= 20 {
                         break Err(e);
                     } else {
                         time::sleep(Duration::from_millis(200)).await;

@@ -68,7 +68,7 @@ impl MeanScheduler {
         let required_accuracy = qos.accuracy.unwrap_or(f32::MIN);
         let required_latency = qos.latency.unwrap_or(u32::MAX);
 
-        let available_rpcs = filter_rpcs_by_accuracy(app, required_accuracy);
+        let available_rpcs = filter_rpcs_by_accuracy(app, service, required_accuracy);
 
         if available_rpcs.is_empty() {
             return None;
@@ -84,14 +84,7 @@ impl MeanScheduler {
             return None;
         }
 
-        let mut target = local_stats
-            .iter()
-            .next()
-            .or_else(|| {
-                println!("WARN: stats are empty");
-                None
-            })?
-            .1;
+        let mut target = None;
         let mut target_rpc = AppRpc::new("", "", "");
         let mut target_latency = f64::MAX;
         let mut target_utilization = 100.0;
@@ -132,11 +125,12 @@ impl MeanScheduler {
                 // Select target if either:
                 //   - No target has satisfied and faster
                 //   - Satisfies the rquirements and less utilized
-                if !target_satisfies && (satisfies || faster)
+                if target.is_none()
+                    || !target_satisfies && (satisfies || faster)
                     || satisfies && less_utilized
                     || (satisfies && both_free && faster)
                 {
-                    target = stats;
+                    target = Some(stats);
                     target_rpc = rpc.clone();
                     target_latency = estimated_latency;
                     target_utilization = utilized_rate;
@@ -145,18 +139,14 @@ impl MeanScheduler {
             }
         }
 
-        let needs_scale_out = is_over_utilized(&target) || !target_satisfies;
+        let needs_scale_out = is_over_utilized(&target?.clone()) || !target_satisfies;
 
-        if target_rpc.package == "" {
-            None
-        } else {
-            self.insert_history(target_rpc.clone(), target.server.id);
-            Some(ScheduleResult::new(
-                target.server.clone(),
-                target_rpc,
-                needs_scale_out,
-            ))
-        }
+        self.insert_history(target_rpc.clone(), target?.server.id);
+        Some(ScheduleResult::new(
+            target?.server.clone(),
+            target_rpc,
+            needs_scale_out,
+        ))
     }
 }
 
@@ -242,11 +232,15 @@ fn cpu_utilized_rate(stats: &ServerStats) -> f64 {
     utilization.cpu as f64 / 100.0
 }
 
-fn filter_rpcs_by_accuracy(deployment: &DeploymentInfo, required_accuracy: f32) -> Vec<AppRpc> {
+fn filter_rpcs_by_accuracy(
+    deployment: &DeploymentInfo,
+    service: &AppService,
+    required_accuracy: f32,
+) -> Vec<AppRpc> {
     deployment
         .accuracies
         .iter()
-        .filter(|(_, acc)| **acc > required_accuracy)
+        .filter(|(rpc, acc)| service.contains(rpc) && **acc > required_accuracy)
         .map(|(rpc, _)| rpc.to_owned())
         .collect()
 }
