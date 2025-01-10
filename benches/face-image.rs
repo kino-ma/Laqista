@@ -34,6 +34,7 @@ pub fn bench_face_image(c: &mut Criterion) {
     let arc_od_client = Arc::new(Mutex::new(od_client));
 
     let mut group = c.benchmark_group("Face image");
+    group.sampling_mode(criterion::SamplingMode::Flat);
     // group.sample_size(10000);
 
     group.bench_with_input(
@@ -230,6 +231,7 @@ pub fn bench_wasm(c: &mut Criterion) {
     let arc_app_client = Arc::new(Mutex::new(detector_client));
 
     let mut group = c.benchmark_group("Face wasm");
+    group.sampling_mode(criterion::SamplingMode::Flat);
 
     // group.bench_with_input(
     //     BenchmarkId::new("face wasm scheduled", "<client>"),
@@ -319,6 +321,7 @@ pub fn bench_scheduler(c: &mut Criterion) {
     let arc_client = Arc::new(Mutex::new(client));
 
     let mut group = c.benchmark_group("Face image");
+    group.sampling_mode(criterion::SamplingMode::Flat);
 
     group.bench_with_input(
         BenchmarkId::new("scheduler lookup", "<client>"),

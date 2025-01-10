@@ -20,6 +20,7 @@ pub fn bench_onnx(c: &mut Criterion) {
     let data = req.as_inputs();
 
     let mut group = c.benchmark_group("Onnx inference");
+    group.sampling_mode(criterion::SamplingMode::Flat);
 
     group.bench_with_input(
         BenchmarkId::new("onnx inference only inference", "pelican"),

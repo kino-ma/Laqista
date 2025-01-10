@@ -25,6 +25,7 @@ pub fn bench_greeter(c: &mut Criterion) {
     let arc_app_client = Arc::new(Mutex::new(app_client));
 
     let mut group = c.benchmark_group("Greeter");
+    group.sampling_mode(criterion::SamplingMode::Flat);
 
     group.bench_with_input(
         BenchmarkId::new("scheduled", "<client>"),

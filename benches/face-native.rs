@@ -27,6 +27,7 @@ pub fn bench_native(c: &mut Criterion) {
     let arc_app_client = Arc::new(Mutex::new(detector_client));
 
     let mut group = c.benchmark_group("Face native");
+    group.sampling_mode(criterion::SamplingMode::Flat);
 
     group.bench_with_input(
         BenchmarkId::new("face native scheduled full image", "<client>"),

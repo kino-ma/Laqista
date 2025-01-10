@@ -24,6 +24,7 @@ pub fn bench_wasm_module(c: &mut Criterion) {
     .unwrap();
 
     let mut group = c.benchmark_group("Wasm instantiate");
+    group.sampling_mode(criterion::SamplingMode::Flat);
     group.bench_with_input("wasm instantiate", &wasm_bytes, |b, i| {
         b.iter(|| instantiate(i, false))
     });
@@ -103,6 +104,7 @@ pub fn bench_wasm_memory(c: &mut Criterion) {
     let input = WriteInput(&wasm_bytes, request.clone());
 
     let mut group = c.benchmark_group("Wasm memory");
+    group.sampling_mode(criterion::SamplingMode::Flat);
     group.bench_with_input("wasm write memory", &input, |b, i| b.iter(|| write(i)));
 
     let request_heavy = DetectionRequest {
