@@ -77,6 +77,7 @@
               python311Packages.onnx
               python311Packages.onnxruntime
               jq
+              fontconfig
               gnuplot
               ghz
               k6
@@ -125,6 +126,9 @@
           RUST_SRC_PATH = "${pkgs.fenix.complete.rust-src}/lib/rustlib/src/rust/";
           LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
           LD_LIBRARY_PATH = (pkgs.lib.makeLibraryPath (nativeBuildInputs ++ [ pkgs.stdenv.cc.cc pkgs.libclang pkgs.vulkan-loader pkgs.openssl ])) + ":/home/kino-ma/lib";
+          FONTCONFIG_FILE = pkgs.makeFontsConf {
+            fontDirectories = [ pkgs.freefont_ttf ];
+          };
         };
 
         packages = rec {
