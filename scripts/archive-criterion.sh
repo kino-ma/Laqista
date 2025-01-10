@@ -27,6 +27,13 @@ cd "$(git rev-parse --show-toplevel)"
 cp -R 'target/criterion' "data/benchmark-results/${host}_${datetime}_${hash}"
 )
 
+
+for f in k6/*.html; do
+    mv "$f" "data/benchmark-results/k6_${f%.html}_${datetime}_${hash}"
+done
+
+
 if [[ ${1:-x} == '--clean' ]]; then
     rm -rf 'target/criterion'
+    rm -rf k6/*.html
 fi
