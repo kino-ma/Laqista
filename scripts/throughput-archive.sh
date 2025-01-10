@@ -8,6 +8,7 @@ hash="$(git show HEAD --pretty=format:%h --no-patch)"
 (
 cd "$(git rev-parse --show-toplevel)"
 for f in k6/*.html; do
-    mv "$f" "data/benchmark-results/k6_${f%.html}_${datetime}_${hash}"
+    title="$(basename ${f%.html})"
+    mv "$f" "data/benchmark-results/k6_${title}_${datetime}_${hash}.html"
 done
 )
