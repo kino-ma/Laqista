@@ -74,6 +74,7 @@
               poetry
               python311Packages.cmake
               python311Packages.grpcio-tools
+              python311Packages.matplotlib
               python311Packages.onnx
               python311Packages.onnxruntime
               jq
