@@ -40,8 +40,9 @@ const runDetectionRequest = JSON.parse(open("../data/run_detection.json"));
 //   [NAN4]: new Counter("nan4_counter"),
 // }
 
-const withQosCounter = new Counter("with_qos");
-const withoutQosCounter = new Counter("without_qos");
+const serverCounter = new Counter("server");
+const desktopCounter = new Counter("desktop");
+const laptopCounter = new Counter("laptop");
 
 export const options = {
   scenarios: {
@@ -114,18 +115,18 @@ export const options = {
 };
 
 export function server() {
-  run(SERVER)
+  run(SERVER, serverCounter)
 }
 
 export function desktop() {
-  run(DESKTOP)
+  run(DESKTOP, desktopCounter)
 }
 
 export function laptop() {
-  run(LAPTOP)
+  run(LAPTOP, laptopCounter)
 }
 
-function run(addr) {
+function run(addr, counter) {
   schedulerClient.connect(SERVER, { plaintext: true });
 
   let lookupReply = schedulerClient.invoke(
@@ -153,4 +154,6 @@ function run(addr) {
     "label is correct": (r) =>
       r && detectionReply.message.label.includes("spoonbill"),
   });
+
+  counter.add(1);
 }
