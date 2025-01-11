@@ -3,8 +3,8 @@ import { Counter } from "k6/metrics";
 import { Client, StatusOK } from "k6/net/grpc";
 import { check } from "k6";
 
-const SCHEDULER = "133.27.186.106:50051";
-const SCHEDULER_URL = "http://133.27.186.106:50051";
+const SCHEDULER     =        "133.27.171.58:50051";
+const SCHEDULER_URL = "http://133.27.171.58:50051";
 
 const NAN1 = "http://133.27.171.130:50051";
 const NAN2 = "http://133.27.171.130:50052";
