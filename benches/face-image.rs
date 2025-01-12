@@ -187,7 +187,7 @@ fn setup_image() -> Vec<f32> {
 
 async fn run_scheduled(
     client: &mut SchedulerClient<Channel>,
-    detector_client: &mut ObjectDetectionClient<Channel>,
+    _detector_client: &mut ObjectDetectionClient<Channel>,
     data: Vec<f32>,
 ) {
     let rpc = AppRpc::new("face", "ObjectDetection", "Squeeze");
@@ -213,7 +213,7 @@ async fn run_scheduled(
 }
 
 async fn run_direct(
-    client: &mut SchedulerClient<Channel>,
+    _client: &mut SchedulerClient<Channel>,
     detector_client: &mut ObjectDetectionClient<Channel>,
     data: Vec<f32>,
 ) {
@@ -270,7 +270,7 @@ pub fn bench_wasm(c: &mut Criterion) {
     group.bench_with_input(
         BenchmarkId::new("face wasm direct full image", "<client>"),
         &arc_app_client,
-        |b, app_client| {
+        |b, _app_client| {
             b.to_async(Runtime::new().unwrap())
                 .iter(|| async { run_wasm_direct(addr, JPEG).await })
         },
