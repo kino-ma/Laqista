@@ -1,0 +1,1 @@
+%{time_total},%{time_namelookup}s,%{time_connect}s,%{time_appconnect}s,%{time_pretransfer}s,%{time_redirect}s,%{time_starttransfer}s\n
