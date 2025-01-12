@@ -1,9 +1,9 @@
-use std::{thread::sleep, time::Duration};
+use std::time::Duration;
 
 use bytes::Bytes;
 use criterion::{criterion_group, criterion_main, Criterion};
 use face::server::FaceServer;
-use tokio::runtime::{self, Runtime};
+use tokio::runtime;
 use wasmer::{wat2wasm, IntoBytes};
 
 static WASM: &'static [u8] =
