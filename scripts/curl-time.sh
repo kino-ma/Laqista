@@ -17,7 +17,7 @@ out_file="data/benchmark-results/curl_${datetime}_${hash}.csv"
 echo 'time_total,time_namelookup,time_connect,time_appconnect,time_pretransfer,time_redirect,time_starttransfer'
 
 for _i in {1..5}; do
-    curl -w "@$this_dir/curl-format.txt" -o /dev/null -s "$@" 2>&1
+    curl --no-keepalive -H 'Connection: close' -w "@$this_dir/curl-format.txt" -o /dev/null -s "$@" 2>&1
     sleep 1
 done
 ) | tee "$out_file"
