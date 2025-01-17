@@ -31,10 +31,12 @@ results_dir = os.path.join(this_dir, "../benchmark-results")
 
 def vs_native():
     vs_native_dir = os.path.join(results_dir, "mac_2025-01-10_20-17-24_0bcae86")
+    infer_json = f"{vs_native_dir}/Onnx inference/onnx inference only inference/pelican/new/sample.json"
     native_json = f"{vs_native_dir}/Face native/face native direct full image/_client_/new/sample.json"
     wasm_json = f"{vs_native_dir}/Face wasm/face wasm direct full image/_client_/new/sample.json"
 
     native_overhead = {
+        "infer": read_times(infer_json, "ms"),
         "native": read_times(native_json, "ms"),
         "wasm": read_times(wasm_json, "ms"),
     }
@@ -44,24 +46,6 @@ def vs_native():
     ax.set_ylabel("milli second / request")
 
     plt.savefig(f"{this_dir}/native-boxplot.pdf")
-
-
-def vs_direct():
-    vs_native_dir = os.path.join(results_dir, "mac_2025-01-10_20-17-24_0bcae86")
-    lookup_json = f"{vs_native_dir}/Face native/face native direct full image/_client_/new/sample.json"
-    wasm_json = f"{vs_native_dir}/Face wasm/face wasm direct full image/_client_/new/sample.json"
-
-    native_overhead = {
-        "native": read_times(native_json, "ms"),
-        "wasm": read_times(wasm_json, "ms"),
-    }
-
-    fig, ax = plt.subplots()
-    ax.boxplot(list(native_overhead.values()), tick_labels=native_overhead.keys())
-    ax.set_ylabel("milli second / request")
-
-    plt.savefig(f"{this_dir}/native-boxplot.pdf")
-    plt.show()
 
 
 vs_native()
