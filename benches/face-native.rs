@@ -17,7 +17,7 @@ use laqista::*;
 
 static JPEG: &'static [u8] = include_bytes!("../data/pelican.jpeg");
 
-pub fn bench_native(c: &mut Criterion) {
+fn bench_native(c: &mut Criterion) {
     let addr = "http://127.0.0.1:50051";
 
     let runtime = Runtime::new().unwrap();
@@ -26,11 +26,11 @@ pub fn bench_native(c: &mut Criterion) {
     let arc_client = Arc::new(Mutex::new(client));
     let arc_app_client = Arc::new(Mutex::new(detector_client));
 
-    let mut group = c.benchmark_group("Face native");
+    let mut group = c.benchmark_group("Native service");
     group.sampling_mode(criterion::SamplingMode::Flat);
 
     group.bench_with_input(
-        BenchmarkId::new("face native scheduled full image", "<client>"),
+        BenchmarkId::new("Native with schedule", "<client>"),
         &(arc_client.clone(), arc_app_client.clone()),
         |b, (client, _)| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
@@ -41,7 +41,7 @@ pub fn bench_native(c: &mut Criterion) {
     );
 
     group.bench_with_input(
-        BenchmarkId::new("face native direct full image", "<client>"),
+        BenchmarkId::new("Native without schedule", "<client>"),
         &arc_app_client,
         |b, app_client| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {

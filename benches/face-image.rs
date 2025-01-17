@@ -24,7 +24,7 @@ static JPEG: &'static [u8] = include_bytes!("../data/pelican.jpeg");
 const IMAGE_WIDTH: usize = 224;
 const IMAGE_HEIGHT: usize = 224;
 
-pub fn bench_face_image(c: &mut Criterion) {
+fn bench_face_image(c: &mut Criterion) {
     let addr = "http://127.0.0.1:50051";
 
     let runtime = Runtime::new().unwrap();
@@ -33,38 +33,13 @@ pub fn bench_face_image(c: &mut Criterion) {
     let arc_client = Arc::new(Mutex::new(client));
     let arc_od_client = Arc::new(Mutex::new(od_client));
 
-    let mut group = c.benchmark_group("Face image");
+    let mut group = c.benchmark_group("ImageClassification model");
     group.sampling_mode(criterion::SamplingMode::Flat);
-    // group.sample_size(10000);
-
-    group.bench_with_input(
-        BenchmarkId::new("face image scheduled", "<client>"),
-        &(arc_client.clone(), arc_od_client.clone(), vec![]),
-        |b, (client, od_client, data)| {
-            b.to_async(Runtime::new().unwrap()).iter(|| async {
-                let mut client = client.lock().await;
-                let mut od_client = od_client.lock().await;
-                run_scheduled(&mut client, &mut od_client, data.clone()).await
-            })
-        },
-    );
-
-    group.bench_with_input(
-        BenchmarkId::new("face image direct", "<client>"),
-        &(arc_client.clone(), arc_od_client.clone(), vec![]),
-        |b, (client, od_client, data)| {
-            b.to_async(Runtime::new().unwrap()).iter(|| async {
-                let mut client = client.lock().await;
-                let mut od_client = od_client.lock().await;
-                run_direct(&mut client, &mut od_client, data.clone()).await
-            })
-        },
-    );
 
     let data = setup_image();
 
     group.bench_with_input(
-        BenchmarkId::new("face full image scheduled", "<client>"),
+        BenchmarkId::new("SqueezeNet with schedule", "<client>"),
         &(arc_client.clone(), arc_od_client.clone(), data.clone()),
         |b, (client, od_client, data)| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
@@ -76,31 +51,7 @@ pub fn bench_face_image(c: &mut Criterion) {
     );
 
     group.bench_with_input(
-        BenchmarkId::new("face full image direct", "<client>"),
-        &(arc_client.clone(), arc_od_client.clone(), data.clone()),
-        |b, (client, od_client, data)| {
-            b.to_async(Runtime::new().unwrap()).iter(|| async {
-                let mut client = client.lock().await;
-                let mut od_client = od_client.lock().await;
-                run_direct(&mut client, &mut od_client, data.clone()).await
-            })
-        },
-    );
-
-    group.bench_with_input(
-        BenchmarkId::new("face full image scheduled again", "<client>"),
-        &(arc_client.clone(), arc_od_client.clone(), data.clone()),
-        |b, (client, od_client, data)| {
-            b.to_async(Runtime::new().unwrap()).iter(|| async {
-                let mut client = client.lock().await;
-                let mut od_client = od_client.lock().await;
-                run_scheduled(&mut client, &mut od_client, data.clone()).await
-            })
-        },
-    );
-
-    group.bench_with_input(
-        BenchmarkId::new("face full image direct again", "<client>"),
+        BenchmarkId::new("SqueezeNet withou schedule", "<client>"),
         &(arc_client.clone(), arc_od_client.clone(), data.clone()),
         |b, (client, od_client, data)| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
@@ -230,34 +181,11 @@ pub fn bench_wasm(c: &mut Criterion) {
     let arc_client = Arc::new(Mutex::new(client));
     let arc_app_client = Arc::new(Mutex::new(detector_client));
 
-    let mut group = c.benchmark_group("Face wasm");
+    let mut group = c.benchmark_group("WebAssembly service");
     group.sampling_mode(criterion::SamplingMode::Flat);
 
-    // group.bench_with_input(
-    //     BenchmarkId::new("face wasm scheduled", "<client>"),
-    //     &(arc_client.clone(), arc_app_client.clone()),
-    //     |b, (client, app_client)| {
-    //         b.to_async(Runtime::new().unwrap()).iter(|| async {
-    //             let mut client = client.lock().await;
-    //             let mut app_client = app_client.lock().await;
-    //             run_wasm_scheduled(&mut client, &mut app_client, &deployment_id, &[2, 40]).await
-    //         })
-    //     },
-    // );
-
-    // group.bench_with_input(
-    //     BenchmarkId::new("face wasm direct", "<client>"),
-    //     &arc_app_client,
-    //     |b, app_client| {
-    //         b.to_async(Runtime::new().unwrap()).iter(|| async {
-    //             let mut app_client = app_client.lock().await;
-    //             run_wasm_direct(&mut app_client, &[2, 40]).await
-    //         })
-    //     },
-    // );
-
     group.bench_with_input(
-        BenchmarkId::new("face wasm scheduled full image", "<client>"),
+        BenchmarkId::new("RunDetection with schedule", "<client>"),
         &(arc_client.clone(), arc_app_client.clone()),
         |b, (client, _)| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
@@ -268,7 +196,7 @@ pub fn bench_wasm(c: &mut Criterion) {
     );
 
     group.bench_with_input(
-        BenchmarkId::new("face wasm direct full image", "<client>"),
+        BenchmarkId::new("RunDetection without schedule", "<client>"),
         &arc_app_client,
         |b, _app_client| {
             b.to_async(Runtime::new().unwrap())

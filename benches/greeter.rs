@@ -24,11 +24,11 @@ pub fn bench_greeter(c: &mut Criterion) {
     let arc_client = Arc::new(Mutex::new(client));
     let arc_app_client = Arc::new(Mutex::new(app_client));
 
-    let mut group = c.benchmark_group("Greeter");
+    let mut group = c.benchmark_group("Greeter service");
     group.sampling_mode(criterion::SamplingMode::Flat);
 
     group.bench_with_input(
-        BenchmarkId::new("scheduled", "<client>"),
+        BenchmarkId::new("SayHello with schedule", "<client>"),
         &(arc_client, arc_app_client.clone()),
         |b, (client, app_client)| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {
@@ -40,7 +40,7 @@ pub fn bench_greeter(c: &mut Criterion) {
     );
 
     group.bench_with_input(
-        BenchmarkId::new("direct", "<client>"),
+        BenchmarkId::new("SayHello without schedule", "<client>"),
         &arc_app_client,
         |b, app_client| {
             b.to_async(Runtime::new().unwrap()).iter(|| async {

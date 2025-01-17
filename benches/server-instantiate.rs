@@ -30,29 +30,37 @@ pub fn bench_server_instantiate(c: &mut Criterion) {
     let wasm_simple = Bytes::from(wasm_bytes.into_bytes());
     let wasm_face = Bytes::from_static(WASM);
 
-    let mut group = c.benchmark_group("App instantiate");
+    let mut group = c.benchmark_group("Initialize WebAssembly runtime");
 
     group.sampling_mode(criterion::SamplingMode::Flat);
     group.warm_up_time(Duration::from_millis(100));
     group.measurement_time(Duration::from_millis(500));
     group.sample_size(10);
 
-    group.bench_with_input("simple app", &wasm_simple, |b, wasm| {
-        let single_thread_rt = runtime::Builder::new_current_thread().build().unwrap();
-        b.to_async(single_thread_rt)
-            .iter(|| async { instantiate(onnx.clone(), wasm.clone()).await })
-    });
+    group.bench_with_input(
+        "Compile simple WebAssembly end to encd",
+        &wasm_simple,
+        |b, wasm| {
+            let single_thread_rt = runtime::Builder::new_current_thread().build().unwrap();
+            b.to_async(single_thread_rt)
+                .iter(|| async { compile(onnx.clone(), wasm.clone()).await })
+        },
+    );
 
-    group.bench_with_input("face app", &wasm_face, |b, wasm| {
-        // Run in single thread to avoid GPU allocation error
-        let single_thread_rt = runtime::Builder::new_current_thread().build().unwrap();
-        b.to_async(single_thread_rt)
-            .iter(|| async { instantiate(onnx.clone(), wasm.clone()).await });
-        // sleep(Duration::from_millis(1000));
-    });
+    group.bench_with_input(
+        "Compile squeeze WebAssembly end to encd",
+        &wasm_face,
+        |b, wasm| {
+            // Run in single thread to avoid GPU allocation error
+            let single_thread_rt = runtime::Builder::new_current_thread().build().unwrap();
+            b.to_async(single_thread_rt)
+                .iter(|| async { compile(onnx.clone(), wasm.clone()).await });
+            // sleep(Duration::from_millis(1000));
+        },
+    );
 }
 
-async fn instantiate(onnx: Bytes, wasm: Bytes) {
+async fn compile(onnx: Bytes, wasm: Bytes) {
     FaceServer::create(onnx, wasm).await.unwrap();
 }
 
