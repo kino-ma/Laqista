@@ -48,4 +48,24 @@ def vs_native():
     plt.savefig(f"{this_dir}/native-boxplot.pdf")
 
 
+def vs_direct():
+    vs_direct_dir = os.path.join(results_dir, "mac_2025-01-10_20-17-24_0bcae86")
+
+    direct_json = f"{vs_direct_dir}/Face wasm/face wasm direct full image/_client_/new/sample.json"
+    scheduled_json = f"{vs_direct_dir}/Face wasm/face wasm scheduled full image/_client_/new/sample.json"
+
+    native_overhead = {
+        "direct": read_times(direct_json, "ms"),
+        "scheduled": read_times(scheduled_json, "ms"),
+    }
+
+    fig, ax = plt.subplots()
+    ax.boxplot(list(native_overhead.values()), tick_labels=native_overhead.keys())
+    ax.set_ylabel("milli second / request")
+
+    plt.savefig(f"{this_dir}/schedule-boxplot.pdf")
+    plt.show()
+
+
 vs_native()
+vs_direct()
