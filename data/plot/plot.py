@@ -45,7 +45,8 @@ def vs_native():
     ax.boxplot(list(native_overhead.values()), tick_labels=native_overhead.keys())
     ax.set_ylabel("milli second / request")
 
-    plt.savefig(f"{this_dir}/native-boxplot.pdf")
+    fig.savefig(f"{this_dir}/native-boxplot.pdf")
+    plt.close()
 
 
 def vs_direct():
@@ -63,7 +64,8 @@ def vs_direct():
     ax.boxplot(list(native_overhead.values()), tick_labels=native_overhead.keys())
     ax.set_ylabel("milli second / request")
 
-    plt.savefig(f"{this_dir}/schedule-boxplot.pdf")
+    fig.savefig(f"{this_dir}/schedule-boxplot.pdf")
+    plt.close()
 
 
 def throughput():
@@ -93,9 +95,10 @@ def throughput():
         bottom += tps[machine]
 
     ax.set_ylabel("requests / second")
-    plt.savefig(f"{this_dir}/throughput.pdf")
+    fig.savefig(f"{this_dir}/throughput.pdf")
 
     plt.show()
+    plt.close()
 
 
 vs_native()
