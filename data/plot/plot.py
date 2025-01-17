@@ -64,8 +64,40 @@ def vs_direct():
     ax.set_ylabel("milli second / request")
 
     plt.savefig(f"{this_dir}/schedule-boxplot.pdf")
+
+
+def throughput():
+    server_tp = 461.67
+    desktop_tp = 135.30
+    laptop_tp = 240.78
+    cloud_tp = 484.30
+
+    tps = {
+        "server": server_tp,
+        "desktop": desktop_tp,
+        "laptop": laptop_tp,
+        "cloud": cloud_tp,
+    }
+
+    bar_colors = ["tab:blue", "tab:orange", "tab:green", "tab:red"]
+
+    fig, ax = plt.subplots()
+
+    p = ax.bar(tps.keys(), tps.values(), color=bar_colors)
+    ax.bar_label(p, label_type="center")
+
+    bottom = 0
+    for machine, color in zip(["server", "desktop", "laptop"], bar_colors):
+        p = ax.bar("ideal", tps[machine], bottom=bottom, color=color)
+        ax.bar_label(p, label_type="center")
+        bottom += tps[machine]
+
+    ax.set_ylabel("requests / second")
+    plt.savefig(f"{this_dir}/throughput.pdf")
+
     plt.show()
 
 
 vs_native()
 vs_direct()
+throughput()
