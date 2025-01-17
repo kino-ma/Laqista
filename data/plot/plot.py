@@ -95,7 +95,7 @@ def throughput():
         bottom += tps[machine]
 
     ax.set_ylabel("requests / second")
-    fig.savefig(f"{this_dir}/throughput.pdf")
+    fig.savefig(f"{this_dir}/throughput-bar.pdf")
 
     plt.show()
     plt.close()
