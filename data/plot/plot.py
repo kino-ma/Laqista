@@ -25,6 +25,11 @@ def read_times(json_path: str, unit: str) -> list[float]:
     return out
 
 
+def read_avg(json_path: str, unit: str) -> float:
+    times = read_times(json_path, unit)
+    return sum(times) / len(times)
+
+
 this_dir = os.path.dirname(__file__)
 results_dir = os.path.join(this_dir, "../benchmark-results")
 
@@ -68,6 +73,37 @@ def vs_direct():
     plt.close()
 
 
+def all_latency():
+    latency_dir = os.path.join(results_dir, "mac_2025-01-10_20-17-24_0bcae86")
+
+    infer_json = f"{latency_dir}/Onnx inference/onnx inference only inference/pelican/new/sample.json"
+    native_json = f"{latency_dir}/Face native/face native direct full image/_client_/new/sample.json"
+    direct_json = (
+        f"{latency_dir}/Face wasm/face wasm direct full image/_client_/new/sample.json"
+    )
+    e2e_json = f"{latency_dir}/Face wasm/face wasm scheduled full image/_client_/new/sample.json"
+
+    latencies = {
+        "infer": read_avg(infer_json, "ms"),
+        "native": read_avg(native_json, "ms"),
+        "direct": read_avg(direct_json, "ms"),
+        "e2e": read_avg(e2e_json, "ms"),
+    }
+
+    bar_colors = ["tab:blue", "tab:orange", "tab:green", "tab:red"]
+
+    fig, ax = plt.subplots()
+
+    p = ax.bar(latencies.keys(), latencies.values(), color=bar_colors)
+    ax.bar_label(p, label_type="center")
+
+    ax.set_ylabel("milli second / request")
+
+    fig.savefig(f"{this_dir}/all-latency-boxplot.pdf")
+    plt.show()
+    plt.close()
+
+
 def throughput():
     server_tp = 461.67
     desktop_tp = 135.30
@@ -105,10 +141,10 @@ def throughput():
     p = ax.bar("Edge-less API", schedule_tp, color=bar_color, width=0.8)
     fig.savefig(f"{this_dir}/edgeless-throughput-bar.pdf")
 
-    plt.show()
     plt.close()
 
 
 vs_native()
 vs_direct()
+all_latency()
 throughput()
