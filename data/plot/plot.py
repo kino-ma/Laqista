@@ -4,6 +4,16 @@ import os
 # type: ignore
 import matplotlib.pyplot as plt
 
+plt.rcParams["font.size"] = 16
+plt.tight_layout()
+
+
+LABEL_LATENCY_MS = "Response time (ms)"
+LABEL_THROUGHPUT = "Requests / Second (rps)"
+
+this_dir = os.path.dirname(__file__)
+results_dir = os.path.join(this_dir, "../benchmark-results")
+
 
 def read_times(json_path: str, unit: str) -> list[float]:
     x = 1_000 if unit == "us" else 1_000_000
@@ -30,8 +40,10 @@ def read_avg(json_path: str, unit: str) -> float:
     return sum(times) / len(times)
 
 
-this_dir = os.path.dirname(__file__)
-results_dir = os.path.join(this_dir, "../benchmark-results")
+def save_fig(fig, name: str):
+    fig.savefig(f"{this_dir}/{name}.pdf")
+    fig.savefig(f"{this_dir}/{name}.png")
+    plt.show()
 
 
 def vs_native():
@@ -50,7 +62,7 @@ def vs_native():
     ax.boxplot(list(native_overhead.values()), tick_labels=native_overhead.keys())
     ax.set_ylabel("milli second / request")
 
-    fig.savefig(f"{this_dir}/native-boxplot.pdf")
+    save_fig(fig, "native-boxplot")
     plt.close()
 
 
@@ -67,9 +79,9 @@ def vs_direct():
 
     fig, ax = plt.subplots()
     ax.boxplot(list(native_overhead.values()), tick_labels=native_overhead.keys())
-    ax.set_ylabel("milli second / request")
+    ax.set_ylabel(LABEL_LATENCY_MS)
 
-    fig.savefig(f"{this_dir}/schedule-boxplot.pdf")
+    save_fig(fig, "schedule-boxplot")
     plt.close()
 
 
@@ -97,10 +109,9 @@ def all_latency():
     p = ax.bar(latencies.keys(), latencies.values(), color=bar_colors)
     ax.bar_label(p, label_type="center")
 
-    ax.set_ylabel("milli second / request")
+    ax.set_ylabel(LABEL_LATENCY_MS)
 
-    fig.savefig(f"{this_dir}/all-latency-boxplot.pdf")
-    plt.show()
+    save_fig(fig, "all-latency-boxplot")
     plt.close()
 
 
@@ -130,8 +141,8 @@ def throughput():
         ax.bar_label(p, label_type="center")
         bottom += tps[machine]
 
-    ax.set_ylabel("requests / second")
-    fig.savefig(f"{this_dir}/throughput-bar.pdf")
+    ax.set_ylabel(LABEL_THROUGHPUT)
+    save_fig(fig, "throughput-bar")
 
     plt.close()
 
@@ -139,7 +150,8 @@ def throughput():
     bar_color = "tab:purple"
     fig, ax = plt.subplots()
     p = ax.bar("Edge-less API", schedule_tp, color=bar_color, width=0.8)
-    fig.savefig(f"{this_dir}/edgeless-throughput-bar.pdf")
+
+    save_fig(fig, "edgeless-throughput-bar")
 
     plt.close()
 
