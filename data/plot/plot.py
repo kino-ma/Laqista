@@ -97,6 +97,14 @@ def throughput():
     ax.set_ylabel("requests / second")
     fig.savefig(f"{this_dir}/throughput-bar.pdf")
 
+    plt.close()
+
+    schedule_tp = 4250.40
+    bar_color = "tab:purple"
+    fig, ax = plt.subplots()
+    p = ax.bar("Edge-less API", schedule_tp, color=bar_color, width=0.8)
+    fig.savefig(f"{this_dir}/edgeless-throughput-bar.pdf")
+
     plt.show()
     plt.close()
 
