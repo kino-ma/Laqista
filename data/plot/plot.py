@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 
 # type: ignore
 import matplotlib.pyplot as plt
@@ -13,6 +14,8 @@ LABEL_THROUGHPUT = "Requests / Second (rps)"
 
 this_dir = os.path.dirname(__file__)
 results_dir = os.path.join(this_dir, "../benchmark-results")
+
+suffix = ("_" + sys.argv[1]) if len(sys.argv) > 1 else ""
 
 
 def read_times(json_path: str, unit: str) -> list[float]:
@@ -41,8 +44,8 @@ def read_avg(json_path: str, unit: str) -> float:
 
 
 def save_fig(fig, name: str):
-    fig.savefig(f"{this_dir}/{name}.pdf")
-    fig.savefig(f"{this_dir}/{name}.png")
+    fig.savefig(f"{this_dir}/{name}{suffix}.pdf")
+    fig.savefig(f"{this_dir}/{name}{suffix}.png")
     plt.show()
 
 
