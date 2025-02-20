@@ -1,0 +1,32 @@
+         /\      Grafana   /‾‾/
+    /\  /  \     |\  __   /  /
+   /  \/    \    | |/ /  /   ‾‾\
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/
+
+     execution: local
+        script: edgeless.js
+ web dashboard: http://127.0.0.1:5665
+        output: -
+
+     scenarios: (100.00%) 1 scenario, 100 max VUs, 10m30s max duration (incl. graceful stop):
+              * default: 25000 iterations shared among 100 VUs (maxDuration: 10m0s, gracefulStop: 30s)
+
+ERRO[0003] GoError: connection error: desc = "transport: error while dialing: dial tcp 133.27.186.106:50051: connect: cannot assign requested address"
+running at reflect.methodValueCall (native)
+default at default (file:///home/kino-ma/projects/laqista/k6/edgeless.js:94:26(7))  executor=shared-iterations scenario=default source=stacktrace
+WARN[0003] The test run was short, report generation was skipped (not enough data)
+
+     data_received........: 7.1 MB 2.1 MB/s
+     data_sent............: 5.8 MB 1.7 MB/s
+     grpc_req_duration....: avg=7.5ms   min=245.96µs med=6.99ms  max=51.63ms p(90)=14.24ms p(95)=15.21ms
+     iteration_duration...: avg=13.62ms min=2.16ms   med=11.34ms max=85.86ms p(90)=20.54ms p(95)=27.99ms
+     iterations...........: 25000  7295.810082/s
+     scheduler_counter....: 24999  7295.51825/s
+     vus..................: 100    min=100       max=100
+     vus_max..............: 100    min=100       max=100
+
+
+running (00m03.4s), 000/100 VUs, 25000 complete and 0 interrupted iterations
+default ✓ [======================================] 100 VUs  00m03.4s/10m0s  25000/25000 shared iters
+K6_WEB_DASHBOARD=true K6_WEB_DASHBOARD_EXPORT=edgeless.html k6 run edgeless.j  23.02s user 39.61s system 1510% cpu 4.146 total
