@@ -122,6 +122,7 @@ def throughput():
     desktop_tp = 135.30
     laptop_tp = 240.78
     cloud_tp = 484.30
+    network_cap = 493.13
 
     tps = {
         "server": server_tp,
@@ -142,6 +143,9 @@ def throughput():
         p = ax.bar("ideal", tps[machine], bottom=bottom, color=color)
         ax.bar_label(p, label_type="center")
         bottom += tps[machine]
+
+    ax.axhline(network_cap, color="tab:cyan", linestyle="dashed")
+    ax.text(1, 500, "Network cap (497 rps)")
 
     ax.set_ylabel(LABEL_THROUGHPUT)
     save_fig(fig, "throughput-bar")
