@@ -130,6 +130,7 @@ def throughput():
         "laptop": laptop_tp,
         "cloud": cloud_tp,
     }
+    ideal = tps["server"] + tps["desktop"] + tps["laptop"]
 
     bar_colors = ["tab:blue", "tab:orange", "tab:green", "tab:red"]
 
@@ -143,6 +144,8 @@ def throughput():
         p = ax.bar("ideal", tps[machine], bottom=bottom, color=color)
         ax.bar_label(p, label_type="center")
         bottom += tps[machine]
+
+    ax.text(3.75, bottom+10, ideal)
 
     ax.axhline(network_cap, color="tab:cyan", linestyle="dashed")
     ax.text(1, 500, "Network cap (497 rps)")
