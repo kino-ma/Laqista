@@ -5,7 +5,7 @@ import sys
 # type: ignore
 import matplotlib.pyplot as plt
 
-plt.rcParams["font.size"] = 16
+# plt.rcParams["font.size"] = 16
 plt.tight_layout()
 
 
@@ -46,7 +46,6 @@ def read_avg(json_path: str, unit: str) -> float:
 def save_fig(fig, name: str):
     fig.savefig(f"{this_dir}/{name}{suffix}.pdf")
     fig.savefig(f"{this_dir}/{name}{suffix}.png")
-    plt.show()
 
 
 def vs_native():
